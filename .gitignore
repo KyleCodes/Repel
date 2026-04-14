@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+tsconfig.tsbuildinfo
+
+# Compiled JS artifacts alongside TS source files
+# (tsc emits .js/.d.ts next to .ts when outDir is not set)
+apps/server/migrate.js
+apps/server/migrate.d.ts
+apps/server/migrate.d.ts.map
+apps/web/vite.config.js
+apps/web/vite.config.d.ts
+apps/web/vite.config.d.ts.map
+*.js.map
+
+# Environment
+.env
+.env.local
+
+# Data
+data/pg/
+data/blobs/
+
+# OS
+.DS_Store
+
+# --- AI Code Flow (managed by install.sh) ---
+CLAUDE.md
+.claude/agents
+.claude/commands
+.claude/skills/blueprint
+.claude/skills/datadog-pup
+.claude/skills/engineering-project-manager
+.claude/skills/linearis-cli
+.claude/skills/notion-cli
+templates
+docs/context/git-conventions.md
+docs/summaries/handoff-2026-03-30-C-17413-execute.md
+# --- End AI Code Flow ---

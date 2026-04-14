@@ -1,0 +1,18 @@
+{
+  "name": "repel",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "cd apps/server && bun run dev",
+    "dev:web": "cd apps/web && bun run dev",
+    "build": "bun run build --filter='*'",
+    "typecheck": "tsc --build",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "typescript": "^5.5"
+  }
+}

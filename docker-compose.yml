@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: repel
+      POSTGRES_USER: repel
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "5432:5432"
+    profiles: [dev, full]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repel -d repel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    environment:
+      MODE: all
+      DATABASE_URL: postgres://repel:dev@postgres:5432/repel
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    profiles: [full]
