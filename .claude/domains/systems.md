@@ -1,11 +1,17 @@
 # Systems Affected
 
-Checklist of subsystems used in feature briefs (`template-8-feature-brief.md`).
-These appear as checkboxes when filing a new parent ticket with `/linear-new`.
-
-<!-- Example:
-- [ ] Storage layer
-- [ ] Caching layer
-- [ ] API / operator interface
-- [ ] Infrastructure / deployment
--->
+- [ ] DB layer (migrations, RLS policies, Kysely types)
+- [ ] Domain: org
+- [ ] Domain: user
+- [ ] Domain: providers / connected accounts
+- [ ] Domain: account-setup (cross-cutting bootstrap)
+- [ ] Channel adapters (Gmail, iCloud ingress/egress)
+- [ ] Sync scheduler
+- [ ] Processing pipeline (classify, summarize, draft-reply, importance)
+- [ ] Job queue (enqueue, dequeue, worker)
+- [ ] LLM executor lib
+- [ ] REST API routes
+- [ ] CLI commands
+- [ ] Web SPA (React + TanStack Router/Query)
+- [ ] Shared package (@repel/shared — enums, types)
+- [ ] Deployment (docker-compose, build, scp)
