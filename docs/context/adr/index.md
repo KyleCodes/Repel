@@ -6,7 +6,7 @@
 | ADR-002 | All Tables Are Org-Scoped with RLS                       | data-storage, multi-tenancy   | Accepted | docs/context/adr/ADR-002-all-tables-org-scoped.md                 |
 | ADR-003 | Single Monolith, Multiple Entrypoints                    | deployment, architecture      | Accepted | docs/context/adr/ADR-003-single-monolith-multiple-entrypoints.md  |
 | ADR-004 | Postgres-Backed Job Queue                                | data-storage, infrastructure  | Accepted | docs/context/adr/ADR-004-postgres-backed-job-queue.md             |
-| ADR-005 | Channel Abstraction via Adapter Pattern                  | architecture, extensibility   | Accepted | docs/context/adr/ADR-005-channel-adapter-pattern.md               |
+| ADR-005 | Provider Account Vocabulary                              | architecture, extensibility, data-storage | Accepted | docs/context/adr/ADR-005-provider-account-vocabulary.md           |
 | ADR-006 | Classifier Config as Versioned Database Rows             | data-storage, ai-pipeline     | Accepted | docs/context/adr/ADR-006-classifier-config-versioned-rows.md      |
 | ADR-007 | LLM Executor as a Shared Lib                             | architecture, ai-pipeline     | Accepted | docs/context/adr/ADR-007-llm-executor-shared-lib.md               |
 | ADR-008 | Client-Side SPA with TanStack Stack                      | frontend, architecture        | Accepted | docs/context/adr/ADR-008-client-side-spa-tanstack.md              |
