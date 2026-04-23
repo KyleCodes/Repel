@@ -7,7 +7,7 @@ Self-hosted AI inbox — aggregates email and messaging channels, classifies and
 - Pulls messages from connected provider accounts (Gmail, iCloud, and more)
 - Classifies, tags, and scores messages for importance using an LLM pipeline
 - Surfaces a unified feed with draft replies ready for review
-- Supports multiple channels: email, iMessage, LinkedIn, Slack, Discord, WhatsApp
+- Supports multiple channels: email, SMS, DM, chat rooms (initial provider support: Gmail, iCloud, generic IMAP)
 
 ## Stack
 
