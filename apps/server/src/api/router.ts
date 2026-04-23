@@ -1,7 +1,9 @@
 import express, { Application, NextFunction, Request, Response } from 'express';
 
 // Augment Express Request with the org id resolved by middleware.
-// Route handlers open their own withOrgTx scope using this value.
+// Route handlers call decorated service singletons directly (e.g.
+// `messageService.list({ orgId: req.orgId })`); transactions are owned
+// inside the service decorators, not here. See ADR-010 (rewritten 2026-04-18).
 declare global {
   namespace Express {
     interface Request {
@@ -20,8 +22,8 @@ export function createRouter(): Application {
   });
 
   // Org context middleware — all /api routes require X-Org-Id.
-  // This only validates + attaches the id; route handlers call withOrgTx
-  // themselves when they need a transaction-scoped Repos bundle.
+  // This only validates + attaches the id; route handlers pass it into
+  // the service-singleton call which opens the runInOrgTx transaction.
   app.use('/api', function (req: Request, res: Response, next: NextFunction) {
     const orgId = req.headers['x-org-id'];
     if (!orgId || typeof orgId !== 'string') {
