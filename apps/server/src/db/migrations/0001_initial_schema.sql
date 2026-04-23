@@ -186,6 +186,13 @@ CREATE UNIQUE INDEX idx_job_queue_dedup
 
 -- Row-Level Security
 
+-- RLS is ENABLEd but not FORCEd. By default Postgres exempts table owners
+-- and superusers from RLS. The migration role typically owns these tables,
+-- so RLS does not engage in dev/test sessions opened as that role; this is
+-- accepted by ADR-002 (bootstrap runs under the BYPASSRLS-equivalent role).
+-- Production should run application queries under a non-owner role for
+-- defense in depth. Smoke tests should use a non-owner role to verify
+-- isolation — RLS verification under the owner role is a no-op.
 ALTER TABLE org ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provider_account ENABLE ROW LEVEL SECURITY;
