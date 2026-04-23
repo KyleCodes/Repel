@@ -6,11 +6,22 @@ import type {
   Transaction,
   Updateable,
 } from 'kysely';
+import type {
+  AuthMethod,
+  Channel,
+  MessageDirection,
+  Provider,
+  UserRole,
+} from '@repel/shared';
 
 // Kysely database interface — one entry per table.
 // Column keys are camelCase; the CamelCasePlugin rewrites them to snake_case
 // identifiers in generated SQL. These types are hand-maintained and mirror
 // the SQL schema in src/db/migrations.
+//
+// Enum-typed columns import their union from @repel/shared (single source of
+// truth — see packages/shared/src/enums.ts). The Postgres enum values defined
+// in the migration MUST stay in sync with these unions.
 
 export interface OrgTable {
   id: Generated<string>;
@@ -24,7 +35,7 @@ export interface UserTable {
   orgId: string;
   email: string;
   name: string | null;
-  role: 'admin' | 'member' | 'viewer';
+  role: UserRole;
   createdAt: Generated<Date>;
   updatedAt: Generated<Date>;
 }
@@ -33,9 +44,9 @@ export interface ProviderAccountTable {
   id: Generated<string>;
   orgId: string;
   userId: string;
-  provider: 'gmail' | 'icloud' | 'generic_imap';
-  channel: 'email' | 'sms' | 'dm' | 'chat_room';
-  authMethod: 'oauth2' | 'app_password' | 'api_key';
+  provider: Provider;
+  channel: Channel;
+  authMethod: AuthMethod;
   externalAccountId: string;
   alias: string | null;
   credentialsEncrypted: Buffer | null;
@@ -49,7 +60,7 @@ export interface ProviderAccountTable {
 export interface ThreadTable {
   id: Generated<string>;
   orgId: string;
-  channel: 'email' | 'sms' | 'dm' | 'chat_room';
+  channel: Channel;
   externalThreadId: string | null;
   subject: string | null;
   lastMessageAt: Date | null;
@@ -63,7 +74,7 @@ export interface MessageTable {
   orgId: string;
   threadId: string | null;
   providerAccountId: string;
-  channel: 'email' | 'sms' | 'dm' | 'chat_room';
+  channel: Channel;
   externalMessageId: string;
   senderAddress: string;
   senderName: string | null;
@@ -73,7 +84,7 @@ export interface MessageTable {
   subject: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
-  direction: 'inbound' | 'outbound';
+  direction: MessageDirection;
   sentAt: Date;
   receivedAt: Date | null;
   isRead: Generated<boolean>;
@@ -103,7 +114,7 @@ export interface ContactTable {
 export interface ContactHandleTable {
   id: Generated<string>;
   contactId: string;
-  channel: 'email' | 'sms' | 'dm' | 'chat_room';
+  channel: Channel;
   handle: string;
   isPrimary: Generated<boolean>;
   createdAt: Generated<Date>;
