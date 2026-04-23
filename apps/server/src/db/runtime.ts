@@ -12,3 +12,13 @@ export function getDb(): Kysely<DB> {
   if (!_db) _db = makeDb();
   return _db;
 }
+
+// Closes the singleton pool if one was lazily created. Call this from CLI
+// entrypoints after work completes — pg's Pool keeps the process alive
+// (~10s default) until idle connections drain otherwise.
+export async function closeDb(): Promise<void> {
+  if (_db) {
+    await _db.destroy();
+    _db = null;
+  }
+}

@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { makeAccountSetupService } from './service.js';
+import { accountSetupService } from './service.js';
 
 interface BootstrapOptions {
   orgName: string;
@@ -27,7 +27,7 @@ async function runBootstrap(opts: BootstrapOptions): Promise<void> {
     return;
   }
 
-  const { org, user } = await makeAccountSetupService().bootstrapAccount({
+  const { org, user } = await accountSetupService.bootstrap({
     orgName: opts.orgName,
     userEmail: opts.email,
     userName: opts.name,

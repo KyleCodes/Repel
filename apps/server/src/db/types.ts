@@ -6,11 +6,22 @@ import type {
   Transaction,
   Updateable,
 } from 'kysely';
+import type {
+  AuthMethodSlug,
+  ChannelSlug,
+  MessageDirectionSlug,
+  ProviderSlug,
+  UserRoleSlug,
+} from '@repel/shared';
 
 // Kysely database interface — one entry per table.
 // Column keys are camelCase; the CamelCasePlugin rewrites them to snake_case
 // identifiers in generated SQL. These types are hand-maintained and mirror
 // the SQL schema in src/db/migrations.
+//
+// Enum-typed columns import their union from @repel/shared (single source of
+// truth — see packages/shared/src/enums.ts). The Postgres enum values defined
+// in the migration MUST stay in sync with these unions.
 
 export interface OrgTable {
   id: Generated<string>;
@@ -24,19 +35,20 @@ export interface UserTable {
   orgId: string;
   email: string;
   name: string | null;
-  role: 'admin' | 'member' | 'viewer';
+  role: UserRoleSlug;
   createdAt: Generated<Date>;
   updatedAt: Generated<Date>;
 }
 
-export interface ConnectedAccountTable {
+export interface ProviderAccountTable {
   id: Generated<string>;
   orgId: string;
   userId: string;
-  channel: 'email' | 'sms' | 'linkedin' | 'imessage' | 'slack' | 'discord' | 'whatsapp';
-  provider: 'gmail' | 'icloud' | 'outlook' | 'linkedin' | 'imessage';
-  authMethod: 'oauth2' | 'app_password' | 'api_key';
-  label: string | null;
+  provider: ProviderSlug;
+  channel: ChannelSlug;
+  authMethod: AuthMethodSlug;
+  externalAccountId: string;
+  alias: string | null;
   credentialsEncrypted: Buffer | null;
   syncCursor: unknown | null;
   lastSyncedAt: Date | null;
@@ -48,7 +60,7 @@ export interface ConnectedAccountTable {
 export interface ThreadTable {
   id: Generated<string>;
   orgId: string;
-  channel: 'email' | 'sms' | 'linkedin' | 'imessage' | 'slack' | 'discord' | 'whatsapp';
+  channel: ChannelSlug;
   externalThreadId: string | null;
   subject: string | null;
   lastMessageAt: Date | null;
@@ -61,8 +73,8 @@ export interface MessageTable {
   id: Generated<string>;
   orgId: string;
   threadId: string | null;
-  connectedAccountId: string;
-  channel: 'email' | 'sms' | 'linkedin' | 'imessage' | 'slack' | 'discord' | 'whatsapp';
+  providerAccountId: string;
+  channel: ChannelSlug;
   externalMessageId: string;
   senderAddress: string;
   senderName: string | null;
@@ -72,7 +84,7 @@ export interface MessageTable {
   subject: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
-  direction: 'inbound' | 'outbound';
+  direction: MessageDirectionSlug;
   sentAt: Date;
   receivedAt: Date | null;
   isRead: Generated<boolean>;
@@ -90,55 +102,6 @@ export interface MessageRawTable {
   createdAt: Generated<Date>;
 }
 
-export interface MessageClassificationTable {
-  id: Generated<string>;
-  orgId: string;
-  messageId: string;
-  category: string;
-  subcategory: string | null;
-  confidence: number | null;
-  classifierVersion: string | null;
-  createdAt: Generated<Date>;
-}
-
-export interface MessageTagTable {
-  messageId: string;
-  orgId: string;
-  tag: string;
-  source: Generated<'auto' | 'manual'>;
-  createdAt: Generated<Date>;
-}
-
-export interface MessageSummaryTable {
-  id: Generated<string>;
-  orgId: string;
-  messageId: string;
-  summary: string;
-  model: string | null;
-  createdAt: Generated<Date>;
-}
-
-export interface DraftReplyTable {
-  id: Generated<string>;
-  orgId: string;
-  messageId: string;
-  bodyText: string;
-  bodyHtml: string | null;
-  model: string | null;
-  status: Generated<'draft' | 'sent' | 'discarded'>;
-  createdAt: Generated<Date>;
-  updatedAt: Generated<Date>;
-}
-
-export interface MessageImportanceTable {
-  messageId: string;
-  orgId: string;
-  score: number;
-  reasoning: string | null;
-  model: string | null;
-  createdAt: Generated<Date>;
-}
-
 export interface ContactTable {
   id: Generated<string>;
   orgId: string;
@@ -151,7 +114,7 @@ export interface ContactTable {
 export interface ContactHandleTable {
   id: Generated<string>;
   contactId: string;
-  channel: 'email' | 'sms' | 'linkedin' | 'imessage' | 'slack' | 'discord' | 'whatsapp';
+  channel: ChannelSlug;
   handle: string;
   isPrimary: Generated<boolean>;
   createdAt: Generated<Date>;
@@ -172,6 +135,7 @@ export interface JobQueueTable {
   id: Generated<string>;
   queue: Generated<string>;
   payload: unknown;
+  dedupKey: string | null;
   status: Generated<'pending' | 'processing' | 'completed' | 'failed' | 'dead'>;
   attempts: Generated<number>;
   maxAttempts: Generated<number>;
@@ -183,13 +147,12 @@ export interface JobQueueTable {
   createdAt: Generated<Date>;
 }
 
-export interface ClassifierConfigTable {
+export interface AcmeTable {
   id: Generated<string>;
   orgId: string;
-  version: string;
-  promptMarkdown: string;
-  isActive: Generated<boolean>;
+  note: string;
   createdAt: Generated<Date>;
+  updatedAt: Generated<Date>;
 }
 
 // The top-level keys here MUST match the real table names in the database.
@@ -198,20 +161,15 @@ export interface ClassifierConfigTable {
 export interface DB {
   org: OrgTable;
   user: UserTable;
-  connected_account: ConnectedAccountTable;
+  provider_account: ProviderAccountTable;
   thread: ThreadTable;
   message: MessageTable;
   message_raw: MessageRawTable;
-  message_classification: MessageClassificationTable;
-  message_tag: MessageTagTable;
-  message_summary: MessageSummaryTable;
-  draft_reply: DraftReplyTable;
-  message_importance: MessageImportanceTable;
   contact: ContactTable;
   contact_handle: ContactHandleTable;
   attachment: AttachmentTable;
   job_queue: JobQueueTable;
-  classifier_config: ClassifierConfigTable;
+  acme: AcmeTable;
 }
 
 // A Kysely instance bound to DB, or a transaction against it.
@@ -229,8 +187,8 @@ export type OrgUpdate = Updateable<OrgTable>;
 export type UserRow = Selectable<UserTable>;
 export type NewUser = Insertable<UserTable>;
 
-export type ConnectedAccountRow = Selectable<ConnectedAccountTable>;
-export type NewConnectedAccount = Insertable<ConnectedAccountTable>;
+export type ProviderAccountRow = Selectable<ProviderAccountTable>;
+export type NewProviderAccount = Insertable<ProviderAccountTable>;
 
 export type ThreadRow = Selectable<ThreadTable>;
 export type NewThread = Insertable<ThreadTable>;
@@ -240,3 +198,7 @@ export type NewMessage = Insertable<MessageTable>;
 
 export type JobQueueRow = Selectable<JobQueueTable>;
 export type NewJobQueue = Insertable<JobQueueTable>;
+
+export type AcmeRow = Selectable<AcmeTable>;
+export type NewAcme = Insertable<AcmeTable>;
+export type AcmeUpdate = Updateable<AcmeTable>;

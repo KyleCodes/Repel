@@ -1,17 +1,19 @@
 import type { DbExecutor } from './types.js';
-import { makeOrgRepo } from '../domains/org/repo.js';
-import { makeUserRepo } from '../domains/user/repo.js';
-import { makeProviderRepo } from '../domains/providers/repo.js';
+import { makeOrgRepo } from '../core/org/repo.js';
+import { makeUserRepo } from '../core/user/repo.js';
+import { makeAcmeRepo } from '../core/acme/repo.js';
 
-// Bundles every domain's repo factory into one object keyed by domain.
+// Bundles every bounded context's repo factory into one object keyed by name.
 // A fresh Repos bundle is built for each transaction so every repo inside
 // it is bound to the same DbExecutor (db or trx). Services take Repos as
 // their single dependency — they never see raw Kysely.
+//
+// Adding a new vertical = add one line here.
 export function makeRepos(q: DbExecutor) {
   return {
     orgs: makeOrgRepo(q),
     users: makeUserRepo(q),
-    providers: makeProviderRepo(q),
+    acme: makeAcmeRepo(q),
   };
 }
 

@@ -1,93 +1,52 @@
 # TypeScript Application Architecture
 
+> **Drift notice (2026-04-22):** This document is being incrementally aligned with the post-REP-9 codebase. The Project Structure, Database Layer, and Entrypoints sections below reflect the current shape. Sections describing the channel adapter, pipeline, agent, and API route layers describe the v1 *target* shape and have not yet landed — those sections will be rewritten under a follow-up ticket as those layers come online.
+
 ## Overview
 
 A TypeScript monorepo with Bun workspaces. Three packages: a shared type/schema library, a backend server, and a frontend SPA. The backend is a monolith with multiple entrypoints (server and CLI). The frontend is a client-side rendered React app backed by TanStack Router and TanStack Query.
 
 ## Project Structure
 
+Current shape (post-REP-9):
+
 ```
-mailbox/
+repel/
 ├── package.json
 ├── bun.lock
 ├── tsconfig.json
 ├── Makefile
 │
 ├── packages/
-│   └── shared/                  # @mailbox/shared
+│   └── shared/                  # @repel/shared
 │       └── src/
-│           ├── schemas/
-│           │   ├── message.ts
-│           │   ├── thread.ts
-│           │   ├── account.ts
-│           │   ├── classification.ts
-│           │   ├── api.ts       # request/response shapes
-│           │   └── index.ts
-│           ├── types/
-│           │   └── index.ts     # z.infer<> re-exports
-│           ├── enums.ts
+│           ├── enums.ts         # Channel, Provider, AuthMethod, MessageDirection, UserRole
 │           └── index.ts
 │
 ├── apps/
-│   ├── server/                  # @mailbox/server
+│   ├── server/                  # @repel/server
 │   │   └── src/
 │   │       ├── main.ts
 │   │       ├── cli.ts
 │   │       ├── db/
-│   │       │   ├── pool.ts
-│   │       │   └── migrations/
-│   │       ├── channels/
-│   │       │   ├── types.ts
-│   │       │   ├── lib/
-│   │       │   │   └── threading.ts
-│   │       │   ├── gmail/
-│   │       │   │   ├── auth.ts
-│   │       │   │   ├── ingress.ts
-│   │       │   │   ├── egress.ts
-│   │       │   │   └── lib/
-│   │       │   │       └── history.ts
-│   │       │   └── icloud/
-│   │       │       ├── auth.ts
-│   │       │       ├── ingress.ts
-│   │       │       ├── egress.ts
-│   │       │       └── lib/
-│   │       │           └── imap.ts
-│   │       ├── pipeline/
-│   │       │   ├── queue.ts
-│   │       │   ├── worker.ts
-│   │       │   ├── processors/
-│   │       │   │   ├── classify.ts
-│   │       │   │   ├── summarize.ts
-│   │       │   │   ├── draft-reply.ts
-│   │       │   │   └── importance.ts
-│   │       │   └── lib/
-│   │       │       └── retry.ts
-│   │       ├── agent/
-│   │       │   ├── prompt.ts
-│   │       │   └── lib/
-│   │       │       └── templates.ts
+│   │       │   ├── client.ts    # makeDb() — Kysely + pg.Pool factory
+│   │       │   ├── runtime.ts   # getDb() lazy singleton + closeDb()
+│   │       │   ├── tx.ts        # runInOrgTx / runInTx decorators (ADR-010)
+│   │       │   ├── repos.ts     # makeRepos(q) — bundles every context repo
+│   │       │   ├── types.ts     # Kysely DB interface + row aliases
+│   │       │   ├── migrations/
+│   │       │   └── __tests__/
+│   │       ├── core/            # bounded contexts (ADR-009)
+│   │       │   ├── org/         # {repo,service,types,mappers}.ts
+│   │       │   ├── user/
+│   │       │   ├── account-setup/  # cross-cutting bootstrap flow (runInTx)
+│   │       │   └── acme/        # reference vertical — see header comment in service.ts
 │   │       ├── api/
-│   │       │   ├── router.ts
-│   │       │   ├── routes/
-│   │       │   │   ├── threads.ts
-│   │       │   │   ├── messages.ts
-│   │       │   │   ├── accounts.ts
-│   │       │   │   ├── digests.ts
-│   │       │   │   └── chat.ts
-│   │       │   └── lib/
-│   │       │       ├── pagination.ts
-│   │       │       └── filters.ts
-│   │       ├── commands/
-│   │       │   ├── add-account.ts
-│   │       │   ├── sync.ts
-│   │       │   ├── enqueue-unprocessed.ts
-│   │       │   └── query.ts
-│   │       └── lib/
-│   │           ├── llm.ts
-│   │           ├── crypto.ts
-│   │           └── contacts.ts
+│   │       │   └── router.ts    # Express setup + /api X-Org-Id middleware
+│   │       └── domains/
+│   │           └── dev-db/      # peer to core/ — dev-only branch DB lifecycle CLI
 │   │
-│   └── web/                     # @mailbox/web
+│   └── web/                     # @repel/web
 │       ├── vite.config.ts
 │       ├── index.html
 │       └── src/
@@ -130,81 +89,26 @@ mailbox/
 
 A single codebase produces two binaries: server and CLI. Both share all business logic.
 
-**Server** (`main.ts`): runs in one of four modes controlled by `MODE` env var.
-
-```typescript
-type Mode = 'all' | 'api' | 'worker' | 'sync';
-
-async function main() {
-  const mode = (process.env.MODE || 'all') as Mode;
-  const db = createPool();
-
-  const components: Record<Mode, () => Promise<void>> = {
-    api: () => startApi(db),
-    worker: () => startWorker(db),
-    sync: () => startSyncScheduler(db),
-    all: async () => {
-      await Promise.all([
-        startApi(db),
-        startWorker(db),
-        startSyncScheduler(db),
-      ]);
-    },
-  };
-
-  await components[mode]();
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
-```
+**Server** (`main.ts`): runs in one of three modes controlled by `MODE` env var (`api`, `worker`, `all`). Worker is currently a stub; the sync scheduler will be folded into worker mode when it lands. Connection lifecycle is managed lazily via `getDb()` in `db/runtime.ts` — no pool is opened until the first call.
 
 `MODE=all` runs everything in a single process (development and initial "production"). Individual modes exist for future separation if any component needs independent scaling.
 
-**CLI** (`cli.ts`): non-HTTP interface to the same business logic. Every command with side effects supports `--dry-run`.
-
-```typescript
-import { Command } from 'commander';
-import { createPool } from './db/pool';
-import { addAccount } from './commands/add-account';
-import { sync } from './commands/sync';
-import { enqueueUnprocessed } from './commands/enqueue-unprocessed';
-import { query } from './commands/query';
-
-const db = createPool();
-const program = new Command();
-
-program.command('add-account')
-  .requiredOption('--provider <provider>', 'gmail | icloud')
-  .option('--dry-run', 'print what would happen', false)
-  .action((opts) => addAccount(db, opts));
-
-program.command('sync')
-  .option('--account <id>', 'specific account, omit for all')
-  .option('--dry-run', 'print sync plan without fetching', false)
-  .action((opts) => sync(db, opts));
-
-program.command('enqueue-unprocessed')
-  .option('--dry-run', 'print message IDs that would be enqueued', false)
-  .action((opts) => enqueueUnprocessed(db, opts));
-
-program.command('query')
-  .option('--tag <tag>')
-  .option('--category <category>')
-  .option('--account <id>')
-  .option('--format <format>', 'json | table', 'table')
-  .action((opts) => query(db, opts));
-
-program.parse();
-```
+**CLI** (`cli.ts`): non-HTTP interface to the same business logic. Every command with side effects supports `--dry-run`. Commands are registered by their owning bounded context (e.g. `core/account-setup/cli.ts` registers `bootstrap`; `domains/dev-db/cli.ts` registers `db {clone,drop,refresh-template}`). The CLI calls `closeDb()` in a `finally` block so the process exits cleanly when work completes (without it, pg's pool would keep the process alive until the idle timeout drains, ~10s).
 
 ### Database Layer
 
-`pool.ts` creates a `pg.Pool` and exposes a helper that acquires a connection, sets `app.current_org_id` for RLS, and returns it. All queries go through this helper to guarantee tenant isolation.
+`db/client.ts` exposes `makeDb()` which constructs a Kysely instance over a `pg.Pool` against `DATABASE_URL`. `db/runtime.ts` exposes `getDb()` (a lazy process-level singleton over `makeDb()`) and `closeDb()` (for entrypoint teardown).
 
-Migrations are raw SQL files in `db/migrations/`, applied in order by filename. No ORM.
+`db/repos.ts` exposes `makeRepos(q: DbExecutor)` which builds a fresh `Repos` bundle (one factory-built repo per bounded context) bound to whatever executor it's given — either the singleton `Db` for read-only contexts or the `Transaction<DB>` inside a tx. Adding a new bounded context = adding one entry here.
+
+Transaction ownership lives in `db/tx.ts` (per ADR-010, rewritten 2026-04-18). All transaction management goes through two decorators:
+
+- `runInOrgTx(fn)` — for tenant-scoped service methods. Opens a transaction, sets `app.current_org_id` via `SET LOCAL` for RLS, builds `Repos` over the trx, and runs the wrapped function under an `AsyncLocalStorage` frame so nested decorated calls join the same transaction. Compile-time `OrgScoped<A>` constraint requires every input to carry an `orgId`.
+- `runInTx(fn)` — for unscoped flows that create the org itself (bootstrap). No `SET LOCAL`. Runtime guards in both decorators reject cross-tenant joins and RLS-bypass attempts.
+
+Services are module-level singletons (per ADR-009 amendment, 2026-04-18) — no `makeXService(repos)` factories. Cross-service composition inside a `runInTx` flow uses sibling `*Impl` exports of the undecorated functions; trivial methods inline their `runInOrgTx` lambdas without lifting a named impl.
+
+Transport layers (HTTP, GraphQL, CLI) **never import `runInOrgTx` or `runInTx`** — they call service singletons directly. Migrations are raw SQL files in `db/migrations/` (node-pg-migrate format with `-- Up Migration` / `-- Down Migration` markers), applied in order by filename. No ORM.
 
 ### Channel Adapters
 
