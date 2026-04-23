@@ -7,11 +7,11 @@ import type {
   Updateable,
 } from 'kysely';
 import type {
-  AuthMethod,
-  Channel,
-  MessageDirection,
-  Provider,
-  UserRole,
+  AuthMethodSlug,
+  ChannelSlug,
+  MessageDirectionSlug,
+  ProviderSlug,
+  UserRoleSlug,
 } from '@repel/shared';
 
 // Kysely database interface — one entry per table.
@@ -35,7 +35,7 @@ export interface UserTable {
   orgId: string;
   email: string;
   name: string | null;
-  role: UserRole;
+  role: UserRoleSlug;
   createdAt: Generated<Date>;
   updatedAt: Generated<Date>;
 }
@@ -44,9 +44,9 @@ export interface ProviderAccountTable {
   id: Generated<string>;
   orgId: string;
   userId: string;
-  provider: Provider;
-  channel: Channel;
-  authMethod: AuthMethod;
+  provider: ProviderSlug;
+  channel: ChannelSlug;
+  authMethod: AuthMethodSlug;
   externalAccountId: string;
   alias: string | null;
   credentialsEncrypted: Buffer | null;
@@ -60,7 +60,7 @@ export interface ProviderAccountTable {
 export interface ThreadTable {
   id: Generated<string>;
   orgId: string;
-  channel: Channel;
+  channel: ChannelSlug;
   externalThreadId: string | null;
   subject: string | null;
   lastMessageAt: Date | null;
@@ -74,7 +74,7 @@ export interface MessageTable {
   orgId: string;
   threadId: string | null;
   providerAccountId: string;
-  channel: Channel;
+  channel: ChannelSlug;
   externalMessageId: string;
   senderAddress: string;
   senderName: string | null;
@@ -84,7 +84,7 @@ export interface MessageTable {
   subject: string | null;
   bodyText: string | null;
   bodyHtml: string | null;
-  direction: MessageDirection;
+  direction: MessageDirectionSlug;
   sentAt: Date;
   receivedAt: Date | null;
   isRead: Generated<boolean>;
@@ -114,7 +114,7 @@ export interface ContactTable {
 export interface ContactHandleTable {
   id: Generated<string>;
   contactId: string;
-  channel: Channel;
+  channel: ChannelSlug;
   handle: string;
   isPrimary: Generated<boolean>;
   createdAt: Generated<Date>;
