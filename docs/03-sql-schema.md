@@ -282,15 +282,9 @@ Both this table and `core/acme/` are deleted in a future ticket once a real Repe
 
 ## Indexes (Beyond PKs and Uniques)
 
-```sql
--- message queries by org, time, account, channel
-CREATE INDEX idx_message_org_sent ON message (org_id, sent_at DESC);
-CREATE INDEX idx_message_account ON message (provider_account_id, sent_at DESC);
-CREATE INDEX idx_message_thread ON message (thread_id, sent_at ASC);
+v0 only ships indexes that are load-bearing for current functionality:
 
--- contact handle resolution
-CREATE INDEX idx_contact_handle_lookup ON contact_handle (channel, handle);
+- `idx_job_queue_poll` — supports the `FOR UPDATE SKIP LOCKED` worker dequeue pattern (see Layer 7 above and ADR-004).
+- `idx_job_queue_dedup` — **unique constraint**, not just a performance index; enforces no-duplicate-enqueue-while-pending/processing for the `dedup_key` feature.
 
--- thread listing
-CREATE INDEX idx_thread_org_last ON thread (org_id, last_message_at DESC);
-```
+Read-path indexes (`message` by org/time/account, `thread` listing, `contact_handle` lookup, etc.) are added when a real query needs them, informed by `EXPLAIN ANALYZE` against representative data — not by ahead-of-time guessing. Adding speculative indexes ahead of consumers locks in shape decisions (column order, partial predicates, covering columns) before there's evidence to inform them, and pays write-overhead cost for nothing.

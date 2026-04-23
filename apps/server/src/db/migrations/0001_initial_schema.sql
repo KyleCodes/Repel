@@ -169,12 +169,16 @@ CREATE TABLE acme (
 );
 
 -- Indexes
-
-CREATE INDEX idx_message_org_sent ON message (org_id, sent_at DESC);
-CREATE INDEX idx_message_account ON message (provider_account_id, sent_at DESC);
-CREATE INDEX idx_message_thread ON message (thread_id, sent_at ASC);
-CREATE INDEX idx_contact_handle_lookup ON contact_handle (channel, handle);
-CREATE INDEX idx_thread_org_last ON thread (org_id, last_message_at DESC);
+--
+-- Only load-bearing indexes ship in v0:
+--   * idx_job_queue_poll      — backs the FOR UPDATE SKIP LOCKED worker
+--                               dequeue pattern (ADR-004).
+--   * idx_job_queue_dedup     — unique constraint, NOT a perf index;
+--                               enforces no-duplicate-enqueue-while-active.
+--
+-- Read-path indexes (message, thread, contact_handle, etc.) are added when
+-- a real query needs them, informed by EXPLAIN ANALYZE against representative
+-- data — not by ahead-of-time guessing.
 
 CREATE INDEX idx_job_queue_poll
   ON job_queue (queue, scheduled_for)
