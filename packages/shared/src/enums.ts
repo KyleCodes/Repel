@@ -1,20 +1,15 @@
 export const Channel = {
   email: 'email',
   sms: 'sms',
-  linkedin: 'linkedin',
-  imessage: 'imessage',
-  slack: 'slack',
-  discord: 'discord',
-  whatsapp: 'whatsapp',
+  dm: 'dm',
+  chat_room: 'chat_room',
 } as const;
 export type Channel = (typeof Channel)[keyof typeof Channel];
 
 export const Provider = {
   gmail: 'gmail',
   icloud: 'icloud',
-  outlook: 'outlook',
-  linkedin: 'linkedin',
-  imessage: 'imessage',
+  generic_imap: 'generic_imap',
 } as const;
 export type Provider = (typeof Provider)[keyof typeof Provider];
 
@@ -30,19 +25,6 @@ export const MessageDirection = {
   outbound: 'outbound',
 } as const;
 export type MessageDirection = (typeof MessageDirection)[keyof typeof MessageDirection];
-
-export const DraftStatus = {
-  draft: 'draft',
-  sent: 'sent',
-  discarded: 'discarded',
-} as const;
-export type DraftStatus = (typeof DraftStatus)[keyof typeof DraftStatus];
-
-export const TagSource = {
-  auto: 'auto',
-  manual: 'manual',
-} as const;
-export type TagSource = (typeof TagSource)[keyof typeof TagSource];
 
 export const UserRole = {
   admin: 'admin',
