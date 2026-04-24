@@ -1,27 +1,5 @@
 import { Client } from 'pg';
-
-// Admin connection target. Points at the maintenance "postgres" database so
-// CREATE/DROP DATABASE statements can run without holding a lock on the target.
-// PG_ADMIN_URL overrides; otherwise derive from DATABASE_URL by swapping the
-// db path for "postgres".
-function adminUrl(): string {
-  const explicit = process.env.PG_ADMIN_URL;
-  if (explicit) return explicit;
-
-  const base = process.env.DATABASE_URL;
-  if (!base) throw new Error('PG_ADMIN_URL or DATABASE_URL is required');
-
-  const u = new URL(base);
-  u.pathname = '/postgres';
-  return u.toString();
-}
-
-// Derives a per-worktree database URL by swapping the path on the admin URL.
-function databaseUrlFor(dbName: string): string {
-  const u = new URL(adminUrl());
-  u.pathname = `/${dbName}`;
-  return u.toString();
-}
+import { buildDatabaseUrl } from './lib/admin-url.js';
 
 // Sanitizes a branch name into a valid Postgres identifier.
 // Lowercases, replaces runs of non-alphanumerics with a single underscore,
@@ -35,8 +13,8 @@ export function sanitizeBranchToDbName(branch: string): string {
   return `repel_${slug}`;
 }
 
-async function withAdmin<T>(fn: (c: Client) => Promise<T>): Promise<T> {
-  const client = new Client({ connectionString: adminUrl() });
+async function withAdmin<T>(adminUrl: string, fn: (c: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString: adminUrl });
   await client.connect();
   try {
     return await fn(client);
@@ -58,6 +36,7 @@ function ident(name: string): string {
 }
 
 export interface CloneDatabaseInput {
+  adminUrl: string;
   branch: string;
   template: string;
   force: boolean;
@@ -71,7 +50,7 @@ export interface CloneDatabaseResult {
 export async function cloneDatabase(input: CloneDatabaseInput): Promise<CloneDatabaseResult> {
   const dbName = sanitizeBranchToDbName(input.branch);
 
-  await withAdmin(async function (client) {
+  await withAdmin(input.adminUrl, async function (client) {
     const exists = await dbExists(client, dbName);
     if (exists) {
       if (!input.force) {
@@ -87,17 +66,18 @@ export async function cloneDatabase(input: CloneDatabaseInput): Promise<CloneDat
     await client.query(`CREATE DATABASE ${ident(dbName)} TEMPLATE ${ident(input.template)}`);
   });
 
-  return { dbName, databaseUrl: databaseUrlFor(dbName) };
+  return { dbName, databaseUrl: buildDatabaseUrl(input.adminUrl, dbName) };
 }
 
 export interface DropDatabaseInput {
+  adminUrl: string;
   branch: string;
 }
 
 export async function dropDatabase(input: DropDatabaseInput): Promise<{ dbName: string; dropped: boolean }> {
   const dbName = sanitizeBranchToDbName(input.branch);
 
-  return withAdmin(async function (client) {
+  return withAdmin(input.adminUrl, async function (client) {
     const exists = await dbExists(client, dbName);
     if (!exists) return { dbName, dropped: false };
     await client.query(`DROP DATABASE ${ident(dbName)} WITH (FORCE)`);
@@ -106,6 +86,7 @@ export async function dropDatabase(input: DropDatabaseInput): Promise<{ dbName: 
 }
 
 export interface RefreshTemplateInput {
+  adminUrl: string;
   template: string;
 }
 
@@ -113,7 +94,7 @@ export interface RefreshTemplateInput {
 // for running migrations and any bootstrap seeding afterwards — those flows
 // already live elsewhere (node-pg-migrate, account-setup bootstrap).
 export async function refreshTemplate(input: RefreshTemplateInput): Promise<{ databaseUrl: string }> {
-  await withAdmin(async function (client) {
+  await withAdmin(input.adminUrl, async function (client) {
     const exists = await dbExists(client, input.template);
     if (exists) {
       await client.query(`DROP DATABASE ${ident(input.template)} WITH (FORCE)`);
@@ -121,5 +102,5 @@ export async function refreshTemplate(input: RefreshTemplateInput): Promise<{ da
     await client.query(`CREATE DATABASE ${ident(input.template)}`);
   });
 
-  return { databaseUrl: databaseUrlFor(input.template) };
+  return { databaseUrl: buildDatabaseUrl(input.adminUrl, input.template) };
 }

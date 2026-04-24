@@ -8,10 +8,15 @@
   "scripts": {
     "dev:server": "cd apps/server && bun run dev",
     "dev:web": "cd apps/web && bun run dev",
+    "dev:docker": "docker compose --profile dev up -d",
+    "dev:docker:down": "docker compose --profile dev down",
     "cli": "bun --filter='@repel/server' run cli --",
     "build": "bun run build --filter='*'",
     "typecheck": "tsc --build",
-    "test": "bun test"
+    "test": "bun test",
+    "migrate:create": "cd apps/server && bun --bun x node-pg-migrate create --migrations-dir src/db/migrations --migration-file-language ts",
+    "migrate:up": "cd apps/server && bun --bun x node-pg-migrate up --migrations-dir src/db/migrations",
+    "migrate:down": "cd apps/server && bun --bun x node-pg-migrate down --migrations-dir src/db/migrations"
   },
   "devDependencies": {
     "bun-types": "^1.3.13",
