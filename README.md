@@ -41,9 +41,9 @@ docs/
 # Start Postgres
 docker compose up -d
 
-# Run migrations
+# Run migrations (Bun runtime — required for .ts migrations to resolve workspace imports)
 cd apps/server
-bunx node-pg-migrate up --migrations-dir src/db/migrations
+bun --bun x node-pg-migrate up --migrations-dir src/db/migrations
 
 # Bootstrap the first org and user
 bun run cli bootstrap --org-name "My Org" --email you@example.com

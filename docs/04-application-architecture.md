@@ -108,7 +108,7 @@ Transaction ownership lives in `db/tx.ts` (per ADR-010, rewritten 2026-04-18). A
 
 Services are module-level singletons (per ADR-009 amendment, 2026-04-18) — no `makeXService(repos)` factories. Cross-service composition inside a `runInTx` flow uses sibling `*Impl` exports of the undecorated functions; trivial methods inline their `runInOrgTx` lambdas without lifting a named impl.
 
-Transport layers (HTTP, GraphQL, CLI) **never import `runInOrgTx` or `runInTx`** — they call service singletons directly. Migrations are raw SQL files in `db/migrations/` (node-pg-migrate format with `-- Up Migration` / `-- Down Migration` markers), applied in order by filename. No ORM.
+Transport layers (HTTP, GraphQL, CLI) **never import `runInOrgTx` or `runInTx`** — they call service singletons directly. Migrations are TypeScript files in `db/migrations/` (node-pg-migrate format exporting `up(pgm)` and `down(pgm)`), applied in order by filename. They run under the Bun runtime (`bun --bun x node-pg-migrate up`) so workspace imports like `@repel/shared` resolve without a build step — used to source enum values directly from the shared package, eliminating Postgres-enum ↔ TS-union drift. No ORM.
 
 ### Channel Adapters
 
