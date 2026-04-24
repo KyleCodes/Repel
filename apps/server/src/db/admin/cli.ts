@@ -6,7 +6,8 @@ import {
   dropDatabase,
   refreshTemplate,
   sanitizeBranchToDbName,
-} from './service.js';
+} from './commands.js';
+import { resolveAdminUrl } from './lib/admin-url.js';
 
 const DEFAULT_TEMPLATE = 'repel_dev';
 
@@ -22,6 +23,13 @@ interface DropOptions {
 
 interface RefreshOptions {
   template: string;
+}
+
+function readAdminUrlFromEnv(): string {
+  return resolveAdminUrl({
+    pgAdminUrl: process.env.PG_ADMIN_URL,
+    databaseUrl: process.env.DATABASE_URL,
+  });
 }
 
 export function registerDevDbCommands(program: Command): void {
@@ -45,7 +53,9 @@ export function registerDevDbCommands(program: Command): void {
 }
 
 async function runClone(branch: string, opts: CloneOptions): Promise<void> {
+  const adminUrl = readAdminUrlFromEnv();
   const { dbName, databaseUrl } = await cloneDatabase({
+    adminUrl,
     branch,
     template: opts.template,
     force: opts.force,
@@ -61,7 +71,8 @@ async function runClone(branch: string, opts: CloneOptions): Promise<void> {
 }
 
 async function runDrop(branch: string, _opts: DropOptions): Promise<void> {
-  const { dbName, dropped } = await dropDatabase({ branch });
+  const adminUrl = readAdminUrlFromEnv();
+  const { dbName, dropped } = await dropDatabase({ adminUrl, branch });
   if (dropped) {
     console.error(`db drop: dropped ${dbName}`);
   } else {
@@ -70,7 +81,8 @@ async function runDrop(branch: string, _opts: DropOptions): Promise<void> {
 }
 
 async function runRefresh(opts: RefreshOptions): Promise<void> {
-  await refreshTemplate({ template: opts.template });
+  const adminUrl = readAdminUrlFromEnv();
+  await refreshTemplate({ adminUrl, template: opts.template });
   console.error(`db refresh-template: recreated ${opts.template} (empty)`);
   console.error(`db refresh-template: next steps — run migrations and bootstrap against ${opts.template}`);
 }
