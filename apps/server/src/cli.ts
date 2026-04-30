@@ -13,7 +13,7 @@ registerDevDbCommands(program);
 program
   .parseAsync()
   .catch(function (err: Error) {
-    console.error(err.message);
+    console.error(err);
     process.exitCode = 1;
   })
   .finally(function () {
