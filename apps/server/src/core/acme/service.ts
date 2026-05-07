@@ -1,13 +1,15 @@
 // Reference vertical — demonstrates the canonical shape of a tenant-scoped
 // bounded context. Has no dependents. Delete when a new vertical in this repo
 // is well-exercised as the reference.
-
-import { runInOrgTx } from '../../db/tx.js';
-import { acmeRowToAcme } from './mappers.js';
-import type { Acme, CreateAcmeInput, ListAcmeOptions } from './types.js';
+import { runInOrgTx } from '../../db/tx.ts';
+import { acmeRowToAcme } from './mappers.ts';
+import type { Acme, CreateAcmeInput, ListAcmeOptions } from './types.ts';
 
 export const acmeService = {
-  createAcme: runInOrgTx(async function (repos, input: CreateAcmeInput): Promise<Acme> {
+  createAcme: runInOrgTx(async function (
+    repos,
+    input: CreateAcmeInput
+  ): Promise<Acme> {
     const row = await repos.acme.insert({
       orgId: input.orgId,
       note: input.note,
@@ -17,7 +19,7 @@ export const acmeService = {
 
   getAcmeById: runInOrgTx(async function (
     repos,
-    input: { orgId: string; id: string },
+    input: { orgId: string; id: string }
   ): Promise<Acme> {
     const row = await repos.acme.findById(input.id);
     if (!row) throw new Error(`Acme ${input.id} not found`);
@@ -26,15 +28,17 @@ export const acmeService = {
 
   listAcmeForOrg: runInOrgTx(async function (
     repos,
-    input: { orgId: string } & ListAcmeOptions,
+    input: { orgId: string } & ListAcmeOptions
   ): Promise<Acme[]> {
-    const rows = await repos.acme.listForOrg(input.orgId, { limit: input.limit });
+    const rows = await repos.acme.listForOrg(input.orgId, {
+      limit: input.limit,
+    });
     return rows.map(acmeRowToAcme);
   }),
 
   deleteAcme: runInOrgTx(async function (
     repos,
-    input: { orgId: string; id: string },
+    input: { orgId: string; id: string }
   ): Promise<void> {
     await repos.acme.deleteById(input.id);
   }),

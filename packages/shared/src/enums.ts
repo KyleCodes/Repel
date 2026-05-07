@@ -65,7 +65,8 @@ export const MessageDirection = {
   inbound: 'inbound',
   outbound: 'outbound',
 } as const;
-export type MessageDirectionSlug = (typeof MessageDirection)[keyof typeof MessageDirection];
+export type MessageDirectionSlug =
+  (typeof MessageDirection)[keyof typeof MessageDirection];
 
 export const UserRole = {
   admin: 'admin',

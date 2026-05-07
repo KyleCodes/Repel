@@ -1,9 +1,11 @@
 # ADR-010: Transaction Ownership via `runInOrgTx` / `runInTx` Decorators
+
 **Date:** 2026-04-13 (rewritten 2026-04-18 — shape changed from caller-owned `withOrgTx` to decorator-based service ownership; see History)
 **Status:** ACCEPTED
 **Domain:** architecture, data-access, multi-tenancy
 
 ## Context
+
 With vertical bounded-context layout (ADR-009), services operate over `Repos` bound to a `DbExecutor`. Every tenant-scoped query must set `app.current_org_id` for RLS (ADR-002), and this must not be forgotten or misapplied.
 
 The original 2026-04-13 version of this ADR put transaction ownership at the **caller**: every HTTP/GraphQL/CLI handler imported `withOrgTx`, constructed the services it needed per-request (`makeUserService(repos)`), and managed the transaction boundary explicitly:
@@ -26,6 +28,7 @@ Two problems surfaced as the architecture matured:
 The race condition in the pre-2026-04-13 `withOrgContext` middleware (connection released before async handlers completed) is still real — a transaction-scoped `SET LOCAL` is still the right mechanism. What changes is **who owns the transaction**: the service, not the caller.
 
 ## Decision
+
 All transaction management goes through two decorators in `apps/server/src/db/tx.ts`:
 
 - `runInOrgTx(fn)` — tenant-scoped. Wraps a service method `(repos, input) => Promise<T>`, returning a callable `(input) => Promise<T>`. On call:
@@ -53,19 +56,21 @@ Services calling services is free — the nested call sees an ambient ALS frame 
 Flow services that need multiple services inside one transaction (e.g. `account-setup.bootstrap`) wrap their method in `runInTx` and call the **undecorated `*Impl` functions** of downstream services with the ambient `repos`. Tenant-scoped decorated services cannot be called inside `runInTx` (RLS isn't active); the ADR-009 `*Impl` convention covers this case.
 
 ## Alternatives Considered
-| Option | Reason Rejected |
-|--------|----------------|
-| Caller-owned `withOrgTx(orgId, (repos) => ...)` in every handler (the 2026-04-13 version) | Forces transport layers to know about transactions, construct services per-request. Leaky and verbose. |
-| `_inTx` dual surface per service (public methods own tx; `_inTx` methods take `repos`) | Two APIs per service; callers must remember which to use. |
-| Thread `repos` through every service call signature (`todoSvc.create(repos, input)`) | Leaks `repos` up to transport — the same leak, renamed. |
-| AsyncLocalStorage without a decorator (services call `runInOrgTx` inside each method body) | Method bodies gain a wrapper line each; the decorator collapses the boilerplate. |
-| Flatten services entirely; transport calls `repos` directly inside `withOrgTx` | Loses the service layer's role as the home for invariants; transport-touches-repos violates the layering rule. |
-| Middleware-owned transaction wrapping all routes | Express `next()` is synchronous; connection releases before async route handlers complete — real race condition. |
-| Services accept optional `trx` parameter | Callers must thread `trx` through every call; DI-by-parameter at every layer is the problem we're solving. |
+
+| Option                                                                                     | Reason Rejected                                                                                                  |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Caller-owned `withOrgTx(orgId, (repos) => ...)` in every handler (the 2026-04-13 version)  | Forces transport layers to know about transactions, construct services per-request. Leaky and verbose.           |
+| `_inTx` dual surface per service (public methods own tx; `_inTx` methods take `repos`)     | Two APIs per service; callers must remember which to use.                                                        |
+| Thread `repos` through every service call signature (`todoSvc.create(repos, input)`)       | Leaks `repos` up to transport — the same leak, renamed.                                                          |
+| AsyncLocalStorage without a decorator (services call `runInOrgTx` inside each method body) | Method bodies gain a wrapper line each; the decorator collapses the boilerplate.                                 |
+| Flatten services entirely; transport calls `repos` directly inside `withOrgTx`             | Loses the service layer's role as the home for invariants; transport-touches-repos violates the layering rule.   |
+| Middleware-owned transaction wrapping all routes                                           | Express `next()` is synchronous; connection releases before async route handlers complete — real race condition. |
+| Services accept optional `trx` parameter                                                   | Callers must thread `trx` through every call; DI-by-parameter at every layer is the problem we're solving.       |
 
 ## Consequences
 
 ### Positive
+
 - Transport layers are ignorant of transactions. One rule: call services.
 - Services are stateless module singletons — no per-request construction.
 - Cross-service composition is implicit and atomic. Nested decorated calls join the ambient tx via AsyncLocalStorage.
@@ -75,20 +80,22 @@ Flow services that need multiple services inside one transaction (e.g. `account-
 
 ### Negative / Trade-offs
 
-| Risk | Mitigation |
-|---|---|
+| Risk                                                              | Mitigation                                                                          |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Wrong `orgId` supplied on nested call → silent cross-tenant write | `OrgScoped<A>` type constraint at compile time; runtime mismatch guard in decorator |
-| Tenant service called inside bootstrap (`runInTx`) | Decorator throws (`ambient.orgId === null` branch) |
-| Unscoped flow joining a tenant tx (would bypass RLS) | `runInTx` throws if ambient has `orgId` |
-| AsyncLocalStorage context loss on worker threads | N/A — service bodies never cross thread boundaries in this codebase |
-| Mixing legacy `withTx`/`withOrgTx` with the new decorator | Old exports removed from `db/tx.ts` — one system only |
-| ALS overhead | ~100–200ns per `.run()` — negligible on request-path code |
-| Kysely/pg serialize queries on same connection inside a tx | Correct transactional semantics; `Promise.all` inside a tx is safe but not parallel |
+| Tenant service called inside bootstrap (`runInTx`)                | Decorator throws (`ambient.orgId === null` branch)                                  |
+| Unscoped flow joining a tenant tx (would bypass RLS)              | `runInTx` throws if ambient has `orgId`                                             |
+| AsyncLocalStorage context loss on worker threads                  | N/A — service bodies never cross thread boundaries in this codebase                 |
+| Mixing legacy `withTx`/`withOrgTx` with the new decorator         | Old exports removed from `db/tx.ts` — one system only                               |
+| ALS overhead                                                      | ~100–200ns per `.run()` — negligible on request-path code                           |
+| Kysely/pg serialize queries on same connection inside a tx        | Correct transactional semantics; `Promise.all` inside a tx is safe but not parallel |
 
 ### Risks
+
 - RISK: Bootstrap (`runInTx`, no RLS) fails silently in production if the Postgres role respects RLS | MITIGATION: Bootstrap is a CLI-only flow run with the migration/superuser role. If a non-superuser app role is introduced, bootstrap must use a `BYPASSRLS` role explicitly.
 
 ## Compliance
+
 - MUST: Tenant-scoped service methods MUST be wrapped in `runInOrgTx`.
 - MUST: Bootstrap and flows that create the org itself MUST be wrapped in `runInTx`.
 - MUST: `app.current_org_id` MUST be set with `SET LOCAL` inside the decorator (transaction-scoped), never `SET` (session-scoped).
@@ -100,14 +107,17 @@ Flow services that need multiple services inside one transaction (e.g. `account-
 - SHOULD: Flow services (`account-setup`-style) use `runInTx` and compose via the undecorated `*Impl` functions of downstream services (see ADR-009).
 
 ## Review Trigger
+
 - A separate non-superuser app role is introduced in production, at which point the `runInTx` path needs to use `BYPASSRLS` or a privileged role explicitly.
 - A legitimate cross-tenant admin flow appears (e.g. a super-admin dashboard). That case warrants a new `runAsAdmin` primitive rather than relaxing the cross-tenant guard.
 
 ## History
+
 - **2026-04-13** — Original decision: caller-owned `withTx(fn)` and `withOrgTx(orgId, fn)` functions in `db/tx.ts`. Services accepted `Repos` via `makeXService(repos)` factory. Route handlers opened `withOrgTx` themselves.
 - **2026-04-18** — Rewrite: transaction ownership moved from caller to service via `runInOrgTx` / `runInTx` decorators. AsyncLocalStorage carries an ambient `TxContext = { repos, orgId | null }` so nested decorated calls automatically join instead of opening fresh transactions. Transport layers call service singletons directly and no longer import any tx primitive. Validated end-to-end in `~/Developer/monorepo_template` (see its ADR-009 for the sibling implementation); REP-9 carries the code migration in this repo. The `SET LOCAL`-inside-a-transaction mechanism from 2026-04-13 is retained unchanged — only the callsite that initiates the transaction changes.
 
 ## Related
+
 - SUPERSEDES: NONE (rewrite of self; history preserved above)
 - RELATED TO: ADR-002, ADR-009
 - REFERENCED BY: NONE

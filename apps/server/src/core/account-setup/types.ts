@@ -1,5 +1,5 @@
-import type { Org } from '../org/types.js';
-import type { User } from '../user/types.js';
+import type { Org } from '../org/types.ts';
+import type { User } from '../user/types.ts';
 
 export interface BootstrapInput {
   orgName: string;

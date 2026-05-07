@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { readDatabaseUrlFromEnvLocal } from '../env-local.js';
+import { readDatabaseUrlFromEnvLocal } from '../env-local.ts';
 
 let original: string | undefined;
 
@@ -15,7 +15,9 @@ afterEach(function () {
 describe('readDatabaseUrlFromEnvLocal', function () {
   test('returns DATABASE_URL when set', function () {
     process.env.DATABASE_URL = 'postgres://app@host:5432/repel_test';
-    expect(readDatabaseUrlFromEnvLocal()).toBe('postgres://app@host:5432/repel_test');
+    expect(readDatabaseUrlFromEnvLocal()).toBe(
+      'postgres://app@host:5432/repel_test'
+    );
   });
 
   test('throws when DATABASE_URL is unset', function () {

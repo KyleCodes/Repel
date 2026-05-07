@@ -1,6 +1,6 @@
 # TypeScript Application Architecture
 
-> **Drift notice (2026-04-22):** This document is being incrementally aligned with the post-REP-9 codebase. The Project Structure, Database Layer, and Entrypoints sections below reflect the current shape. Sections describing the channel adapter, pipeline, agent, and API route layers describe the v1 *target* shape and have not yet landed — those sections will be rewritten under a follow-up ticket as those layers come online.
+> **Drift notice (2026-04-22):** This document is being incrementally aligned with the post-REP-9 codebase. The Project Structure, Database Layer, and Entrypoints sections below reflect the current shape. Sections describing the channel adapter, pipeline, agent, and API route layers describe the v1 _target_ shape and have not yet landed — those sections will be rewritten under a follow-up ticket as those layers come online.
 
 ## Overview
 
@@ -198,25 +198,29 @@ Every API resource gets a typed fetch function in `api/` and a TanStack Query ho
 
 ```typescript
 // api/threads.ts
-import type { ListThreadsQuery, ListThreadsResponse } from '@mailbox/shared';
+import type { ListThreadsQuery, ListThreadsResponse } from "@mailbox/shared";
+import type { ListThreadsQuery } from "@mailbox/shared";
+// hooks/use-threads.ts
+import { useQuery } from "@tanstack/react-query";
+import { listThreads } from "../api/threads";
 
-export async function listThreads(params: ListThreadsQuery): Promise<ListThreadsResponse> {
+export async function listThreads(
+  params: ListThreadsQuery,
+): Promise<ListThreadsResponse> {
   const qs = new URLSearchParams(
-    Object.entries(params).filter(([_, v]) => v !== undefined) as [string, string][]
+    Object.entries(params).filter(([_, v]) => v !== undefined) as [
+      string,
+      string,
+    ][],
   );
   const res = await fetch(`/api/threads?${qs}`);
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
 
-// hooks/use-threads.ts
-import { useQuery } from '@tanstack/react-query';
-import { listThreads } from '../api/threads';
-import type { ListThreadsQuery } from '@mailbox/shared';
-
 export function useThreads(params: ListThreadsQuery) {
   return useQuery({
-    queryKey: ['threads', params],
+    queryKey: ["threads", params],
     queryFn: () => listThreads(params),
   });
 }
@@ -229,7 +233,16 @@ function ThreadList() {
   const { data, isLoading, error } = useThreads({ limit: 50 });
   if (isLoading) return <Loading />;
   if (error) return <Error error={error} />;
-  return <ul>{data.threads.map(t => <ThreadRow key={t.id} thread={t} />)}</ul>;
+  return (
+    <ul>
+      {data.threads.map((t) => (
+        <ThreadRow
+          key={t.id}
+          thread={t}
+        />
+      ))}
+    </ul>
+  );
 }
 ```
 
@@ -340,7 +353,7 @@ services:
       POSTGRES_USER: mailbox
       POSTGRES_PASSWORD: dev
     ports:
-      - "5432:5432"
+      - '5432:5432'
     profiles: [dev, full]
 
   app:
@@ -351,6 +364,6 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     depends_on: [postgres]
     ports:
-      - "3000:3000"
+      - '3000:3000'
     profiles: [full]
 ```

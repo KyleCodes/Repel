@@ -1,11 +1,14 @@
-import type { Repos } from '../../db/repos.js';
-import { runInOrgTx, runInTx } from '../../db/tx.js';
-import { userRowToUser } from './mappers.js';
-import type { CreateUserInput, User } from './types.js';
+import type { Repos } from '../../db/repos.ts';
+import { runInOrgTx, runInTx } from '../../db/tx.ts';
+import { userRowToUser } from './mappers.ts';
+import type { CreateUserInput, User } from './types.ts';
 
 // createUser is lifted to a named impl because accountSetupService composes
 // it inside runInTx (see ADR-009).
-async function createUserImpl(repos: Repos, input: CreateUserInput): Promise<User> {
+async function createUserImpl(
+  repos: Repos,
+  input: CreateUserInput
+): Promise<User> {
   const row = await repos.users.insert({
     orgId: input.orgId,
     email: input.email,
@@ -20,7 +23,7 @@ export const userService = {
 
   getUserById: runInOrgTx(async function (
     repos,
-    input: { orgId: string; id: string },
+    input: { orgId: string; id: string }
   ): Promise<User> {
     const row = await repos.users.findById(input.id);
     if (!row) throw new Error(`User ${input.id} not found`);
@@ -29,7 +32,7 @@ export const userService = {
 
   listUsersInOrg: runInOrgTx(async function (
     repos,
-    input: { orgId: string },
+    input: { orgId: string }
   ): Promise<User[]> {
     const rows = await repos.users.findByOrgId(input.orgId);
     return rows.map(userRowToUser);

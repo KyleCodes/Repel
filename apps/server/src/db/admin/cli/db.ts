@@ -1,15 +1,15 @@
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { z } from 'zod';
+import { resolveAdminUrl } from '../lib/admin-url.ts';
 import {
   cloneDatabase,
   dropDatabase,
   refreshTemplate,
   sanitizeBranchToDbName,
-} from '../service.js';
-import { resolveAdminUrl } from '../lib/admin-url.js';
-import { CloneInput, DropInput, RefreshTemplateInput } from './schemas/db.js';
+} from '../service.ts';
+import { CloneInput, DropInput, RefreshTemplateInput } from './schemas/db.ts';
 
 function readAdminUrlFromEnv(): string {
   return resolveAdminUrl({
@@ -21,7 +21,10 @@ function readAdminUrlFromEnv(): string {
 // Commander .action() is the parse boundary per DR-REP-38-2. The raw positional
 // + options object goes through Schema.safeParse, and any validation issue exits
 // non-zero with a human-readable message. Handlers receive a single typed input.
-function parseOrExit<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> {
+function parseOrExit<S extends z.ZodTypeAny>(
+  schema: S,
+  raw: unknown
+): z.infer<S> {
   const result = schema.safeParse(raw);
   if (!result.success) {
     for (const issue of result.error.issues) {
@@ -34,14 +37,24 @@ function parseOrExit<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S
 }
 
 export function registerDevDbCommands(program: Command): void {
-  const db = program.command('db').description('Local development database lifecycle');
+  const db = program
+    .command('db')
+    .description('Local development database lifecycle');
 
   db.command('clone <branch>')
-    .description('Clone the template database into a per-branch database and write .env.local')
+    .description(
+      'Clone the template database into a per-branch database and write .env.local'
+    )
     .option('--template <name>', 'source template database')
     .option('--env-file <path>', 'path to the .env file to write')
-    .option('--force', 'drop and recreate if the per-branch database already exists')
-    .action(async function (branch: string, opts: { template?: string; envFile?: string; force?: boolean }) {
+    .option(
+      '--force',
+      'drop and recreate if the per-branch database already exists'
+    )
+    .action(async function (
+      branch: string,
+      opts: { template?: string; envFile?: string; force?: boolean }
+    ) {
       const input = parseOrExit(CloneInput, {
         branch,
         template: opts.template,
@@ -59,10 +72,14 @@ export function registerDevDbCommands(program: Command): void {
     });
 
   db.command('refresh-template')
-    .description('Drop and recreate the template database (empty — caller runs migrations + seed)')
+    .description(
+      'Drop and recreate the template database (empty — caller runs migrations + seed)'
+    )
     .option('--template <name>', 'template database name')
     .action(async function (opts: { template?: string }) {
-      const input = parseOrExit(RefreshTemplateInput, { template: opts.template });
+      const input = parseOrExit(RefreshTemplateInput, {
+        template: opts.template,
+      });
       await runRefreshTemplate(input);
     });
 }
@@ -86,7 +103,10 @@ export async function runClone(input: CloneInput): Promise<void> {
 
 export async function runDrop(input: DropInput): Promise<void> {
   const adminUrl = readAdminUrlFromEnv();
-  const { dbName, dropped } = await dropDatabase({ adminUrl, branch: input.branch });
+  const { dbName, dropped } = await dropDatabase({
+    adminUrl,
+    branch: input.branch,
+  });
   if (dropped) {
     console.error(`db drop: dropped ${dbName}`);
   } else {
@@ -94,11 +114,15 @@ export async function runDrop(input: DropInput): Promise<void> {
   }
 }
 
-export async function runRefreshTemplate(input: RefreshTemplateInput): Promise<void> {
+export async function runRefreshTemplate(
+  input: RefreshTemplateInput
+): Promise<void> {
   const adminUrl = readAdminUrlFromEnv();
   await refreshTemplate({ adminUrl, template: input.template });
   console.error(`db refresh-template: recreated ${input.template} (empty)`);
-  console.error(`db refresh-template: next steps — run migrations and bootstrap against ${input.template}`);
+  console.error(
+    `db refresh-template: next steps — run migrations and bootstrap against ${input.template}`
+  );
 }
 
 export { sanitizeBranchToDbName };

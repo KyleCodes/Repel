@@ -11,6 +11,7 @@
 Expand the `repel db` CLI (Commander, registered at `apps/server/src/cli.ts`) into the canonical interface for all developer-facing database operations. Replace the loose `npm run migrate:*` scripts with `db migrate {create|up|down}`, add `db status`, `db connect`, `db query`. Drop "rollback" from the original framing — `migrate down [target]` covers it.
 
 Two cross-cutting concerns ride along:
+
 1. Adopt **zod ^4** as the monorepo-wide validation library, replacing the unused `zod@3` in `packages/shared`.
 2. Restructure `apps/server/src/db/admin/cli.ts` → `apps/server/src/db/admin/cli/db.ts` (Commander wiring + inline handlers) with colocated `cli/schemas/db.ts` (per-namespace zod schemas).
 
@@ -48,6 +49,7 @@ apps/server/src/db/admin/cli/
 ### Handler contract
 
 Every Commander `.action(...)` does:
+
 1. Construct an args object from positional args + options.
 2. `Schema.safeParse(args)` against the matching zod schema in `schemas/db.ts`.
 3. On `success: false`, print formatted issues, exit non-zero.
@@ -62,6 +64,7 @@ Every Commander `.action(...)` does:
 ### Migrate target resolver
 
 `db migrate {up|down} [target]`:
+
 - target omitted → `up` = `runner({ count: Infinity, direction: 'up' })`; `down` = `runner({ count: 1, direction: 'down' })`.
 - target matches `/^\d+$/` → timestamp-prefix range. `runner({ count: <ts>, timestamp: true, direction })`. Up applies all pending where filename-ts ≤ target; down rolls back all applied where filename-ts ≥ target.
 - Otherwise → exact filename. `runner({ file: <name>, direction })`.
@@ -107,6 +110,7 @@ T2 and T3 are independent of each other.
 ## Files touched (rollup)
 
 **New:**
+
 - `apps/server/src/db/admin/cli/db.ts`
 - `apps/server/src/db/admin/cli/schemas/db.ts`
 - `apps/server/src/db/admin/cli/lib/branch.ts`
@@ -114,15 +118,18 @@ T2 and T3 are independent of each other.
 - `docs/context/adr/ADR-012-cli-structure-namespace-and-schemas.md`
 
 **Modified:**
+
 - `apps/server/src/cli.ts` (import path)
 - `package.json` (root) — `+zod@^4`, `-migrate:*` scripts
 - `packages/shared/package.json` — `-zod@3`
 - `docs/context/adr/index.md` (ADR-012 entry)
 
 **Deleted:**
+
 - `apps/server/src/db/admin/cli.ts`
 
 **Renamed:**
+
 - `apps/server/src/db/migrations/0001_initial_schema.ts` → `<unix-ms>_rep-9.ts`
 
 ## Open / Assumed

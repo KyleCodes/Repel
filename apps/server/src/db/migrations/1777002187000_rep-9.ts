@@ -18,16 +18,32 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   // Layer 1: Tenancy
 
   pgm.createTable('org', {
-    id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
     name: { type: 'text', notNull: true },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-    updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
+    updated_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   pgm.createTable(
     'user',
     {
-      id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+      id: {
+        type: 'uuid',
+        primaryKey: true,
+        default: pgm.func('gen_random_uuid()'),
+      },
       org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
       email: { type: 'text', notNull: true },
       name: { type: 'text' },
@@ -37,12 +53,20 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
         default: 'admin',
         check: "role IN ('admin', 'member', 'viewer')",
       },
-      created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-      updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+      created_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
+      updated_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
     },
     {
       constraints: { unique: ['org_id', 'email'] },
-    },
+    }
   );
 
   // Layer 2: Provider Accounts (per ADR-005)
@@ -50,7 +74,11 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.createTable(
     'provider_account',
     {
-      id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+      id: {
+        type: 'uuid',
+        primaryKey: true,
+        default: pgm.func('gen_random_uuid()'),
+      },
       org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
       user_id: { type: 'uuid', notNull: true, references: '"user"(id)' },
 
@@ -66,12 +94,20 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
       last_synced_at: { type: 'timestamptz' },
       is_active: { type: 'boolean', notNull: true, default: true },
 
-      created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-      updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+      created_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
+      updated_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
     },
     {
       constraints: { unique: ['org_id', 'provider', 'external_account_id'] },
-    },
+    }
   );
 
   // Layer 3: Threads and Messages
@@ -79,33 +115,57 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.createTable(
     'thread',
     {
-      id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+      id: {
+        type: 'uuid',
+        primaryKey: true,
+        default: pgm.func('gen_random_uuid()'),
+      },
       org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
       channel: { type: 'channel', notNull: true },
       external_thread_id: { type: 'text' },
       subject: { type: 'text' },
       last_message_at: { type: 'timestamptz' },
       message_count: { type: 'int', notNull: true, default: 0 },
-      created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-      updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+      created_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
+      updated_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
     },
     {
       constraints: { unique: ['org_id', 'channel', 'external_thread_id'] },
-    },
+    }
   );
 
   pgm.createTable(
     'message',
     {
-      id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+      id: {
+        type: 'uuid',
+        primaryKey: true,
+        default: pgm.func('gen_random_uuid()'),
+      },
       org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
       thread_id: { type: 'uuid', references: 'thread(id)' },
-      provider_account_id: { type: 'uuid', notNull: true, references: 'provider_account(id)' },
+      provider_account_id: {
+        type: 'uuid',
+        notNull: true,
+        references: 'provider_account(id)',
+      },
       channel: { type: 'channel', notNull: true },
       external_message_id: { type: 'text', notNull: true },
       sender_address: { type: 'text', notNull: true },
       sender_name: { type: 'text' },
-      recipient_addresses: { type: 'text[]', notNull: true, default: pgm.func("'{}'") },
+      recipient_addresses: {
+        type: 'text[]',
+        notNull: true,
+        default: pgm.func("'{}'"),
+      },
       cc_addresses: { type: 'text[]', default: pgm.func("'{}'") },
       bcc_addresses: { type: 'text[]', default: pgm.func("'{}'") },
       subject: { type: 'text' },
@@ -122,65 +182,109 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
       is_starred: { type: 'boolean', notNull: true, default: false },
       is_archived: { type: 'boolean', notNull: true, default: false },
       is_deleted: { type: 'boolean', notNull: true, default: false },
-      created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-      updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+      created_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
+      updated_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
     },
     {
       constraints: { unique: ['provider_account_id', 'external_message_id'] },
-    },
+    }
   );
 
   pgm.createTable('message_raw', {
     message_id: { type: 'uuid', primaryKey: true, references: 'message(id)' },
     payload: { type: 'jsonb', notNull: true },
     content_type: { type: 'text', notNull: true },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   // Layer 5: Contacts (Layer 4 — derived facts — is deferred. See
   // docs/design_ideas/derived-fact-model.md.)
 
   pgm.createTable('contact', {
-    id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
     org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
     name: { type: 'text' },
     is_blocked: { type: 'boolean', notNull: true, default: false },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-    updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
+    updated_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   pgm.createTable(
     'contact_handle',
     {
-      id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+      id: {
+        type: 'uuid',
+        primaryKey: true,
+        default: pgm.func('gen_random_uuid()'),
+      },
       contact_id: { type: 'uuid', notNull: true, references: 'contact(id)' },
       channel: { type: 'channel', notNull: true },
       handle: { type: 'text', notNull: true },
       is_primary: { type: 'boolean', notNull: true, default: false },
-      created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+      created_at: {
+        type: 'timestamptz',
+        notNull: true,
+        default: pgm.func('now()'),
+      },
     },
     {
       constraints: { unique: ['contact_id', 'channel', 'handle'] },
-    },
+    }
   );
 
   // Layer 6: Attachments
 
   pgm.createTable('attachment', {
-    id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
     org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
     message_id: { type: 'uuid', notNull: true, references: 'message(id)' },
     filename: { type: 'text', notNull: true },
     content_type: { type: 'text' },
     size_bytes: { type: 'bigint' },
     storage_path: { type: 'text', notNull: true },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   // Layer 7: Processing Queue
 
   pgm.createTable('job_queue', {
-    id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
     queue: { type: 'text', notNull: true, default: 'default' },
     payload: { type: 'jsonb', notNull: true },
     dedup_key: { type: 'text' },
@@ -188,16 +292,25 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
       type: 'text',
       notNull: true,
       default: 'pending',
-      check: "status IN ('pending', 'processing', 'completed', 'failed', 'dead')",
+      check:
+        "status IN ('pending', 'processing', 'completed', 'failed', 'dead')",
     },
     attempts: { type: 'int', notNull: true, default: 0 },
     max_attempts: { type: 'int', notNull: true, default: 3 },
     last_error: { type: 'text' },
     locked_at: { type: 'timestamptz' },
     locked_by: { type: 'text' },
-    scheduled_for: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    scheduled_for: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
     completed_at: { type: 'timestamptz' },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   // Layer 8: Reference vertical (acme). Paired with apps/server/src/core/acme/.
@@ -205,11 +318,23 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   // as the in-tree reference. No production data lands here.
 
   pgm.createTable('acme', {
-    id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
     org_id: { type: 'uuid', notNull: true, references: 'org(id)' },
     note: { type: 'text', notNull: true },
-    created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
-    updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    created_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
+    updated_at: {
+      type: 'timestamptz',
+      notNull: true,
+      default: pgm.func('now()'),
+    },
   });
 
   // Indexes

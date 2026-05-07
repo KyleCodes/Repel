@@ -10,6 +10,7 @@ Surfaces and projects named in the product spec or surfaced during planning that
 Once Syncer writes messages into the database, they need to become viewable from the CLI. Reading is a separate concern with its own complexity: thread grouping, filtering, pagination, body rendering for the terminal. Tickets will live under their own project when it's created.
 
 **Rough scope:**
+
 - `core/message/` expansion — list queries with filters (account, channel, date, starred, unread)
 - `core/thread/` — thread aggregation, subject normalization, message counts, `last_message_at` maintenance during insert
 - `repel messages list` / `messages show <id>` / `messages mark-read` / `star` / `archive`
@@ -33,6 +34,7 @@ The full derived-fact pipeline. This is where the locked deferral from `docs/des
 v1 is manual-sync-via-CLI. You'll get tired of it. Scheduled incremental syncs (simple interval-per-account) and Gmail Pub/Sub push notifications for near-real-time ingestion.
 
 **Rough scope:**
+
 - Scheduler component inside the worker process, enqueues `sync.incremental` per active `provider_account` at configured intervals
 - Configuration: per-account interval, enable/disable, last-tick tracking (dedup_key on `job_queue` already prevents double-enqueue on restart, but track for observability)
 - Gmail Pub/Sub push: `api/webhooks/gmail-push/` receives push notifications, translates to `sync.range` jobs

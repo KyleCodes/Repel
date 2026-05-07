@@ -6,7 +6,7 @@
 
 ## Why this is deferred
 
-Derived facts are a layer *above* raw sync. The `message` and `message_raw` tables do not need to know derived facts exist. We can ship sync end-to-end (CLI + provider adapters + sync engine + raw storage) without resolving any of the questions below, then revisit with concrete experience of what processing actually needs.
+Derived facts are a layer _above_ raw sync. The `message` and `message_raw` tables do not need to know derived facts exist. We can ship sync end-to-end (CLI + provider adapters + sync engine + raw storage) without resolving any of the questions below, then revisit with concrete experience of what processing actually needs.
 
 Punting also lets us think about the event-sourcing angle (see "Open Direction" below) without rushing.
 
@@ -85,14 +85,14 @@ CREATE INDEX idx_processor_run_message ON processor_run (message_id, processor_i
 
 ## Mapping from the existing schema
 
-| Old table | New representation |
-|---|---|
-| `message_classification` | `derived_fact` rows where `fact_type='classification'`, `value={category, subcategory}` |
-| `message_tag` | `derived_fact` rows where `fact_type='tag'`, `value={tag}` (auto-tags only — see open question D) |
-| `message_summary` | `derived_fact` row where `fact_type='summary'`, `value={summary}` |
-| `message_importance` | `derived_fact` row where `fact_type='importance_score'`, `value={score, reasoning}` |
-| `draft_reply` | `derived_fact` row where `fact_type='draft_reply'`, `value={body_text, body_html, status}` |
-| `classifier_config` | `processor` row where `kind='classify'` |
+| Old table                | New representation                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `message_classification` | `derived_fact` rows where `fact_type='classification'`, `value={category, subcategory}`           |
+| `message_tag`            | `derived_fact` rows where `fact_type='tag'`, `value={tag}` (auto-tags only — see open question D) |
+| `message_summary`        | `derived_fact` row where `fact_type='summary'`, `value={summary}`                                 |
+| `message_importance`     | `derived_fact` row where `fact_type='importance_score'`, `value={score, reasoning}`               |
+| `draft_reply`            | `derived_fact` row where `fact_type='draft_reply'`, `value={body_text, body_html, status}`        |
+| `classifier_config`      | `processor` row where `kind='classify'`                                                           |
 
 Per-feature query ergonomics come back as views:
 
@@ -117,7 +117,7 @@ FROM derived_fact WHERE fact_type = 'importance_score';
 
 > seems like this table could be a materialized view on top of event logs emitted by the processing pipeline as a message flows through
 
-This reframes the model. Instead of `processor_run` being the source of truth, it becomes a *projection* over an append-only event log:
+This reframes the model. Instead of `processor_run` being the source of truth, it becomes a _projection_ over an append-only event log:
 
 ```sql
 CREATE TABLE processing_event (
@@ -165,8 +165,9 @@ Before implementing the pipeline, not after. Once the worker is dequeueing jobs 
 **(E) Cascading invalidation on re-sync.** When a re-synced `message_raw` produces a different normalized `message`, derived facts become stale. Proposal: add `message.content_hash` and `derived_fact.message_content_hash`. A fact is "fresh" when the hashes match, "stale" otherwise. Replay verbs can target stale facts (`process replay --stale --processor classify`). More flexible than auto-invalidation.
 
 **(F) Where do processor outputs that aren't message-scoped go?** Example: "extract contacts and update the contact graph." The output isn't a fact about the message — it's a side effect on `contact`. Two options:
-  - (a) `derived_fact` only stores message-scoped facts; side effects happen in the same TX as the `processor_run` insert.
-  - (b) Processors *always* write a `derived_fact` describing what they did, even if the real effect is elsewhere — fact serves as an audit log.
+
+- (a) `derived_fact` only stores message-scoped facts; side effects happen in the same TX as the `processor_run` insert.
+- (b) Processors _always_ write a `derived_fact` describing what they did, even if the real effect is elsewhere — fact serves as an audit log.
 
 Lean (b) for the audit-log property, especially under the event-sourcing direction where it falls out naturally.
 

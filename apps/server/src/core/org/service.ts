@@ -1,12 +1,15 @@
-import type { Repos } from '../../db/repos.js';
-import { runInOrgTx, runInTx } from '../../db/tx.js';
-import { orgRowToOrg } from './mappers.js';
-import type { CreateOrgInput, Org } from './types.js';
+import type { Repos } from '../../db/repos.ts';
+import { runInOrgTx, runInTx } from '../../db/tx.ts';
+import { orgRowToOrg } from './mappers.ts';
+import type { CreateOrgInput, Org } from './types.ts';
 
 // createOrg is lifted to a named impl because accountSetupService composes
 // it inside runInTx (the decorated tenant-scoped services refuse to join an
 // unscoped ambient tx — see ADR-009).
-async function createOrgImpl(repos: Repos, input: CreateOrgInput): Promise<Org> {
+async function createOrgImpl(
+  repos: Repos,
+  input: CreateOrgInput
+): Promise<Org> {
   const existing = await repos.orgs.findByName(input.name);
   if (existing) throw new Error(`Org with name "${input.name}" already exists`);
   const row = await repos.orgs.insert({ name: input.name });
@@ -18,7 +21,7 @@ export const orgService = {
 
   getOrgById: runInOrgTx(async function (
     repos,
-    input: { orgId: string },
+    input: { orgId: string }
   ): Promise<Org> {
     const row = await repos.orgs.findById(input.orgId);
     if (!row) throw new Error(`Org ${input.orgId} not found`);

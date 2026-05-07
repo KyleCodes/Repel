@@ -1,4 +1,4 @@
-import type { DbExecutor, OrgRow } from '../../db/types.js';
+import type { DbExecutor, OrgRow } from '../../db/types.ts';
 
 export function makeOrgRepo(q: DbExecutor) {
   return {

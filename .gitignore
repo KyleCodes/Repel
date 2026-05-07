@@ -30,6 +30,7 @@ data/blobs/
 CLAUDE.md
 .claude/agents
 .claude/commands
+.claude/skills/TypeScript
 .claude/skills/blueprint
 .claude/skills/datadog-pup
 .claude/skills/engineering-project-manager
@@ -39,3 +40,6 @@ templates
 docs/context/git-conventions.md
 docs/summaries/handoff-2026-03-30-C-17413-execute.md
 # --- End AI Code Flow ---
+
+# devctl worktree machinery (absolute-path symlinks, host-local)
+.devctl_generated/

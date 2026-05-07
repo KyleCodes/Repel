@@ -1,4 +1,4 @@
-import type { DbExecutor, NewUser, UserRow } from '../../db/types.js';
+import type { DbExecutor, NewUser, UserRow } from '../../db/types.ts';
 
 export function makeUserRepo(q: DbExecutor) {
   return {

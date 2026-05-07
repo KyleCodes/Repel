@@ -5,8 +5,6 @@
     "rootDir": "./src",
     "types": ["bun-types"]
   },
-  "references": [
-    { "path": "../../packages/shared" }
-  ],
+  "references": [{ "path": "../../packages/shared" }],
   "include": ["src"]
 }

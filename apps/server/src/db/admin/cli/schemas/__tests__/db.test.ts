@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CloneInput, DropInput, RefreshTemplateInput } from '../db.js';
+import { CloneInput, DropInput, RefreshTemplateInput } from '../db.ts';
 
 describe('CloneInput', function () {
   test('applies defaults when only branch is provided', function () {
@@ -63,10 +63,14 @@ describe('RefreshTemplateInput', function () {
   });
 
   test('accepts an explicit template', function () {
-    expect(RefreshTemplateInput.parse({ template: 'foo' })).toEqual({ template: 'foo' });
+    expect(RefreshTemplateInput.parse({ template: 'foo' })).toEqual({
+      template: 'foo',
+    });
   });
 
   test('rejects empty template', function () {
-    expect(RefreshTemplateInput.safeParse({ template: '' }).success).toBe(false);
+    expect(RefreshTemplateInput.safeParse({ template: '' }).success).toBe(
+      false
+    );
   });
 });
