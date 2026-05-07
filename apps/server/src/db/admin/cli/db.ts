@@ -7,7 +7,7 @@ import {
   dropDatabase,
   refreshTemplate,
   sanitizeBranchToDbName,
-} from '../commands.js';
+} from '../service.js';
 import { resolveAdminUrl } from '../lib/admin-url.js';
 import { CloneInput, DropInput, RefreshTemplateInput } from './schemas/db.js';
 
