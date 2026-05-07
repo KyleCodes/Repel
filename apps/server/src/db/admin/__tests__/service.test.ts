@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sanitizeBranchToDbName } from '../commands.js';
+import { sanitizeBranchToDbName } from '../service.js';
 
 describe('sanitizeBranchToDbName', function () {
   test('ticket-shaped names', function () {

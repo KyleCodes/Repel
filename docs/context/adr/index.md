@@ -13,6 +13,7 @@
 | ADR-009 | Vertical Domain Layout with DbExecutor-Bound Repo Factories | architecture, data-access  | Accepted | docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md |
 | ADR-010 | Transaction Boundaries via withTx and withOrgTx          | architecture, data-access, multi-tenancy | Accepted | docs/context/adr/ADR-010-transaction-boundaries-withtx-withOrgtx.md |
 | ADR-011 | CamelCasePlugin — TypeScript camelCase, DB snake_case    | data-access, conventions      | Accepted | docs/context/adr/ADR-011-camelcase-plugin-ts-snake-db.md          |
+| ADR-012 | CLI Structure — `cli/<namespace>.ts` + colocated `cli/schemas/<namespace>.ts` | conventions, architecture | Accepted | docs/context/adr/ADR-012-cli-structure-namespace-and-schemas.md   |
 
 ## Domain Tags
 `data-storage` · `multi-tenancy` · `deployment` · `infrastructure` · `architecture` · `extensibility` · `ai-pipeline` · `frontend` · `data-access` · `conventions`

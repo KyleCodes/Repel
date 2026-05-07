@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { registerBootstrapCommand } from './core/account-setup/cli.js';
-import { registerDevDbCommands } from './db/admin/cli.js';
+import { registerDevDbCommands } from './db/admin/cli/db.js';
 import { closeDb } from './db/runtime.js';
 
 const program = new Command();
