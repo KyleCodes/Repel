@@ -192,9 +192,13 @@ export type NewProviderAccount = Insertable<ProviderAccountTable>;
 
 export type ThreadRow = Selectable<ThreadTable>;
 export type NewThread = Insertable<ThreadTable>;
+export type ThreadUpdate = Updateable<ThreadTable>;
 
 export type MessageRow = Selectable<MessageTable>;
 export type NewMessage = Insertable<MessageTable>;
+
+export type MessageRawRow = Selectable<MessageRawTable>;
+export type NewMessageRaw = Insertable<MessageRawTable>;
 
 export type JobQueueRow = Selectable<JobQueueTable>;
 export type NewJobQueue = Insertable<JobQueueTable>;

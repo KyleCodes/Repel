@@ -1,4 +1,5 @@
 import { makeAcmeRepo } from '../core/acme/repo.ts';
+import { makeMessageRepo } from '../core/message/repo.ts';
 import { makeOrgRepo } from '../core/org/repo.ts';
 import { makeUserRepo } from '../core/user/repo.ts';
 import type { DbExecutor } from './types.ts';
@@ -14,6 +15,7 @@ export function makeRepos(q: DbExecutor) {
     orgs: makeOrgRepo(q),
     users: makeUserRepo(q),
     acme: makeAcmeRepo(q),
+    messages: makeMessageRepo(q),
   };
 }
 
