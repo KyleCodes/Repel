@@ -1,4 +1,5 @@
 # Session Handoff: Decorator-Based Transactions & `core/acme/` Reference Vertical — REP-9 Plan Landed
+
 **Date:** 2026-04-18
 **Session Duration:** ~2 days of design + one full implementation session in the template + ADR/ticket landing pass
 **Session Focus:** Replace caller-owned `withTx`/`withOrgTx` with a decorator-based transaction-ownership model, validate end-to-end in `~/Developer/monorepo_template`, then amend Repel's ADR-009 + ADR-010 and expand REP-9 scope to carry the migration plus a `core/acme/` reference vertical. No Repel code changed — design is locked, mechanical port is what remains.
@@ -11,6 +12,7 @@
 You are implementing **REP-9**. Its scope just grew. It is no longer a directory rename — it now ports a **fully designed and validated** new transaction-ownership model from `~/Developer/monorepo_template` into Repel. The design has been proven end-to-end in the template (full stack boots, 26 tests pass, RLS verified cross-tenant). There is **no design work left** — just port the shape verbatim and add `core/acme/` as a reference vertical.
 
 Read in this order before touching code:
+
 1. This handoff (you are here)
 2. `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` — amended 2026-04-18 (see Amendments section)
 3. `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-010-transaction-boundaries-withtx-withOrgtx.md` — fully rewritten 2026-04-18
@@ -58,7 +60,10 @@ Services are module-level singletons. Methods are wrapped in `runInOrgTx(...)` (
 ```ts
 // core/org/service.ts (what you will write in REP-9)
 export const orgService = {
-  getOrgById: runInOrgTx(async function (repos, input: { orgId: string }): Promise<Org> {
+  getOrgById: runInOrgTx(async function (
+    repos,
+    input: { orgId: string }
+  ): Promise<Org> {
     const row = await repos.orgs.findById(input.orgId);
     if (!row) throw new Error(`Org ${input.orgId} not found`);
     return orgRowToOrg(row);
@@ -67,11 +72,13 @@ export const orgService = {
 ```
 
 Call site:
+
 ```ts
-const org = await orgService.getOrgById({ orgId: 'abc' });  // opens a tx, SET LOCAL, returns
+const org = await orgService.getOrgById({ orgId: 'abc' }); // opens a tx, SET LOCAL, returns
 ```
 
 Nested call from another decorated method:
+
 ```ts
 createTodo: runInOrgTx(async function (repos, input) {
   const user = await userService.getUserById({ orgId: input.orgId, id: input.userId });
@@ -144,35 +151,35 @@ export const accountSetupService = {
 
 ### Repel — documentation only (code unchanged)
 
-| File | Action | What |
-|---|---|---|
-| `docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` | Amended | Added 2026-04-18 amendment section. Updated Compliance to require module-level singleton services + `OrgScoped<A>` input constraint + `*Impl` SHOULD. Updated "Positive" testability note. |
+| File                                                                  | Action          | What                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md`   | Amended         | Added 2026-04-18 amendment section. Updated Compliance to require module-level singleton services + `OrgScoped<A>` input constraint + `*Impl` SHOULD. Updated "Positive" testability note.                                             |
 | `docs/context/adr/ADR-010-transaction-boundaries-withtx-withOrgtx.md` | Fully rewritten | Retitled to "Transaction Ownership via runInOrgTx/runInTx Decorators". New Decision section, 7-row risk/mitigation table, expanded Alternatives Considered, full Compliance block. 2026-04-13 original preserved in a History section. |
-| `docs/summaries/handoff-2026-04-18-REP-9-plan.md` | Created | This document. |
+| `docs/summaries/handoff-2026-04-18-REP-9-plan.md`                     | Created         | This document.                                                                                                                                                                                                                         |
 
 ### Repel Linear tickets — updated via Linear MCP
 
-| Ticket | Change |
-|---|---|
-| **REP-9** | **Retitled** to "Rename domains/ → core/, adopt runInOrgTx decorator, land core/acme reference". Scope expanded to include `db/tx.ts` rewrite + service flattening + `core/acme/` reference vertical. Full acceptance criteria with grep gate. |
-| **REP-8** | Added `acme` table to the v0 migration scope. Shape: `id uuid PK, org_id uuid FK, note text, created_at, updated_at` + RLS. Documented as reference-only. |
-| **REP-7** | Parent body updated to note the decorator-model scope landing in REP-9. Project milestone descriptions updated. |
-| **REP-10** | Service contract updated: module-level singletons, `createOrg`/`createUser` as `runInTx` with `*Impl`, `orgId` inputs. |
-| **REP-11** | Service contract updated (same pattern — `providerAccountService` singleton, `runInOrgTx` methods, `orgId` inputs). `*Impl` guidance added. |
-| **REP-12** | Service contract updated. Note added that `insertMessageWithRaw` atomicity comes from the `runInOrgTx` decorator, not caller-threaded `withOrgTx`. |
-| **REP-32** | Comment added: dev-db is unaffected by the decorator refactor; peer-directory landing (e.g. `apps/server/src/dev/db/`) confirmed via template precedent. |
+| Ticket     | Change                                                                                                                                                                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **REP-9**  | **Retitled** to "Rename domains/ → core/, adopt runInOrgTx decorator, land core/acme reference". Scope expanded to include `db/tx.ts` rewrite + service flattening + `core/acme/` reference vertical. Full acceptance criteria with grep gate. |
+| **REP-8**  | Added `acme` table to the v0 migration scope. Shape: `id uuid PK, org_id uuid FK, note text, created_at, updated_at` + RLS. Documented as reference-only.                                                                                      |
+| **REP-7**  | Parent body updated to note the decorator-model scope landing in REP-9. Project milestone descriptions updated.                                                                                                                                |
+| **REP-10** | Service contract updated: module-level singletons, `createOrg`/`createUser` as `runInTx` with `*Impl`, `orgId` inputs.                                                                                                                         |
+| **REP-11** | Service contract updated (same pattern — `providerAccountService` singleton, `runInOrgTx` methods, `orgId` inputs). `*Impl` guidance added.                                                                                                    |
+| **REP-12** | Service contract updated. Note added that `insertMessageWithRaw` atomicity comes from the `runInOrgTx` decorator, not caller-threaded `withOrgTx`.                                                                                             |
+| **REP-32** | Comment added: dev-db is unaffected by the decorator refactor; peer-directory landing (e.g. `apps/server/src/dev/db/`) confirmed via template precedent.                                                                                       |
 
 ### Template (completed last session — reference only)
 
 Already done. Working end-to-end. **This is your canonical reference.**
 
-| File | State |
-|---|---|
-| `~/Developer/monorepo_template/apps/server/src/db/tx.ts` | **Port this verbatim.** 100 lines, self-contained, no Repel-specific code. |
-| `~/Developer/monorepo_template/apps/server/src/db/repos.ts` | Pattern for `makeRepos(q)` bundle. |
+| File                                                                                          | State                                                                                                                                         |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/Developer/monorepo_template/apps/server/src/db/tx.ts`                                      | **Port this verbatim.** 100 lines, self-contained, no Repel-specific code.                                                                    |
+| `~/Developer/monorepo_template/apps/server/src/db/repos.ts`                                   | Pattern for `makeRepos(q)` bundle.                                                                                                            |
 | `~/Developer/monorepo_template/apps/server/src/core/{org,user,todo,account-setup}/service.ts` | Service shape reference. `todo` = fully inline. `org`+`user` = `*Impl` lifted for `createOrg`/`createUser`. `account-setup` = `runInTx` flow. |
-| `~/Developer/monorepo_template/apps/server/src/db/__tests__/tx.test.ts` | **Port these 6 tests.** Cover all three guards + happy paths. No DB required — uses `withTxContext` helper. |
-| `~/Developer/monorepo_template/docs/context/adr/ADR-008-...md`, `ADR-009-...md` | Template's version of the two ADRs. Repel's ADR-009 amendment + ADR-010 rewrite mirror these. |
+| `~/Developer/monorepo_template/apps/server/src/db/__tests__/tx.test.ts`                       | **Port these 6 tests.** Cover all three guards + happy paths. No DB required — uses `withTxContext` helper.                                   |
+| `~/Developer/monorepo_template/docs/context/adr/ADR-008-...md`, `ADR-009-...md`               | Template's version of the two ADRs. Repel's ADR-009 amendment + ADR-010 rewrite mirror these.                                                 |
 
 ---
 
@@ -220,7 +227,7 @@ From the amended ticket, verbatim:
 
 7. **Add `core/acme/`**: copy shape from `~/Developer/monorepo_template/apps/server/src/core/todo/` and adapt. Four files:
    - `repo.ts` — `makeAcmeRepo(q: DbExecutor)` with `insert`, `findById`, `listForOrg`, `deleteById`
-   - `service.ts` — `export const acmeService = { ... }`. All methods inline `runInOrgTx` lambdas (no `*Impl` — nothing composes it). **Include a header comment**: *"Reference vertical — demonstrates the canonical shape of a tenant-scoped bounded context. Has no dependents. Delete when a new vertical in this repo is well-exercised as the reference."*
+   - `service.ts` — `export const acmeService = { ... }`. All methods inline `runInOrgTx` lambdas (no `*Impl` — nothing composes it). **Include a header comment**: _"Reference vertical — demonstrates the canonical shape of a tenant-scoped bounded context. Has no dependents. Delete when a new vertical in this repo is well-exercised as the reference."_
    - `types.ts` — `Acme`, `CreateAcmeInput`, etc.
    - `mappers.ts` — `acmeRowToAcme`
 
@@ -231,12 +238,15 @@ From the amended ticket, verbatim:
 10. **Port tx tests**: copy `~/Developer/monorepo_template/apps/server/src/db/__tests__/tx.test.ts` to Repel. No DB required — uses the `withTxContext` helper. 6 test cases.
 
 11. **Run the grep gate**:
+
     ```bash
     grep -rE 'withOrgTx|withTx\b|makeRepos\b|make[A-Z][a-zA-Z]+Service' apps/server/src/{api,core/**/cli.ts,main.ts,cli.ts}
     ```
+
     Must return zero matches. If it hits, the refactor isn't complete.
 
 12. **Smoke test**:
+
     ```bash
     bun run typecheck                                              # clean
     bun test                                                        # all pass
@@ -305,20 +315,21 @@ From the amended ticket, verbatim:
 
 ## Files Created or Modified (this session)
 
-| File Path | Action | Description |
-|---|---|---|
-| `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` | Amended | Added 2026-04-18 Amendment section. Updated Compliance (singleton services, `OrgScoped<A>`, `*Impl` SHOULD). Updated "Positive" testability note. |
-| `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-010-transaction-boundaries-withtx-withOrgtx.md` | Fully rewritten | Retitled. New Decision section, 7-row risk/mitigation table, History preserving 2026-04-13 original. |
-| `/Users/kylemuldoon/Developer/Repel/docs/summaries/handoff-2026-04-18-REP-9-plan.md` | Created | This document. |
-| Linear REP-9 | Updated | Retitled, scope expanded, full AC. |
-| Linear REP-8 | Updated | Added `acme` table to v0 migration scope. |
-| Linear REP-7 | Updated | Parent body notes decorator-model scope in REP-9. |
-| Linear REP-10 | Updated | Service contract → singletons + `runInOrgTx` + `*Impl` convention. |
-| Linear REP-11 | Updated | Same contract update. |
-| Linear REP-12 | Updated | Same, plus note on `insertMessageWithRaw` atomicity via decorator. |
-| Linear REP-32 | Comment | Confirmed dev-db unaffected; peer-directory landing via template precedent. |
+| File Path                                                                                                | Action          | Description                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md`   | Amended         | Added 2026-04-18 Amendment section. Updated Compliance (singleton services, `OrgScoped<A>`, `*Impl` SHOULD). Updated "Positive" testability note. |
+| `/Users/kylemuldoon/Developer/Repel/docs/context/adr/ADR-010-transaction-boundaries-withtx-withOrgtx.md` | Fully rewritten | Retitled. New Decision section, 7-row risk/mitigation table, History preserving 2026-04-13 original.                                              |
+| `/Users/kylemuldoon/Developer/Repel/docs/summaries/handoff-2026-04-18-REP-9-plan.md`                     | Created         | This document.                                                                                                                                    |
+| Linear REP-9                                                                                             | Updated         | Retitled, scope expanded, full AC.                                                                                                                |
+| Linear REP-8                                                                                             | Updated         | Added `acme` table to v0 migration scope.                                                                                                         |
+| Linear REP-7                                                                                             | Updated         | Parent body notes decorator-model scope in REP-9.                                                                                                 |
+| Linear REP-10                                                                                            | Updated         | Service contract → singletons + `runInOrgTx` + `*Impl` convention.                                                                                |
+| Linear REP-11                                                                                            | Updated         | Same contract update.                                                                                                                             |
+| Linear REP-12                                                                                            | Updated         | Same, plus note on `insertMessageWithRaw` atomicity via decorator.                                                                                |
+| Linear REP-32                                                                                            | Comment         | Confirmed dev-db unaffected; peer-directory landing via template precedent.                                                                       |
 
 **Template files** (already landed last session; untouched this session but are your reference material):
+
 - `~/Developer/monorepo_template/apps/server/src/db/tx.ts`
 - `~/Developer/monorepo_template/apps/server/src/db/repos.ts`
 - `~/Developer/monorepo_template/apps/server/src/core/{org,user,todo,account-setup}/service.ts`
@@ -340,11 +351,13 @@ From the amended ticket, verbatim:
 2. **Then**: Open `~/Developer/monorepo_template/apps/server/src/db/tx.ts` and read it end-to-end. That is the single most important file to understand. It's ~100 lines. Understand each guard clause.
 
 3. **Then**: Run the template's smoke test locally to see the decorator model working end-to-end:
+
    ```bash
    cd ~/Developer/monorepo_template
    bun run typecheck && bun test
    TEST_DATABASE_URL="postgres://acme:dev@localhost:5432/postgres" bun test
    ```
+
    If that passes, you've confirmed the baseline you're porting from is green.
 
 4. **Then**: Execute REP-9 per the step-by-step above. One branch, one commit, all health gates green.
@@ -397,6 +410,7 @@ From the amended ticket, verbatim:
 ## Confirm with the user before starting
 
 Before any code edits, confirm with Kyle:
+
 1. Is REP-8's v0 migration landed or not? (Determines `acme` table location.)
 2. Is REP-10 folded into REP-9's commit or staying separate?
 3. Any Repel-specific context that makes the template's shape unusable as-is (unlikely, but worth asking)?

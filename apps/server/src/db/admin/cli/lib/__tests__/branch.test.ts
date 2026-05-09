@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { extractTicketSlug } from '../branch.js';
+import { extractTicketSlug } from '../branch.ts';
 
 describe('extractTicketSlug', function () {
   test('extracts upper-case slug from a typical user-prefixed branch', function () {
-    expect(extractTicketSlug('kylemuldoon15/rep-38-t1-foundation')).toBe('REP-38');
+    expect(extractTicketSlug('kylemuldoon15/rep-38-t1-foundation')).toBe(
+      'REP-38'
+    );
   });
 
   test('upper-cases an already lower-case match', function () {

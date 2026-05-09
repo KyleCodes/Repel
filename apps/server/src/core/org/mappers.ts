@@ -1,5 +1,5 @@
-import type { OrgRow } from '../../db/types.js';
-import type { Org } from './types.js';
+import type { OrgRow } from '../../db/types.ts';
+import type { Org } from './types.ts';
 
 export function orgRowToOrg(row: OrgRow): Org {
   return {

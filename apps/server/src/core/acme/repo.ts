@@ -1,4 +1,4 @@
-import type { AcmeRow, DbExecutor, NewAcme } from '../../db/types.js';
+import type { AcmeRow, DbExecutor, NewAcme } from '../../db/types.ts';
 
 export function makeAcmeRepo(q: DbExecutor) {
   return {
@@ -18,7 +18,10 @@ export function makeAcmeRepo(q: DbExecutor) {
         .executeTakeFirst();
     },
 
-    async listForOrg(orgId: string, opts: { limit?: number } = {}): Promise<AcmeRow[]> {
+    async listForOrg(
+      orgId: string,
+      opts: { limit?: number } = {}
+    ): Promise<AcmeRow[]> {
       let query = q
         .selectFrom('acme')
         .selectAll()

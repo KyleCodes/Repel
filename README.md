@@ -11,16 +11,16 @@ Self-hosted AI inbox — aggregates email and messaging channels, classifies and
 
 ## Stack
 
-| Layer | Choice |
-|-------|--------|
-| Runtime | Bun |
-| Language | TypeScript |
-| Database | PostgreSQL (with RLS for tenant isolation) |
-| Query builder | Kysely |
-| HTTP framework | Express |
-| Frontend | React + Vite + TanStack Router + TanStack Query |
-| CLI | Commander |
-| Migrations | node-pg-migrate |
+| Layer          | Choice                                          |
+| -------------- | ----------------------------------------------- |
+| Runtime        | Bun                                             |
+| Language       | TypeScript                                      |
+| Database       | PostgreSQL (with RLS for tenant isolation)      |
+| Query builder  | Kysely                                          |
+| HTTP framework | Express                                         |
+| Frontend       | React + Vite + TanStack Router + TanStack Query |
+| CLI            | Commander                                       |
+| Migrations     | node-pg-migrate                                 |
 
 ## Repo structure
 

@@ -4,7 +4,9 @@
 export function readDatabaseUrlFromEnvLocal(): string {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error('DATABASE_URL not set — run `repel db clone` first to write .env.local');
+    throw new Error(
+      'DATABASE_URL not set — run `repel db clone` first to write .env.local'
+    );
   }
   return url;
 }

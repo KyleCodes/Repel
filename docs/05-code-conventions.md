@@ -20,7 +20,7 @@ When a lib function is used by a new dependent outside its current scope, move i
 
 Prefer pure functions with deterministic outputs: arguments in, return value out.
 
-Avoid side effects, global state, and ambient imports where possible. When side effects are unavoidable (database queries, network requests, filesystem writes), isolate them in boundary modules (`pool.ts`, `ingress.ts`, `worker.ts`) and keep the logic that decides *what* to do separate from the code that *does* it.
+Avoid side effects, global state, and ambient imports where possible. When side effects are unavoidable (database queries, network requests, filesystem writes), isolate them in boundary modules (`pool.ts`, `ingress.ts`, `worker.ts`) and keep the logic that decides _what_ to do separate from the code that _does_ it.
 
 Functions that depend on external configuration (env vars, feature flags) receive it as an argument, not by reading `process.env` directly. The entrypoint (`main.ts`, `cli.ts`) reads the environment and passes values down.
 
@@ -100,8 +100,15 @@ Complex queries go in dedicated functions, not inline in route handlers:
 
 ```typescript
 // yes — in a query module
-function getMessagesByTag(db: Pool, orgId: string, tag: string): Promise<Message[]> {
-  return db.query(`SELECT ... FROM message JOIN message_tag ... WHERE org_id = $1 AND tag = $2`, [orgId, tag]);
+function getMessagesByTag(
+  db: Pool,
+  orgId: string,
+  tag: string
+): Promise<Message[]> {
+  return db.query(
+    `SELECT ... FROM message JOIN message_tag ... WHERE org_id = $1 AND tag = $2`,
+    [orgId, tag]
+  );
 }
 
 // no — inline SQL in route handler

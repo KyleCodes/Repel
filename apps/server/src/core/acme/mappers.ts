@@ -1,5 +1,5 @@
-import type { AcmeRow } from '../../db/types.js';
-import type { Acme } from './types.js';
+import type { AcmeRow } from '../../db/types.ts';
+import type { Acme } from './types.ts';
 
 export function acmeRowToAcme(row: AcmeRow): Acme {
   return {

@@ -17,48 +17,48 @@ Bare metal VM, self-hosted. No cloud provider dependency. The application runs o
 
 ### Backend
 
-| Component       | Technology                          |
-|-----------------|-------------------------------------|
-| Language        | TypeScript                          |
-| Runtime         | Bun                                 |
-| Framework       | Express                             |
-| Database        | PostgreSQL 16, self-hosted          |
-| Queue           | Postgres-backed (`SKIP LOCKED`)     |
-| LLM             | Anthropic API (Claude) / OpenAI API |
-| CLI             | Commander.js                        |
-| Test framework  | bun test (built-in)                 |
+| Component      | Technology                          |
+| -------------- | ----------------------------------- |
+| Language       | TypeScript                          |
+| Runtime        | Bun                                 |
+| Framework      | Express                             |
+| Database       | PostgreSQL 16, self-hosted          |
+| Queue          | Postgres-backed (`SKIP LOCKED`)     |
+| LLM            | Anthropic API (Claude) / OpenAI API |
+| CLI            | Commander.js                        |
+| Test framework | bun test (built-in)                 |
 
 ### Frontend
 
-| Component        | Technology                          |
-|------------------|-------------------------------------|
-| Framework        | React (client-side SPA)             |
-| Build tool       | Vite 8                              |
-| Routing          | TanStack Router                     |
-| Data fetching    | TanStack Query                      |
-| Global state     | Zustand (auth/session, UI prefs)    |
-| API protocol     | REST (plain HTTP fetch)             |
+| Component     | Technology                       |
+| ------------- | -------------------------------- |
+| Framework     | React (client-side SPA)          |
+| Build tool    | Vite 8                           |
+| Routing       | TanStack Router                  |
+| Data fetching | TanStack Query                   |
+| Global state  | Zustand (auth/session, UI prefs) |
+| API protocol  | REST (plain HTTP fetch)          |
 
 No SSR. No Next.js. No Redux. No GraphQL. No tRPC.
 
 ### Infrastructure
 
-| Component       | Technology                          |
-|-----------------|-------------------------------------|
-| Containerization| Docker, docker-compose              |
-| Reverse proxy   | None (direct port access via VPN)   |
-| VPN             | Tailscale or WireGuard              |
-| Blob storage    | Local filesystem                    |
-| Secrets         | Environment variables               |
+| Component        | Technology                        |
+| ---------------- | --------------------------------- |
+| Containerization | Docker, docker-compose            |
+| Reverse proxy    | None (direct port access via VPN) |
+| VPN              | Tailscale or WireGuard            |
+| Blob storage     | Local filesystem                  |
+| Secrets          | Environment variables             |
 
 ### Monorepo
 
-| Component        | Technology                         |
-|------------------|------------------------------------|
-| Workspace manager| Bun workspaces                     |
-| Type sharing     | Zod schemas in shared package      |
-| Type checking    | TypeScript project references      |
-| Task runner      | Makefile                           |
+| Component         | Technology                    |
+| ----------------- | ----------------------------- |
+| Workspace manager | Bun workspaces                |
+| Type sharing      | Zod schemas in shared package |
+| Type checking     | TypeScript project references |
+| Task runner       | Makefile                      |
 
 ## Docker Compose Profiles
 
@@ -69,6 +69,7 @@ Runs infrastructure services only. The application runs as a bare process on the
 Services started: `postgres`
 
 Developer workflow:
+
 ```
 docker compose --profile dev up -d
 bun run dev:server    # terminal 1
@@ -82,6 +83,7 @@ Runs everything. Used for "production" deployment on the home server and for val
 Services started: `postgres`, `app`
 
 Deployment workflow:
+
 ```
 docker compose --profile full up -d
 ```

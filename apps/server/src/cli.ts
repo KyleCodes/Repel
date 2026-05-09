@@ -1,7 +1,7 @@
 import { Command } from 'commander';
-import { registerBootstrapCommand } from './core/account-setup/cli.js';
-import { registerDevDbCommands } from './db/admin/cli/db.js';
-import { closeDb } from './db/runtime.js';
+import { registerBootstrapCommand } from './core/account-setup/cli.ts';
+import { registerDevDbCommands } from './db/admin/cli/db.ts';
+import { closeDb } from './db/runtime.ts';
 
 const program = new Command();
 

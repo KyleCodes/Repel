@@ -1,9 +1,14 @@
 import { execFileSync } from 'node:child_process';
 
 export function getCurrentBranch(): string {
-  const out = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' });
+  const out = execFileSync('git', ['branch', '--show-current'], {
+    encoding: 'utf8',
+  });
   const branch = out.trim();
-  if (!branch) throw new Error('git branch --show-current returned empty (detached HEAD?)');
+  if (!branch)
+    throw new Error(
+      'git branch --show-current returned empty (detached HEAD?)'
+    );
   return branch;
 }
 

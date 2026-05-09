@@ -30,7 +30,7 @@ These two are the only `domains/` subdirectories that survive the rename to what
 
 ## Why not file these as Linear cleanup tickets now?
 
-These deletions only make sense in the context of *replacing* the placeholders with real implementations. A bare "delete these files" ticket would leave the codebase in a worse state than the placeholders did. Better: each affected Linear project (Provider Adapters, CLI Foundation) calls out the placeholder removal as part of its scope so the deletion lands with a working replacement.
+These deletions only make sense in the context of _replacing_ the placeholders with real implementations. A bare "delete these files" ticket would leave the codebase in a worse state than the placeholders did. Better: each affected Linear project (Provider Adapters, CLI Foundation) calls out the placeholder removal as part of its scope so the deletion lands with a working replacement.
 
 ## Triggers that close this file
 

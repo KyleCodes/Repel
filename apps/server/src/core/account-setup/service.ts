@@ -1,8 +1,8 @@
-import type { Repos } from '../../db/repos.js';
-import { runInTx } from '../../db/tx.js';
-import { orgServiceImpl } from '../org/service.js';
-import { userServiceImpl } from '../user/service.js';
-import type { BootstrapInput, BootstrapResult } from './types.js';
+import type { Repos } from '../../db/repos.ts';
+import { runInTx } from '../../db/tx.ts';
+import { orgServiceImpl } from '../org/service.ts';
+import { userServiceImpl } from '../user/service.ts';
+import type { BootstrapInput, BootstrapResult } from './types.ts';
 
 // Cross-cutting bootstrap flow. Creates the first org and user atomically.
 // Runs under runInTx because the org does not exist yet — RLS is bypassed
@@ -14,12 +14,12 @@ import type { BootstrapInput, BootstrapResult } from './types.js';
 // current transaction through argument-passing.
 async function bootstrapImpl(
   repos: Repos,
-  input: BootstrapInput,
+  input: BootstrapInput
 ): Promise<BootstrapResult> {
   const existing = await repos.users.findByEmail(input.userEmail);
   if (existing) {
     throw new Error(
-      `already bootstrapped — user ${input.userEmail} exists in org ${existing.orgId}`,
+      `already bootstrapped — user ${input.userEmail} exists in org ${existing.orgId}`
     );
   }
 

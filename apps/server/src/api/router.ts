@@ -34,7 +34,12 @@ export function createRouter(): Application {
     next();
   });
 
-  app.use(function (err: Error, _req: Request, res: Response, _next: NextFunction) {
+  app.use(function (
+    err: Error,
+    _req: Request,
+    res: Response,
+    _next: NextFunction
+  ) {
     console.error(err);
     res.status(500).json({ error: err.message });
   });

@@ -1,7 +1,7 @@
-import type { DbExecutor } from './types.js';
-import { makeOrgRepo } from '../core/org/repo.js';
-import { makeUserRepo } from '../core/user/repo.js';
-import { makeAcmeRepo } from '../core/acme/repo.js';
+import { makeAcmeRepo } from '../core/acme/repo.ts';
+import { makeOrgRepo } from '../core/org/repo.ts';
+import { makeUserRepo } from '../core/user/repo.ts';
+import type { DbExecutor } from './types.ts';
 
 // Bundles every bounded context's repo factory into one object keyed by name.
 // A fresh Repos bundle is built for each transaction so every repo inside

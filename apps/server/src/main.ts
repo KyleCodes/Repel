@@ -1,4 +1,4 @@
-import { startApi } from './api/router.js';
+import { startApi } from './api/router.ts';
 
 type Mode = 'all' | 'api' | 'worker';
 
@@ -16,10 +16,7 @@ async function main() {
       console.log('Worker not yet implemented');
     },
     all: async () => {
-      await Promise.all([
-        components.api(),
-        components.worker(),
-      ]);
+      await Promise.all([components.api(), components.worker()]);
     },
   };
 

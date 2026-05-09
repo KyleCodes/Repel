@@ -50,44 +50,50 @@ src/
 ## types.ts
 
 ```ts
-import type { Kysely, Transaction, Generated, Selectable, Insertable } from "kysely"
+import type {
+  Generated,
+  Insertable,
+  Kysely,
+  Selectable,
+  Transaction,
+} from 'kysely';
 
 export interface OrgsTable {
-  id: Generated<string>
-  name: string
-  created_at: Generated<Date>
+  id: Generated<string>;
+  name: string;
+  created_at: Generated<Date>;
 }
 
 export interface UsersTable {
-  id: Generated<string>
-  org_id: string
-  email: string
-  full_name: string
-  created_at: Generated<Date>
+  id: Generated<string>;
+  org_id: string;
+  email: string;
+  full_name: string;
+  created_at: Generated<Date>;
 }
 
 export interface ProviderAccountsTable {
-  id: Generated<string>
-  org_id: string
-  user_id: string
-  provider: string
-  external_account_id: string
-  created_at: Generated<Date>
+  id: Generated<string>;
+  org_id: string;
+  user_id: string;
+  provider: string;
+  external_account_id: string;
+  created_at: Generated<Date>;
 }
 
 export interface Database {
-  orgs: OrgsTable
-  users: UsersTable
-  provider_accounts: ProviderAccountsTable
+  orgs: OrgsTable;
+  users: UsersTable;
+  provider_accounts: ProviderAccountsTable;
 }
 
-export type Db = Kysely<Database>
-export type Tx = Transaction<Database>
-export type DbExecutor = Db | Tx
+export type Db = Kysely<Database>;
+export type Tx = Transaction<Database>;
+export type DbExecutor = Db | Tx;
 
-export type OrgRow = Selectable<OrgsTable>
-export type UserRow = Selectable<UsersTable>
-export type ProviderAccountRow = Selectable<ProviderAccountsTable>
+export type OrgRow = Selectable<OrgsTable>;
+export type UserRow = Selectable<UsersTable>;
+export type ProviderAccountRow = Selectable<ProviderAccountsTable>;
 ```
 
 ---
@@ -95,9 +101,9 @@ export type ProviderAccountRow = Selectable<ProviderAccountsTable>
 ## client.ts
 
 ```ts
-import { Kysely, PostgresDialect, CamelCasePlugin } from "kysely"
-import { Pool } from "pg"
-import type { Database } from "./types"
+import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
+import { Pool } from 'pg';
+import type { Database } from './types';
 
 export function makeDb(): Kysely<Database> {
   return new Kysely<Database>({
@@ -107,7 +113,7 @@ export function makeDb(): Kysely<Database> {
       }),
     }),
     plugins: [new CamelCasePlugin()],
-  })
+  });
 }
 ```
 
@@ -116,9 +122,9 @@ export function makeDb(): Kysely<Database> {
 ## runtime.ts (singleton)
 
 ```ts
-import { makeDb } from "./client"
+import { makeDb } from './client';
 
-export const db = makeDb()
+export const db = makeDb();
 ```
 
 ---
@@ -126,20 +132,20 @@ export const db = makeDb()
 ## repos.ts
 
 ```ts
-import type { DbExecutor } from "./types"
-import { makeOrgRepo } from "../domains/org/repo"
-import { makeUserRepo } from "../domains/user/repo"
-import { makeProviderRepo } from "../domains/providers/repo"
+import { makeOrgRepo } from '../domains/org/repo';
+import { makeProviderRepo } from '../domains/providers/repo';
+import { makeUserRepo } from '../domains/user/repo';
+import type { DbExecutor } from './types';
 
 export function makeRepos(q: DbExecutor) {
   return {
     orgs: makeOrgRepo(q),
     users: makeUserRepo(q),
     providers: makeProviderRepo(q),
-  }
+  };
 }
 
-export type Repos = ReturnType<typeof makeRepos>
+export type Repos = ReturnType<typeof makeRepos>;
 ```
 
 ---
@@ -147,16 +153,16 @@ export type Repos = ReturnType<typeof makeRepos>
 ## tx.ts (transaction capability)
 
 ```ts
-import { db } from "./runtime"
-import { makeRepos, type Repos } from "./repos"
+import { type Repos, makeRepos } from './repos';
+import { db } from './runtime';
 
-export type WithTx = <T>(fn: (repos: Repos) => Promise<T>) => Promise<T>
+export type WithTx = <T>(fn: (repos: Repos) => Promise<T>) => Promise<T>;
 
 export const withTx: WithTx = async function (fn) {
   return db.transaction().execute(function (trx) {
-    return fn(makeRepos(trx))
-  })
-}
+    return fn(makeRepos(trx));
+  });
+};
 ```
 
 ---
@@ -167,13 +173,13 @@ export const withTx: WithTx = async function (fn) {
 
 ```ts
 export interface Org {
-  id: string
-  name: string
-  createdAt: Date
+  id: string;
+  name: string;
+  createdAt: Date;
 }
 
 export interface CreateOrgInput {
-  name: string
+  name: string;
 }
 ```
 
@@ -182,29 +188,29 @@ export interface CreateOrgInput {
 ## repo.ts
 
 ```ts
-import type { DbExecutor, OrgRow } from "../../db/types"
-import type { Org, CreateOrgInput } from "./types"
+import type { DbExecutor, OrgRow } from '../../db/types';
+import type { CreateOrgInput, Org } from './types';
 
 function mapOrg(row: OrgRow): Org {
   return {
     id: row.id,
     name: row.name,
     createdAt: row.createdAt,
-  }
+  };
 }
 
 export function makeOrgRepo(q: DbExecutor) {
   return {
     async create(input: CreateOrgInput): Promise<Org> {
       const row = await q
-        .insertInto("orgs")
+        .insertInto('orgs')
         .values({ name: input.name })
         .returningAll()
-        .executeTakeFirstOrThrow()
+        .executeTakeFirstOrThrow();
 
-      return mapOrg(row)
+      return mapOrg(row);
     },
-  }
+  };
 }
 ```
 
@@ -213,15 +219,15 @@ export function makeOrgRepo(q: DbExecutor) {
 ## service.ts
 
 ```ts
-import type { Repos } from "../../db/repos"
-import type { CreateOrgInput } from "./types"
+import type { Repos } from '../../db/repos';
+import type { CreateOrgInput } from './types';
 
 export function makeOrgService(repos: Repos) {
   return {
     async createOrg(input: CreateOrgInput) {
-      return repos.orgs.create(input)
+      return repos.orgs.create(input);
     },
-  }
+  };
 }
 ```
 
@@ -233,17 +239,17 @@ export function makeOrgService(repos: Repos) {
 
 ```ts
 export interface User {
-  id: string
-  orgId: string
-  email: string
-  fullName: string
-  createdAt: Date
+  id: string;
+  orgId: string;
+  email: string;
+  fullName: string;
+  createdAt: Date;
 }
 
 export interface CreateUserInput {
-  orgId: string
-  email: string
-  fullName: string
+  orgId: string;
+  email: string;
+  fullName: string;
 }
 ```
 
@@ -252,8 +258,8 @@ export interface CreateUserInput {
 ## repo.ts
 
 ```ts
-import type { DbExecutor, UserRow } from "../../db/types"
-import type { User, CreateUserInput } from "./types"
+import type { DbExecutor, UserRow } from '../../db/types';
+import type { CreateUserInput, User } from './types';
 
 function mapUser(row: UserRow): User {
   return {
@@ -262,21 +268,21 @@ function mapUser(row: UserRow): User {
     email: row.email,
     fullName: row.fullName,
     createdAt: row.createdAt,
-  }
+  };
 }
 
 export function makeUserRepo(q: DbExecutor) {
   return {
     async create(input: CreateUserInput): Promise<User> {
       const row = await q
-        .insertInto("users")
+        .insertInto('users')
         .values(input)
         .returningAll()
-        .executeTakeFirstOrThrow()
+        .executeTakeFirstOrThrow();
 
-      return mapUser(row)
+      return mapUser(row);
     },
-  }
+  };
 }
 ```
 
@@ -285,15 +291,15 @@ export function makeUserRepo(q: DbExecutor) {
 ## service.ts
 
 ```ts
-import type { Repos } from "../../db/repos"
-import type { CreateUserInput } from "./types"
+import type { Repos } from '../../db/repos';
+import type { CreateUserInput } from './types';
 
 export function makeUserService(repos: Repos) {
   return {
     async createUser(input: CreateUserInput) {
-      return repos.users.create(input)
+      return repos.users.create(input);
     },
-  }
+  };
 }
 ```
 
@@ -304,20 +310,20 @@ export function makeUserService(repos: Repos) {
 ## repo.ts
 
 ```ts
-import type { DbExecutor, ProviderAccountRow } from "../../db/types"
+import type { DbExecutor, ProviderAccountRow } from '../../db/types';
 
 export function makeProviderRepo(q: DbExecutor) {
   return {
     async createLinkedAccount(input) {
       const row = await q
-        .insertInto("providerAccounts")
+        .insertInto('providerAccounts')
         .values(input)
         .returningAll()
-        .executeTakeFirstOrThrow()
+        .executeTakeFirstOrThrow();
 
-      return row
+      return row;
     },
-  }
+  };
 }
 ```
 
@@ -326,14 +332,14 @@ export function makeProviderRepo(q: DbExecutor) {
 ## service.ts
 
 ```ts
-import type { Repos } from "../../db/repos"
+import type { Repos } from '../../db/repos';
 
 export function makeProviderService(repos: Repos) {
   return {
     async linkProvider(input) {
-      return repos.providers.createLinkedAccount(input)
+      return repos.providers.createLinkedAccount(input);
     },
-  }
+  };
 }
 ```
 
@@ -342,40 +348,40 @@ export function makeProviderService(repos: Repos) {
 # 5. Cross-Cutting: Account Setup
 
 ```ts
-import type { WithTx } from "../../db/tx"
-import { makeOrgService } from "../org/service"
-import { makeUserService } from "../user/service"
-import { makeProviderService } from "../providers/service"
+import type { WithTx } from '../../db/tx';
+import { makeOrgService } from '../org/service';
+import { makeProviderService } from '../providers/service';
+import { makeUserService } from '../user/service';
 
 export function makeAccountSetupService(params: { withTx: WithTx }) {
-  const withTx = params.withTx
+  const withTx = params.withTx;
 
   return {
     async bootstrapAccount(input) {
       return withTx(async function (repos) {
-        const orgService = makeOrgService(repos)
-        const userService = makeUserService(repos)
-        const providerService = makeProviderService(repos)
+        const orgService = makeOrgService(repos);
+        const userService = makeUserService(repos);
+        const providerService = makeProviderService(repos);
 
-        const org = await orgService.createOrg({ name: input.orgName })
+        const org = await orgService.createOrg({ name: input.orgName });
 
         const user = await userService.createUser({
           orgId: org.id,
           email: input.userEmail,
           fullName: input.userFullName,
-        })
+        });
 
         const providerAccount = await providerService.linkProvider({
           orgId: org.id,
           userId: user.id,
           provider: input.provider,
           externalAccountId: input.externalAccountId,
-        })
+        });
 
-        return { org, user, providerAccount }
-      })
+        return { org, user, providerAccount };
+      });
     },
-  }
+  };
 }
 ```
 
@@ -384,19 +390,19 @@ export function makeAccountSetupService(params: { withTx: WithTx }) {
 # 6. App Composition
 
 ```ts
-import { db } from "./db/runtime"
-import { makeRepos } from "./db/repos"
-import { withTx } from "./db/tx"
-import { makeUserService } from "./domains/user/service"
-import { makeAccountSetupService } from "./domains/account-setup/service"
+import { makeRepos } from './db/repos';
+import { db } from './db/runtime';
+import { withTx } from './db/tx';
+import { makeAccountSetupService } from './domains/account-setup/service';
+import { makeUserService } from './domains/user/service';
 
-const repos = makeRepos(db)
+const repos = makeRepos(db);
 
-export const userService = makeUserService(repos)
+export const userService = makeUserService(repos);
 
 export const accountSetupService = makeAccountSetupService({
   withTx,
-})
+});
 ```
 
 ---
@@ -410,4 +416,3 @@ This pattern:
 - keeps transactions explicit
 - keeps services clean
 - keeps infra swappable
-

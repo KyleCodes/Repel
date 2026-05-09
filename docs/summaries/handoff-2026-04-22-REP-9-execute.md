@@ -1,4 +1,5 @@
 # Session Handoff: REP-9 Implementation Landed
+
 **Date:** 2026-04-22
 **Session Duration:** ~one focused execution session
 **Session Focus:** Implement REP-9 end-to-end (with absorbed REP-5 + REP-8 scope) per the 2026-04-18 plan, plus the additional cleanup items surfaced during execution. PR opened against main; not merged.
@@ -24,7 +25,7 @@ In order:
 4. `70eb21a` Rewrite v0 migration for new schema
 5. `1a3fa36` Port db/tx.ts decorator model from template
 6. `ff0376f` Move domains/ → core/, flatten services, add acme reference vertical
-7. `d271efb` Port db/__tests__/tx.test.ts from template
+7. `d271efb` Port db/**tests**/tx.test.ts from template
 8. `e2eb60a` Vestigial cleanup: archive stale docs, fix README, rename LICENSE typo
 9. `e985797` Update docs/04-application-architecture.md (targeted)
 10. `201a1a2` Add bun-types for tsc to resolve bun:test in tx tests
@@ -111,9 +112,9 @@ Per repo audit on 2026-04-22 — these are demonstrably stale, not vague drift:
 ## Open items (not in Linear yet)
 
 - **Filing 3 follow-up tickets**: Linear MCP token expired during the execution session. Need to file:
-  1. *Align docs/01-product-spec.md with ADR-005 v1 channel scope* (parent: REP-7, project: Foundations, priority: Low)
-  2. *Rewrite docs/05-code-conventions.md against current architecture* (same parents)
-  3. *Full rewrite of docs/04-application-architecture.md* (after REP-11 + pipeline scaffolding lands; the current targeted updates have a drift notice that needs removal)
+  1. _Align docs/01-product-spec.md with ADR-005 v1 channel scope_ (parent: REP-7, project: Foundations, priority: Low)
+  2. _Rewrite docs/05-code-conventions.md against current architecture_ (same parents)
+  3. _Full rewrite of docs/04-application-architecture.md_ (after REP-11 + pipeline scaffolding lands; the current targeted updates have a drift notice that needs removal)
 
 - **REP-32** (dev-db relocation) is unaffected by this ticket; `domains/dev-db/` stays put.
 

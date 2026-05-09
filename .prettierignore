@@ -1,0 +1,11 @@
+# Lockfiles
+bun.lock
+package-lock.json
+
+# Generated / build artifacts
+dist/
+.devctl_generated/
+node_modules/
+
+# Worktree noise
+.devctl-worktrees/

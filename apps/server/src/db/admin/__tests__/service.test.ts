@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sanitizeBranchToDbName } from '../service.js';
+import { sanitizeBranchToDbName } from '../service.ts';
 
 describe('sanitizeBranchToDbName', function () {
   test('ticket-shaped names', function () {
@@ -7,7 +7,9 @@ describe('sanitizeBranchToDbName', function () {
   });
 
   test('slashes collapse to underscores', function () {
-    expect(sanitizeBranchToDbName('REP-7/some-feature')).toBe('repel_rep_7_some_feature');
+    expect(sanitizeBranchToDbName('REP-7/some-feature')).toBe(
+      'repel_rep_7_some_feature'
+    );
   });
 
   test('runs of non-alphanumerics collapse to a single underscore', function () {

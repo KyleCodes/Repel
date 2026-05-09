@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
-import { makeDb } from './client.js';
-import type { DB } from './types.js';
+import { makeDb } from './client.ts';
+import type { DB } from './types.ts';
 
 // Lazy process-level singleton. The first caller instantiates the pool and
 // Kysely instance; every subsequent caller gets the same reference. Importing

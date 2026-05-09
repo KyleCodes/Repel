@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'kysely';
-import { getDb } from './runtime.js';
-import { makeRepos, type Repos } from './repos.js';
+import { type Repos, makeRepos } from './repos.ts';
+import { getDb } from './runtime.ts';
 
 // Runtime context tracked per transaction. runInOrgTx/runInTx stash this on
 // the AsyncLocalStorage so nested service calls can detect an ambient tx
@@ -36,7 +36,7 @@ function extractOrgId<A>(arg: OrgScoped<A>): string {
 //   - Ambient runInTx (no org) → throws; cannot call tenant code from
 //     unscoped flows because RLS would not be active.
 export function runInOrgTx<A, R>(
-  fn: (repos: Repos, input: OrgScoped<A>) => Promise<R>,
+  fn: (repos: Repos, input: OrgScoped<A>) => Promise<R>
 ): (input: OrgScoped<A>) => Promise<R> {
   return async function (input: OrgScoped<A>): Promise<R> {
     const orgId = extractOrgId(input);
@@ -45,13 +45,13 @@ export function runInOrgTx<A, R>(
       if (ambient.orgId === null) {
         throw new Error(
           'runInOrgTx: cannot call tenant-scoped service inside runInTx ' +
-            '(ambient transaction has no org context)',
+            '(ambient transaction has no org context)'
         );
       }
       if (ambient.orgId !== orgId) {
         throw new Error(
           `runInOrgTx: ambient transaction scoped to org ${ambient.orgId}, ` +
-            `refusing to join as ${orgId}`,
+            `refusing to join as ${orgId}`
         );
       }
       return fn(ambient.repos, input);
@@ -59,7 +59,9 @@ export function runInOrgTx<A, R>(
     return getDb()
       .transaction()
       .execute(async function (trx) {
-        await sql`SET LOCAL app.current_org_id = ${sql.lit(orgId)}`.execute(trx);
+        await sql`SET LOCAL app.current_org_id = ${sql.lit(orgId)}`.execute(
+          trx
+        );
         const repos = makeRepos(trx);
         return txStorage.run({ repos, orgId }, function () {
           return fn(repos, input);
@@ -72,7 +74,7 @@ export function runInOrgTx<A, R>(
 // the org itself. Joins an ambient runInTx if one exists; refuses to join
 // a runInOrgTx, which would silently bypass RLS.
 export function runInTx<A, R>(
-  fn: (repos: Repos, input: A) => Promise<R>,
+  fn: (repos: Repos, input: A) => Promise<R>
 ): (input: A) => Promise<R> {
   return async function (input: A): Promise<R> {
     const ambient = txStorage.getStore();
@@ -80,7 +82,7 @@ export function runInTx<A, R>(
       if (ambient.orgId !== null) {
         throw new Error(
           'runInTx: refusing to join an org-scoped ambient transaction ' +
-            '(would bypass RLS)',
+            '(would bypass RLS)'
         );
       }
       return fn(ambient.repos, input);
@@ -101,7 +103,7 @@ export function runInTx<A, R>(
 // for unit tests.
 export function withTxContext<T>(
   ctx: TxContext,
-  fn: () => Promise<T>,
+  fn: () => Promise<T>
 ): Promise<T> {
   return txStorage.run(ctx, fn);
 }

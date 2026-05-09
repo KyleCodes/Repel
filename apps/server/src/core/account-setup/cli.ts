@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { accountSetupService } from './service.js';
+import { accountSetupService } from './service.ts';
 
 interface BootstrapOptions {
   orgName: string;
@@ -15,7 +15,11 @@ export function registerBootstrapCommand(program: Command): void {
     .requiredOption('--org-name <name>', 'name of the org')
     .requiredOption('--email <email>', 'admin user email')
     .option('--name <name>', 'admin user display name')
-    .option('--dry-run', 'print what would happen without making changes', false)
+    .option(
+      '--dry-run',
+      'print what would happen without making changes',
+      false
+    )
     .action(runBootstrap);
 }
 

@@ -1,4 +1,5 @@
 # Session Handoff: Project Breakdown Planning (Q1–Q4 of 6)
+
 **Date:** 2026-04-14
 **Session Duration:** single long planning conversation
 **Session Focus:** Work through six architectural questions that must resolve before Repel's roadmap can be broken into Linear projects. Completed Q1, Q3, Q4. Deferred Q2 and part of Q5 to a design-ideas doc. Q6 (the actual project breakdown) is next.
@@ -65,6 +66,7 @@
 ### Q4 — Sync job contract + CLI verbs + worker entrypoint (LOCKED)
 
 **Job queue structure:**
+
 - **Separate logical queues from day one** via the existing `job_queue.queue text` column. v1 values: `'sync'` only. Future: `'process'`, `'send'`, `'integration_export'`. BECAUSE different backoff semantics, different worker pool sizing, `FOR UPDATE SKIP LOCKED` polls stay cheap when filtered by queue name.
 - **Three sync job types**: `sync.full`, `sync.incremental`, `sync.range`. Rejected a fourth `sync.single` type — collapse it into `sync.range` with a single-element `externalIds` array. BECAUSE: minimizes job-type surface, `sync.single` is an optimization that rarely pays off.
 - **Hybrid payload shape**: generic `jsonb` column at rest, strict TypeScript discriminated union + Zod schema at the edges. Writer and reader both type-safe; database stays generic.
@@ -72,12 +74,19 @@
 - Canonical sync payload union:
   ```ts
   type SyncJobPayload =
-    | { type: 'sync.full';        providerAccountId: string }
+    | { type: 'sync.full'; providerAccountId: string }
     | { type: 'sync.incremental'; providerAccountId: string }
-    | { type: 'sync.range';       providerAccountId: string; from: string; to?: string; externalIds?: string[] };
+    | {
+        type: 'sync.range';
+        providerAccountId: string;
+        from: string;
+        to?: string;
+        externalIds?: string[];
+      };
   ```
 
 **Where sync code lives:**
+
 - **Top-level `apps/server/src/jobs/`** for queue-driven workflows (peer of `core/`, `providers/`, `integrations/`, `api/`). BECAUSE sync is a workflow, not an entity — forcing it into `core/` would muddy `core/`'s meaning.
 - **`jobs/sync/types.ts`** — SyncJobPayload discriminated union + Zod schemas.
 - **`jobs/sync/enqueue.ts`** — `enqueueSyncJob(payload)`. Validates with Zod, computes `dedup_key`, issues INSERT. The CLI calls this; it does NOT write to `job_queue` directly.
@@ -88,12 +97,14 @@
 - **Dependency direction**: `jobs/` → `core/` → `db/`. Never reverse. If a core service needs to enqueue, it accepts `enqueueSyncJob` as a dependency rather than importing `jobs/` directly.
 
 **Worker process architecture:**
+
 - **One worker process with many in-process queue consumers**, started via `MODE=worker` (or `MODE=all`) in `apps/server/src/main.ts`. BECAUSE: simpler deploy, `FOR UPDATE SKIP LOCKED` already handles concurrency safely, per-queue tuning is a parameter (concurrency, poll interval) not an entrypoint.
 - **When to split into separate worker processes (future)**: LLM processing queue starts eating CPU/memory, independent restart/deploy cycles desired, or horizontal scaling (N replicas of process worker, 1 replica of sync worker). At that point, `MODE=worker-sync` and `MODE=worker-process` become separate filter flags on the same binary. Still one repo, one binary, still ADR-003 (single monolith multiple entrypoints).
 - **`main.ts` already supports this** via the existing `MODE` env var pattern. Confirmed and cleaned up: the stub `sync` mode removed; modes are now `api | worker | all`; `all` runs api + worker in-process via `Promise.all`. Inline comment explains why one worker process runs all logical queues.
 - **Graceful shutdown**: worker.ts will install SIGTERM/SIGINT handlers that stop polling, drain in-flight jobs, then exit. Captured for the implementation ticket.
 
 **CLI verb shape:**
+
 - `repel sync run <account>` — enqueue `sync.incremental` (default)
 - `repel sync run <account> --full` — enqueue `sync.full`
 - `repel sync run <account> --from <date>` (`--to <date>` optional) — enqueue `sync.range`
@@ -105,11 +116,13 @@
 - **`<account>` identifier resolver** accepts uuid, alias, or `provider:external_account_id`; errors on ambiguity. (Noted but not yet implemented.)
 
 **Org resolution in v1 (interim):**
+
 - **v1: single-org bootstrap file.** `repel bootstrap` writes the one org's uuid to `~/.repel/bootstrap` (or equivalent). Every CLI command reads it. No `--org` flag at v1. Matches single-tenant self-host reality. BECAUSE: less machinery now, and the v2 profile system is a non-breaking add.
 - **v2: profile system (`~/.aws`-style)**, filed as REP-6. Blocked until v1 sync ships.
 - **Resolution order at v2**: `--org` flag > `REPEL_PROFILE` env > active profile in `~/.repel/config` > bootstrap file fallback > error.
 
 **Job queue schema change required (minor migration):**
+
 - Add `dedup_key text` column to `job_queue`.
 - Add partial unique index `CREATE UNIQUE INDEX ... ON job_queue (queue, dedup_key) WHERE status IN ('pending', 'processing')`.
 - Absorbed into the first sync implementation ticket, not a standalone migration ticket.
@@ -163,32 +176,32 @@ Flagged during Q2 discussion, still outstanding — the existing schema has seve
 
 ## Files Created or Modified
 
-| File Path | Action | Description |
-|-----------|--------|-------------|
-| `docs/context/adr/ADR-005-provider-account-vocabulary.md` | Created (replaces old ADR-005) | Full three-level provider/channel/account vocabulary. ACCEPTED. Supersedes nothing (old ADR-005 deleted in place). |
-| `docs/context/adr/ADR-005-channel-adapter-pattern.md` | Deleted | Old ADR-005 removed in place — 2 commits in, no code references, decided to delete the junk rather than mark superseded. |
-| `docs/context/adr/ADR-012-provider-account-vocabulary.md` | Created then deleted | Draft written as ADR-012 first; Kyle asked to replace in place; deleted after content moved to ADR-005. |
-| `docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` | Modified | Added `## Amendments` section dated 2026-04-14 explaining the `domains/` → `core/` rename. Updated the Decision, Consequences, Risks, Compliance, and Review Trigger prose to say "bounded context" / "context" / "core/" instead of "domain" / "domains/". Pattern, rules, and factory contract unchanged. |
-| `docs/context/adr/index.md` | Modified | ADR-005 row retitled from "Channel Abstraction via Adapter Pattern" to "Provider Account Vocabulary", domain list expanded, filename updated. |
-| `docs/design_ideas/derived-fact-model.md` | Created | Full deferred design for Q2: three-table model (`processor`, `processor_run`, `derived_fact`), mapping from old per-feature tables, six open sub-questions, event-sourcing alternative direction elevated to primary option, revisit triggers. |
-| `docs/design_ideas/future-surfaces.md` | Created | MCP server deferral note. Product-spec-committed feature, open design questions, trigger for revisiting. |
-| `docs/design_ideas/scaffold-cleanup.md` | Created | What stays / what goes / what relocates in `apps/server/src/`. Notes that `domains/org/` and `domains/user/` are real and survive; `domains/providers/` and `domains/account-setup/` are throwaway. Deletion happens alongside first real implementation, not as standalone ticket. |
-| `docs/summaries/handoff-2026-04-14-project-breakdown-plan.md` | Created | This handoff. |
-| `apps/server/src/main.ts` | Modified | Removed stub `sync` mode. Modes now `api | worker | all`. Inline comment explains worker runs all logical queues in-process. |
-| Linear REP-5 | Created | `domains/` → `core/` rename ticket. Backlog, Medium. No project. |
-| Linear REP-6 | Created | CLI profile/config system. Backlog, Low. No project. Blocked until v1 sync ships. |
+| File Path                                                           | Action                         | Description                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `docs/context/adr/ADR-005-provider-account-vocabulary.md`           | Created (replaces old ADR-005) | Full three-level provider/channel/account vocabulary. ACCEPTED. Supersedes nothing (old ADR-005 deleted in place).                                                                                                                                                                                          |
+| `docs/context/adr/ADR-005-channel-adapter-pattern.md`               | Deleted                        | Old ADR-005 removed in place — 2 commits in, no code references, decided to delete the junk rather than mark superseded.                                                                                                                                                                                    |
+| `docs/context/adr/ADR-012-provider-account-vocabulary.md`           | Created then deleted           | Draft written as ADR-012 first; Kyle asked to replace in place; deleted after content moved to ADR-005.                                                                                                                                                                                                     |
+| `docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` | Modified                       | Added `## Amendments` section dated 2026-04-14 explaining the `domains/` → `core/` rename. Updated the Decision, Consequences, Risks, Compliance, and Review Trigger prose to say "bounded context" / "context" / "core/" instead of "domain" / "domains/". Pattern, rules, and factory contract unchanged. |
+| `docs/context/adr/index.md`                                         | Modified                       | ADR-005 row retitled from "Channel Abstraction via Adapter Pattern" to "Provider Account Vocabulary", domain list expanded, filename updated.                                                                                                                                                               |
+| `docs/design_ideas/derived-fact-model.md`                           | Created                        | Full deferred design for Q2: three-table model (`processor`, `processor_run`, `derived_fact`), mapping from old per-feature tables, six open sub-questions, event-sourcing alternative direction elevated to primary option, revisit triggers.                                                              |
+| `docs/design_ideas/future-surfaces.md`                              | Created                        | MCP server deferral note. Product-spec-committed feature, open design questions, trigger for revisiting.                                                                                                                                                                                                    |
+| `docs/design_ideas/scaffold-cleanup.md`                             | Created                        | What stays / what goes / what relocates in `apps/server/src/`. Notes that `domains/org/` and `domains/user/` are real and survive; `domains/providers/` and `domains/account-setup/` are throwaway. Deletion happens alongside first real implementation, not as standalone ticket.                         |
+| `docs/summaries/handoff-2026-04-14-project-breakdown-plan.md`       | Created                        | This handoff.                                                                                                                                                                                                                                                                                               |
+| `apps/server/src/main.ts`                                           | Modified                       | Removed stub `sync` mode. Modes now `api                                                                                                                                                                                                                                                                    | worker | all`. Inline comment explains worker runs all logical queues in-process. |
+| Linear REP-5                                                        | Created                        | `domains/` → `core/` rename ticket. Backlog, Medium. No project.                                                                                                                                                                                                                                            |
+| Linear REP-6                                                        | Created                        | CLI profile/config system. Backlog, Low. No project. Blocked until v1 sync ships.                                                                                                                                                                                                                           |
 
 ## What the NEXT Session Should Do
 
 1. **First, read this handoff in full** (`docs/summaries/handoff-2026-04-14-project-breakdown-plan.md`).
 2. **Then, execute Q6 — Linear project breakdown.** Propose a list of Linear projects with scopes, dependency ordering, and indicative ticket outlines. The goal is to have a concrete roadmap in Linear that REP-5 and REP-6 can be slotted into, and that the first implementation session can pick up from.
 3. **Specifically, Q6 must answer:**
-    - What are the distinct Linear projects? (Earlier working guess was six: CLI Foundation, Channel Adapters, Sync Engine, Processing Pipeline Core, Initial Processors, HTTP API + Frontend. That guess predates Q1–Q4 resolutions and may not hold.)
-    - What is the dependency order and which are parallelizable?
-    - Which project absorbs REP-5 (`domains/` → `core/` rename)?
-    - Which project unblocks REP-6 (profile system)?
-    - What's the first ticket in the first project (the "pick this up on Monday" answer)?
-    - How do we handle the schema rewrite for `docs/03-sql-schema.md` — one ticket per project that touches schema, or one ticket at the top of the roadmap to rewrite it against locked decisions?
+   - What are the distinct Linear projects? (Earlier working guess was six: CLI Foundation, Channel Adapters, Sync Engine, Processing Pipeline Core, Initial Processors, HTTP API + Frontend. That guess predates Q1–Q4 resolutions and may not hold.)
+   - What is the dependency order and which are parallelizable?
+   - Which project absorbs REP-5 (`domains/` → `core/` rename)?
+   - Which project unblocks REP-6 (profile system)?
+   - What's the first ticket in the first project (the "pick this up on Monday" answer)?
+   - How do we handle the schema rewrite for `docs/03-sql-schema.md` — one ticket per project that touches schema, or one ticket at the top of the roadmap to rewrite it against locked decisions?
 4. **Before creating projects in Linear, pause and confirm the project list with Kyle.** Do NOT spam the workspace with speculative projects.
 5. **After project list is confirmed**, use `/linear-new` or `save_project` + `save_milestone` via the Linear MCP to scaffold. Use `ticket-breakdown` subagent only if the scope is large enough to justify it — single-project first-ticket breakdowns can be done inline.
 
@@ -224,7 +237,7 @@ Flagged during Q2 discussion, still outstanding — the existing schema has seve
 2. `docs/context/adr/ADR-005-provider-account-vocabulary.md` — locked vocabulary for the provider layer.
 3. `docs/context/adr/ADR-009-vertical-domain-layout-repo-factories.md` — core directory pattern (pay attention to the Amendments section).
 4. `docs/context/adr/index.md` — the full ADR index, because Q6 needs awareness of every accepted ADR that might constrain a project.
-5. `docs/design_ideas/derived-fact-model.md` — to understand what is *intentionally not in scope* for the near-term projects.
+5. `docs/design_ideas/derived-fact-model.md` — to understand what is _intentionally not in scope_ for the near-term projects.
 6. `docs/design_ideas/scaffold-cleanup.md` — to understand which existing source files can be deleted, which are real, and which need to move.
 7. `docs/design_ideas/future-surfaces.md` — to understand what's deferred and why.
 8. `docs/01-product-spec.md` — to ground the project list in actual product commitments.
@@ -233,6 +246,7 @@ Flagged during Q2 discussion, still outstanding — the existing schema has seve
 11. The `apps/server/src/` file tree — to understand what physically exists vs. what needs to be created. Use Glob, not Read-all.
 
 **DO NOT load at session start:**
+
 - `docs/context/adr/ADR-001` through `ADR-004`, `ADR-006` through `ADR-008`, `ADR-010`, `ADR-011` — read them on demand only if a specific Q6 question lands on their turf. They're indexed; pick surgically.
 - `docs/02-deployment-stack.md`, `docs/04-application-architecture.md`, `docs/05-code-conventions.md`, `docs/06-adrs.md` — load only if a project needs them.
 - `docs/existing_market/companies.md` — irrelevant to Q6.

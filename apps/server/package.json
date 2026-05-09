@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "cli": "bun run src/cli.ts",
     "dev": "bun run --watch src/main.ts",
-    "start": "bun run src/main.ts",
-    "cli": "bun run src/cli.ts"
+    "start": "bun run src/main.ts"
   },
   "dependencies": {
     "@repel/shared": "workspace:*",
