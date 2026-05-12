@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e
+cd "$(git rev-parse --show-toplevel)"
+bun install
+bun run clean
+
+# DB reset prompt on rebase (not amend). Disable with DEVCTL_DB_PROMPT=0.
+# Skipped when stdin isn't a tty. --force drops the per-branch db and
+# re-clones from template; any unmigrated local rows are lost.
+if [ "$1" = "rebase" ] && [ "${DEVCTL_DB_PROMPT:-1}" != "0" ] && [ -t 0 ]; then
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  printf "devctl: reset db for '%s' from template? (drops current db) [y/N] " "$branch" > /dev/tty
+  read -r reply < /dev/tty
+  if [ "$reply" = "y" ] || [ "$reply" = "Y" ]; then
+    ( cd apps/server && PG_ADMIN_URL="postgres://repel:dev@localhost:5432/postgres" \
+      bun run src/cli.ts db clone "$branch" --force --env-file .env.local )
+  fi
+fi
