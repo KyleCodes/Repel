@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { CloneInput, DropInput, RefreshTemplateInput } from '../db.ts';
+import {
+  CloneInput,
+  DropInput,
+  MigrateCreateInput,
+  MigrateDownInput,
+  MigrateUpInput,
+  RefreshTemplateInput,
+  StatusInput,
+} from '../db.ts';
 
 describe('CloneInput', function () {
   test('applies defaults when only branch is provided', function () {
@@ -54,6 +62,72 @@ describe('DropInput', function () {
 
   test('rejects missing branch', function () {
     expect(DropInput.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('MigrateCreateInput', function () {
+  test('accepts empty object (name optional)', function () {
+    expect(MigrateCreateInput.parse({})).toEqual({});
+  });
+
+  test('accepts a valid name', function () {
+    expect(MigrateCreateInput.parse({ name: 'rep-39' })).toEqual({
+      name: 'rep-39',
+    });
+  });
+
+  test('rejects empty name', function () {
+    expect(MigrateCreateInput.safeParse({ name: '' }).success).toBe(false);
+  });
+
+  test('rejects non-string name', function () {
+    expect(MigrateCreateInput.safeParse({ name: 123 }).success).toBe(false);
+  });
+});
+
+describe('MigrateUpInput', function () {
+  test('accepts empty object (target optional)', function () {
+    expect(MigrateUpInput.parse({})).toEqual({});
+  });
+
+  test('accepts a valid target', function () {
+    expect(MigrateUpInput.parse({ target: '20240101' })).toEqual({
+      target: '20240101',
+    });
+  });
+
+  test('rejects empty target', function () {
+    expect(MigrateUpInput.safeParse({ target: '' }).success).toBe(false);
+  });
+
+  test('rejects non-string target', function () {
+    expect(MigrateUpInput.safeParse({ target: 42 }).success).toBe(false);
+  });
+});
+
+describe('MigrateDownInput', function () {
+  test('accepts empty object (target optional)', function () {
+    expect(MigrateDownInput.parse({})).toEqual({});
+  });
+
+  test('accepts a valid target', function () {
+    expect(MigrateDownInput.parse({ target: '20240101' })).toEqual({
+      target: '20240101',
+    });
+  });
+
+  test('rejects empty target', function () {
+    expect(MigrateDownInput.safeParse({ target: '' }).success).toBe(false);
+  });
+
+  test('rejects non-string target', function () {
+    expect(MigrateDownInput.safeParse({ target: 42 }).success).toBe(false);
+  });
+});
+
+describe('StatusInput', function () {
+  test('accepts empty object', function () {
+    expect(StatusInput.parse({})).toEqual({});
   });
 });
 

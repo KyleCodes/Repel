@@ -19,3 +19,21 @@ export const RefreshTemplateInput = z.object({
   template: z.string().min(1).default(DEFAULT_TEMPLATE),
 });
 export type RefreshTemplateInput = z.infer<typeof RefreshTemplateInput>;
+
+export const MigrateCreateInput = z.object({
+  name: z.string().min(1).optional(),
+});
+export type MigrateCreateInput = z.infer<typeof MigrateCreateInput>;
+
+export const MigrateUpInput = z.object({
+  target: z.string().min(1).optional(),
+});
+export type MigrateUpInput = z.infer<typeof MigrateUpInput>;
+
+export const MigrateDownInput = z.object({
+  target: z.string().min(1).optional(),
+});
+export type MigrateDownInput = z.infer<typeof MigrateDownInput>;
+
+export const StatusInput = z.object({});
+export type StatusInput = z.infer<typeof StatusInput>;
