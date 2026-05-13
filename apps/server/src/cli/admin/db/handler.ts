@@ -3,13 +3,12 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import runner from 'node-pg-migrate';
+import { migrationsService } from '../../../core/migrations/service.ts';
 import { resolveAdminUrl } from '../../../db/admin/lib/admin-url.ts';
 import {
   cloneDatabase,
   dropDatabase,
-  listAppliedMigrations,
   refreshTemplate,
-  sanitizeBranchToDbName,
 } from '../../../db/admin/service.ts';
 import { parseOrExit } from '../../lib/parse-or-exit.ts';
 import { extractTicketSlug, getCurrentBranch } from './lib/branch.ts';
@@ -23,23 +22,24 @@ import {
   parseGeneratedPath,
   partitionStatus,
   renderStatusTable,
+  resolveMigrationMatch,
   resolveMigrationName,
 } from './lib/migrations.ts';
 import {
   type CloneInput,
-  CloneSchema,
+  CloneInputSchema,
   type DropInput,
-  DropSchema,
+  DropInputSchema,
   type MigrateCreateInput,
-  MigrateCreateSchema,
+  MigrateCreateInputSchema,
   type MigrateDownInput,
-  MigrateDownSchema,
+  MigrateDownInputSchema,
   type MigrateUpInput,
-  MigrateUpSchema,
+  MigrateUpInputSchema,
   type RefreshTemplateInput,
-  RefreshTemplateSchema,
+  RefreshTemplateInputSchema,
   type StatusInput,
-  StatusSchema,
+  StatusInputSchema,
 } from './schemas.ts';
 
 function readAdminUrlFromEnv(): string {
@@ -68,7 +68,7 @@ export function registerDevDbCommands(program: Command): void {
       branch: string,
       opts: { template?: string; envFile?: string; force?: boolean }
     ) {
-      const input = parseOrExit(CloneSchema, {
+      const input = parseOrExit(CloneInputSchema, {
         branch,
         template: opts.template,
         envFile: opts.envFile,
@@ -80,7 +80,7 @@ export function registerDevDbCommands(program: Command): void {
   db.command('drop <branch>')
     .description('Drop the per-branch database')
     .action(async function (branch: string) {
-      const input = parseOrExit(DropSchema, { branch });
+      const input = parseOrExit(DropInputSchema, { branch });
       await runDrop(input);
     });
 
@@ -90,7 +90,7 @@ export function registerDevDbCommands(program: Command): void {
     )
     .option('--template <name>', 'template database name')
     .action(async function (opts: { template?: string }) {
-      const input = parseOrExit(RefreshTemplateSchema, {
+      const input = parseOrExit(RefreshTemplateInputSchema, {
         template: opts.template,
       });
       await runRefreshTemplate(input);
@@ -102,23 +102,27 @@ export function registerDevDbCommands(program: Command): void {
     .command('create [name]')
     .description('Generate a new migration file with a docstring header')
     .action(async function (name: string | undefined) {
-      const input = parseOrExit(MigrateCreateSchema, { name });
+      const input = parseOrExit(MigrateCreateInputSchema, { name });
       await runMigrateCreate(input);
     });
 
   migrate
-    .command('up [target]')
-    .description('Apply pending migrations')
-    .action(async function (target: string | undefined) {
-      const input = parseOrExit(MigrateUpSchema, { target });
+    .command('up [match]')
+    .description(
+      'Apply pending migrations. With [match], resolves a unique substring against the filesystem list.'
+    )
+    .action(async function (match: string | undefined) {
+      const input = parseOrExit(MigrateUpInputSchema, { match });
       await runMigrateUp(input);
     });
 
   migrate
-    .command('down [target]')
-    .description('Roll back applied migrations')
-    .action(async function (target: string | undefined) {
-      const input = parseOrExit(MigrateDownSchema, { target });
+    .command('down [match]')
+    .description(
+      'Roll back applied migrations. With [match], resolves a unique substring against the filesystem list.'
+    )
+    .action(async function (match: string | undefined) {
+      const input = parseOrExit(MigrateDownInputSchema, { match });
       await runMigrateDown(input);
     });
 
@@ -127,7 +131,7 @@ export function registerDevDbCommands(program: Command): void {
       'Diff applied migrations in pgmigrations against the filesystem'
     )
     .action(async function () {
-      const input = parseOrExit(StatusSchema, {});
+      const input = parseOrExit(StatusInputSchema, {});
       await runStatus(input);
     });
 }
@@ -211,25 +215,38 @@ export async function runMigrateCreate(
 }
 
 export async function runMigrateUp(input: MigrateUpInput): Promise<void> {
+  const resolved = resolveMigrationMatch(input.match, 'up', listFsMigrations());
   await runner(
-    buildRunnerOptions('up', input.target, {
+    buildRunnerOptions('up', resolved, {
       databaseUrl: readDatabaseUrlFromEnvLocal(),
     })
   );
 }
 
 export async function runMigrateDown(input: MigrateDownInput): Promise<void> {
+  const resolved = resolveMigrationMatch(
+    input.match,
+    'down',
+    listFsMigrations()
+  );
   await runner(
-    buildRunnerOptions('down', input.target, {
+    buildRunnerOptions('down', resolved, {
       databaseUrl: readDatabaseUrlFromEnvLocal(),
     })
   );
 }
 
 export async function runStatus(_input: StatusInput): Promise<void> {
-  const applied = await listAppliedMigrations(readDatabaseUrlFromEnvLocal());
+  const applied = await migrationsService.listApplied();
   const fs = listFsMigrations();
-  console.log(renderStatusTable(partitionStatus({ fs, applied })));
+  console.log(
+    renderStatusTable(
+      partitionStatus({
+        fs,
+        applied: applied.map(function (a) {
+          return a.name;
+        }),
+      })
+    )
+  );
 }
-
-export { sanitizeBranchToDbName };

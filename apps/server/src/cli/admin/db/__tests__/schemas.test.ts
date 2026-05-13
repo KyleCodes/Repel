@@ -1,17 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  CloneSchema,
-  DropSchema,
-  MigrateCreateSchema,
-  MigrateDownSchema,
-  MigrateUpSchema,
-  RefreshTemplateSchema,
-  StatusSchema,
+  CloneInputSchema,
+  DropInputSchema,
+  MigrateCreateInputSchema,
+  MigrateDownInputSchema,
+  MigrateUpInputSchema,
+  RefreshTemplateInputSchema,
+  StatusInputSchema,
 } from '../schemas.ts';
 
-describe('CloneSchema', function () {
+describe('CloneInputSchema', function () {
   test('applies defaults when only branch is provided', function () {
-    const result = CloneSchema.parse({ branch: 'rep-38' });
+    const result = CloneInputSchema.parse({ branch: 'rep-38' });
     expect(result).toEqual({
       branch: 'rep-38',
       template: 'repel_dev',
@@ -21,7 +21,7 @@ describe('CloneSchema', function () {
   });
 
   test('accepts all fields explicitly', function () {
-    const result = CloneSchema.parse({
+    const result = CloneInputSchema.parse({
       branch: 'rep-38',
       template: 'custom_template',
       envFile: '.env.test',
@@ -36,113 +36,119 @@ describe('CloneSchema', function () {
   });
 
   test('rejects empty branch', function () {
-    expect(CloneSchema.safeParse({ branch: '' }).success).toBe(false);
+    expect(CloneInputSchema.safeParse({ branch: '' }).success).toBe(false);
   });
 
   test('rejects missing branch', function () {
-    expect(CloneSchema.safeParse({}).success).toBe(false);
+    expect(CloneInputSchema.safeParse({}).success).toBe(false);
   });
 
   test('rejects non-string branch', function () {
-    expect(CloneSchema.safeParse({ branch: 123 }).success).toBe(false);
+    expect(CloneInputSchema.safeParse({ branch: 123 }).success).toBe(false);
   });
 });
 
-describe('DropSchema', function () {
+describe('DropInputSchema', function () {
   test('accepts a branch', function () {
-    expect(DropSchema.parse({ branch: 'rep-38' })).toEqual({
+    expect(DropInputSchema.parse({ branch: 'rep-38' })).toEqual({
       branch: 'rep-38',
     });
   });
 
   test('rejects empty branch', function () {
-    expect(DropSchema.safeParse({ branch: '' }).success).toBe(false);
+    expect(DropInputSchema.safeParse({ branch: '' }).success).toBe(false);
   });
 
   test('rejects missing branch', function () {
-    expect(DropSchema.safeParse({}).success).toBe(false);
+    expect(DropInputSchema.safeParse({}).success).toBe(false);
   });
 });
 
-describe('MigrateCreateSchema', function () {
+describe('MigrateCreateInputSchema', function () {
   test('accepts empty object (name optional)', function () {
-    expect(MigrateCreateSchema.parse({})).toEqual({});
+    expect(MigrateCreateInputSchema.parse({})).toEqual({});
   });
 
   test('accepts a valid name', function () {
-    expect(MigrateCreateSchema.parse({ name: 'add_users' })).toEqual({
+    expect(MigrateCreateInputSchema.parse({ name: 'add_users' })).toEqual({
       name: 'add_users',
     });
   });
 
   test('rejects empty name', function () {
-    expect(MigrateCreateSchema.safeParse({ name: '' }).success).toBe(false);
+    expect(MigrateCreateInputSchema.safeParse({ name: '' }).success).toBe(
+      false
+    );
   });
 
   test('rejects non-string name', function () {
-    expect(MigrateCreateSchema.safeParse({ name: 123 }).success).toBe(false);
+    expect(MigrateCreateInputSchema.safeParse({ name: 123 }).success).toBe(
+      false
+    );
   });
 });
 
-describe('MigrateUpSchema', function () {
-  test('accepts empty object (target optional)', function () {
-    expect(MigrateUpSchema.parse({})).toEqual({});
+describe('MigrateUpInputSchema', function () {
+  test('accepts empty object (match optional)', function () {
+    expect(MigrateUpInputSchema.parse({})).toEqual({});
   });
 
-  test('accepts a valid target', function () {
-    expect(MigrateUpSchema.parse({ target: '20240101' })).toEqual({
-      target: '20240101',
+  test('accepts a valid match', function () {
+    expect(MigrateUpInputSchema.parse({ match: 'rep-39' })).toEqual({
+      match: 'rep-39',
     });
   });
 
-  test('rejects empty target', function () {
-    expect(MigrateUpSchema.safeParse({ target: '' }).success).toBe(false);
+  test('rejects empty match', function () {
+    expect(MigrateUpInputSchema.safeParse({ match: '' }).success).toBe(false);
   });
 
-  test('rejects non-string target', function () {
-    expect(MigrateUpSchema.safeParse({ target: 42 }).success).toBe(false);
+  test('rejects non-string match', function () {
+    expect(MigrateUpInputSchema.safeParse({ match: 42 }).success).toBe(false);
   });
 });
 
-describe('MigrateDownSchema', function () {
-  test('accepts empty object (target optional)', function () {
-    expect(MigrateDownSchema.parse({})).toEqual({});
+describe('MigrateDownInputSchema', function () {
+  test('accepts empty object (match optional)', function () {
+    expect(MigrateDownInputSchema.parse({})).toEqual({});
   });
 
-  test('accepts a valid target', function () {
-    expect(MigrateDownSchema.parse({ target: '20240101' })).toEqual({
-      target: '20240101',
+  test('accepts a valid match', function () {
+    expect(MigrateDownInputSchema.parse({ match: 'rep-39' })).toEqual({
+      match: 'rep-39',
     });
   });
 
-  test('rejects empty target', function () {
-    expect(MigrateDownSchema.safeParse({ target: '' }).success).toBe(false);
+  test('rejects empty match', function () {
+    expect(MigrateDownInputSchema.safeParse({ match: '' }).success).toBe(false);
   });
 
-  test('rejects non-string target', function () {
-    expect(MigrateDownSchema.safeParse({ target: 42 }).success).toBe(false);
+  test('rejects non-string match', function () {
+    expect(MigrateDownInputSchema.safeParse({ match: 42 }).success).toBe(false);
   });
 });
 
-describe('StatusSchema', function () {
+describe('StatusInputSchema', function () {
   test('accepts empty object', function () {
-    expect(StatusSchema.parse({})).toEqual({});
+    expect(StatusInputSchema.parse({})).toEqual({});
   });
 });
 
-describe('RefreshTemplateSchema', function () {
+describe('RefreshTemplateInputSchema', function () {
   test('defaults template to repel_dev', function () {
-    expect(RefreshTemplateSchema.parse({})).toEqual({ template: 'repel_dev' });
+    expect(RefreshTemplateInputSchema.parse({})).toEqual({
+      template: 'repel_dev',
+    });
   });
 
   test('accepts an explicit template', function () {
-    expect(RefreshTemplateSchema.parse({ template: 'foo' })).toEqual({
+    expect(RefreshTemplateInputSchema.parse({ template: 'foo' })).toEqual({
       template: 'foo',
     });
   });
 
   test('rejects empty template', function () {
-    expect(RefreshTemplateSchema.safeParse({ template: '' }).success).toBe(
+    expect(RefreshTemplateInputSchema.safeParse({ template: '' }).success).toBe(
       false
     );
   });

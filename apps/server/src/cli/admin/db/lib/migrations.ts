@@ -1,19 +1,33 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import type { RunnerOption } from 'node-pg-migrate';
+import { sanitizeSlug } from '../../../../db/admin/lib/slug.ts';
 import { extractTicketSlug } from './branch.ts';
 
-// Absolute path to the migrations directory. Resolved off this file's location
-// so the value is stable regardless of process cwd. Boot-time existsSync check
-// surfaces a clear error if the relative chain is wrong (e.g. after a future
-// restructure of cli/admin/db/). See D6 in the plan for the long-term home.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-export const MIGRATIONS_DIR = resolve(__dirname, '../../../../db/migrations');
+// Walks up from process.cwd() looking for the repo root marker. The marker
+// is `bun.lock` which uniquely identifies our workspace root (apps/ and
+// packages/ never contain one). Resolving from cwd (not import.meta.url)
+// keeps the path stable even if this file moves under a future restructure.
+function findRepoRoot(): string {
+  let dir = process.cwd();
+  while (dir !== dirname(dir)) {
+    if (existsSync(join(dir, 'bun.lock'))) return dir;
+    dir = dirname(dir);
+  }
+  throw new Error(
+    'Could not find repo root (no bun.lock in ancestor dirs of process.cwd())'
+  );
+}
+
+// Absolute path to the migrations directory, resolved from the repo root.
+// Boot-time existsSync check surfaces a clear error if the path drifts.
+export const MIGRATIONS_DIR = join(
+  findRepoRoot(),
+  'apps/server/src/db/migrations'
+);
 if (!existsSync(MIGRATIONS_DIR)) {
   throw new Error(
-    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — the relative chain in cli/admin/db/lib/migrations.ts is out of date.`
+    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — repo layout drifted from apps/server/src/db/migrations.`
   );
 }
 
@@ -39,17 +53,6 @@ export function formatHeader(input: FormatHeaderInput): string {
   ].join('\n');
 }
 
-// Normalizes a user-supplied slug fragment: lowercase, collapse non-[a-z0-9_-]
-// runs into a single underscore, trim leading/trailing underscores. Returns
-// the sanitized string or null if nothing usable remains.
-export function sanitizeSlugFragment(raw: string): string | null {
-  const cleaned = raw
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return cleaned.length > 0 ? cleaned : null;
-}
-
 // Composes the migration name baked into the filename:
 //   - No `explicit` → ticket slug alone (e.g. "rep-39")
 //   - With `explicit` → "<ticket-slug>_<sanitized-explicit>" (e.g. "rep-39_add_users")
@@ -61,13 +64,13 @@ export function resolveMigrationName(input: {
 }): string {
   const slug = extractTicketSlug(input.branch);
   const slugLc = slug ? slug.toLowerCase() : null;
-  if (input.explicit === undefined) {
+  if (!input.explicit) {
     if (slugLc) return slugLc;
     throw new Error(
       `Could not derive migration name from branch '${input.branch}'. Pass an explicit name.`
     );
   }
-  const cleaned = sanitizeSlugFragment(input.explicit);
+  const cleaned = sanitizeSlug(input.explicit);
   if (!cleaned) {
     throw new Error(
       `Migration name '${input.explicit}' sanitized to empty. Pass a name containing alphanumerics, '_', or '-'.`
@@ -174,10 +177,39 @@ export function renderStatusTable(input: PartitionResult): string {
   return [header, separator, body].join('\n');
 }
 
-// Pure routing for node-pg-migrate's `runner` option object.
+// Resolves the user-supplied `[match]` substring against the filesystem list:
+//   - No `match` → default count (Infinity for up, 1 for down)
+//   - 1 substring hit → return { file: <full-name> }
+//   - 0 hits → throw with a clear message
+//   - >1 hits → throw with the candidate list so the user can narrow
+export type ResolvedTarget = { file: string } | { count: number };
+export function resolveMigrationMatch(
+  match: string | undefined,
+  direction: 'up' | 'down',
+  fsMigrations: string[]
+): ResolvedTarget {
+  if (!match) {
+    return { count: direction === 'up' ? Infinity : 1 };
+  }
+  const hits = fsMigrations.filter(function (n) {
+    return n.includes(match);
+  });
+  if (hits.length === 0) {
+    throw new Error(`db migrate ${direction}: no migration matches "${match}"`);
+  }
+  if (hits.length > 1) {
+    throw new Error(
+      `db migrate ${direction}: "${match}" matches multiple migrations:\n  - ${hits.join('\n  - ')}`
+    );
+  }
+  return { file: hits[0] };
+}
+
+// Pure routing for node-pg-migrate's `runner` option object. Caller supplies
+// the already-resolved target (either a unique filename or a count).
 export function buildRunnerOptions(
   direction: 'up' | 'down',
-  target: string | undefined,
+  resolved: ResolvedTarget,
   env: { databaseUrl: string }
 ): RunnerOption {
   const base = {
@@ -189,18 +221,15 @@ export function buildRunnerOptions(
       console.error(msg);
     },
   };
-  if (target === undefined) {
-    return { ...base, count: direction === 'up' ? Infinity : 1 };
+  if ('file' in resolved) {
+    return { ...base, file: resolved.file };
   }
-  if (/^\d+$/.test(target)) {
-    return { ...base, count: Number(target), timestamp: true };
-  }
-  return { ...base, file: target };
+  return { ...base, count: resolved.count };
 }
 
 // Pulls the absolute generated migration path out of `node-pg-migrate create`
 // stdout. Returns null when the marker isn't present so the caller can throw
-// a clear error — no newest-mtime fallback per DR-REP-39-2 follow-up.
+// a clear error — no newest-mtime fallback.
 export function parseGeneratedPath(stdout: string): string | null {
   const m = stdout.match(/Created migration -- (.+\.ts)\s*$/m);
   return m ? m[1] : null;

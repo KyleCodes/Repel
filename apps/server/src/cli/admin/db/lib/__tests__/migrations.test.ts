@@ -17,8 +17,8 @@ import {
   parseGeneratedPath,
   partitionStatus,
   renderStatusTable,
+  resolveMigrationMatch,
   resolveMigrationName,
-  sanitizeSlugFragment,
 } from '../migrations.ts';
 
 describe('MIGRATIONS_DIR', function () {
@@ -69,25 +69,6 @@ describe('formatHeader', function () {
   });
 });
 
-describe('sanitizeSlugFragment', function () {
-  test('lowercases and replaces non-[a-z0-9_-] runs with single underscore', function () {
-    expect(sanitizeSlugFragment('Add Users!!')).toBe('add_users');
-  });
-
-  test('preserves underscores and hyphens', function () {
-    expect(sanitizeSlugFragment('add_user-table')).toBe('add_user-table');
-  });
-
-  test('trims leading and trailing underscores', function () {
-    expect(sanitizeSlugFragment('__foo__')).toBe('foo');
-  });
-
-  test('returns null when nothing usable remains', function () {
-    expect(sanitizeSlugFragment('!!!')).toBeNull();
-    expect(sanitizeSlugFragment('')).toBeNull();
-  });
-});
-
 describe('resolveMigrationName', function () {
   test('explicit alone is appended to ticket slug when branch has one', function () {
     expect(
@@ -112,6 +93,15 @@ describe('resolveMigrationName', function () {
       resolveMigrationName({
         explicit: undefined,
         branch: 'kylemuldoon15/rep-39-t2-migrate',
+      })
+    ).toBe('rep-39');
+  });
+
+  test('empty-string explicit treated as no explicit', function () {
+    expect(
+      resolveMigrationName({
+        explicit: '',
+        branch: 'kylemuldoon15/rep-39-foo',
       })
     ).toBe('rep-39');
   });
@@ -240,11 +230,77 @@ describe('renderStatusTable', function () {
   });
 });
 
+describe('resolveMigrationMatch', function () {
+  const fs = [
+    '1700000000000_rep-1',
+    '1750000000000_rep-39_add_users',
+    '1777002187000_rep-9',
+  ];
+
+  test('no match arg on up → count Infinity', function () {
+    expect(resolveMigrationMatch(undefined, 'up', fs)).toEqual({
+      count: Infinity,
+    });
+  });
+
+  test('no match arg on down → count 1', function () {
+    expect(resolveMigrationMatch(undefined, 'down', fs)).toEqual({ count: 1 });
+  });
+
+  test('empty-string match treated as no match', function () {
+    expect(resolveMigrationMatch('', 'up', fs)).toEqual({ count: Infinity });
+  });
+
+  test('single substring hit → returns the resolved filename', function () {
+    expect(resolveMigrationMatch('rep-39', 'up', fs)).toEqual({
+      file: '1750000000000_rep-39_add_users',
+    });
+  });
+
+  test('matches by epoch substring', function () {
+    expect(resolveMigrationMatch('1700000000000', 'up', fs)).toEqual({
+      file: '1700000000000_rep-1',
+    });
+  });
+
+  test('matches by slug substring', function () {
+    expect(resolveMigrationMatch('add_users', 'up', fs)).toEqual({
+      file: '1750000000000_rep-39_add_users',
+    });
+  });
+
+  test('zero hits → throws no-match error', function () {
+    expect(function () {
+      resolveMigrationMatch('nonexistent', 'up', fs);
+    }).toThrow('db migrate up: no migration matches "nonexistent"');
+  });
+
+  test('multiple hits → throws ambiguity error with candidates', function () {
+    expect(function () {
+      resolveMigrationMatch('rep', 'up', fs);
+    }).toThrow(/matches multiple migrations:/);
+  });
+
+  test('ambiguity error lists every candidate', function () {
+    let captured: Error | null = null;
+    try {
+      resolveMigrationMatch('rep', 'down', fs);
+    } catch (e) {
+      captured = e as Error;
+    }
+    expect(captured).not.toBeNull();
+    expect(captured!.message).toContain('1700000000000_rep-1');
+    expect(captured!.message).toContain('1750000000000_rep-39_add_users');
+    expect(captured!.message).toContain('1777002187000_rep-9');
+    expect(captured!.message).toContain('db migrate down:');
+  });
+});
+
 describe('buildRunnerOptions', function () {
   const env = { databaseUrl: 'postgres://x' };
 
-  test("('up', undefined) → count Infinity, direction up", function () {
-    const o = buildRunnerOptions('up', undefined, env);
+  test("('up', { count: Infinity }) → count Infinity, direction up", function () {
+    const o = buildRunnerOptions('up', { count: Infinity }, env);
     expect(o.direction).toBe('up');
     expect(o.count).toBe(Infinity);
     expect(o.dir).toBe(MIGRATIONS_DIR);
@@ -252,57 +308,20 @@ describe('buildRunnerOptions', function () {
     expect('databaseUrl' in o && o.databaseUrl).toBe('postgres://x');
   });
 
-  test("('down', undefined) → count 1, direction down", function () {
-    const o = buildRunnerOptions('down', undefined, env);
+  test("('down', { count: 1 }) → count 1, direction down", function () {
+    const o = buildRunnerOptions('down', { count: 1 }, env);
     expect(o.direction).toBe('down');
     expect(o.count).toBe(1);
   });
 
-  test("('up', '20240101') → count 20240101, timestamp true", function () {
-    const o = buildRunnerOptions('up', '20240101', env);
-    expect(o.count).toBe(20240101);
-    expect(o.timestamp).toBe(true);
-    expect(o.direction).toBe('up');
-  });
-
-  test("('down', '20240101') → count 20240101, timestamp true, direction down", function () {
-    const o = buildRunnerOptions('down', '20240101', env);
-    expect(o.count).toBe(20240101);
-    expect(o.timestamp).toBe(true);
-    expect(o.direction).toBe('down');
-  });
-
-  test("('up', '1700000000000_rep-9') → file branch, no count, no timestamp", function () {
-    const o = buildRunnerOptions('up', '1700000000000_rep-9', env);
+  test("('up', { file: '...' }) → file branch, no count", function () {
+    const o = buildRunnerOptions('up', { file: '1700000000000_rep-9' }, env);
     expect(o.file).toBe('1700000000000_rep-9');
     expect(o.count).toBeUndefined();
-    expect(o.timestamp).toBeUndefined();
-  });
-
-  test("('up', 'abc123') → file branch", function () {
-    const o = buildRunnerOptions('up', 'abc123', env);
-    expect(o.file).toBe('abc123');
-  });
-
-  test("('up', ' 123 ') → file branch (whitespace prevents digits match)", function () {
-    const o = buildRunnerOptions('up', ' 123 ', env);
-    expect(o.file).toBe(' 123 ');
-    expect(o.count).toBeUndefined();
-  });
-
-  test("('up', '0') → digits branch, count 0", function () {
-    const o = buildRunnerOptions('up', '0', env);
-    expect(o.count).toBe(0);
-    expect(o.timestamp).toBe(true);
-  });
-
-  test("('up', '007') → digits branch, count 7", function () {
-    const o = buildRunnerOptions('up', '007', env);
-    expect(o.count).toBe(7);
   });
 
   test('log option routes to console.error', function () {
-    const o = buildRunnerOptions('up', undefined, env);
+    const o = buildRunnerOptions('up', { count: Infinity }, env);
     expect(typeof o.log).toBe('function');
   });
 });
