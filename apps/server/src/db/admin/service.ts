@@ -98,6 +98,33 @@ export async function dropDatabase(
   });
 }
 
+// Reads applied migration names from the `pgmigrations` table on the current
+// per-branch DB. SQLSTATE 42P01 (undefined_table) is treated as "no rows"
+// because a freshly cloned DB hasn't been migrated yet and the table is
+// created lazily by node-pg-migrate's first `up`.
+//
+// Lives here temporarily — see D2 in the REP-39 follow-up plan. Long-term
+// home is `core/migrations/{repo,service}.ts` under ADR-009/010.
+export async function listAppliedMigrations(
+  databaseUrl: string
+): Promise<string[]> {
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    const result = await client.query<{ name: string }>(
+      'SELECT name FROM pgmigrations ORDER BY run_on'
+    );
+    return result.rows.map(function (r) {
+      return r.name;
+    });
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === '42P01') return [];
+    throw err;
+  } finally {
+    await client.end();
+  }
+}
+
 export interface RefreshTemplateInput {
   adminUrl: string;
   template: string;

@@ -1,6 +1,6 @@
 import { Command } from 'commander';
+import { registerDevDbCommands } from './cli/admin/db/handler.ts';
 import { registerBootstrapCommand } from './core/account-setup/cli.ts';
-import { registerDevDbCommands } from './db/admin/cli/db.ts';
 import { closeDb } from './db/runtime.ts';
 
 const program = new Command();

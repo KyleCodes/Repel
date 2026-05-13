@@ -1,14 +1,21 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunnerOption } from 'node-pg-migrate';
 import { extractTicketSlug } from './branch.ts';
 
 // Absolute path to the migrations directory. Resolved off this file's location
-// so the value is stable regardless of process cwd.
+// so the value is stable regardless of process cwd. Boot-time existsSync check
+// surfaces a clear error if the relative chain is wrong (e.g. after a future
+// restructure of cli/admin/db/). See D6 in the plan for the long-term home.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 export const MIGRATIONS_DIR = resolve(__dirname, '../../../../db/migrations');
+if (!existsSync(MIGRATIONS_DIR)) {
+  throw new Error(
+    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — the relative chain in cli/admin/db/lib/migrations.ts is out of date.`
+  );
+}
 
 export interface FormatHeaderInput {
   name: string;
@@ -17,9 +24,8 @@ export interface FormatHeaderInput {
   createdAt: Date;
 }
 
-// Emits the 4-line JSDoc header (plus opening/closing comment lines) used at
-// the top of every generated migration file. Trailing newline included so the
-// migration body starts on a fresh line.
+// Emits the 4-line JSDoc header used at the top of every generated migration
+// file. Trailing newline included so the migration body starts on a fresh line.
 export function formatHeader(input: FormatHeaderInput): string {
   const ticket = input.ticket ?? 'unknown';
   return [
@@ -33,30 +39,53 @@ export function formatHeader(input: FormatHeaderInput): string {
   ].join('\n');
 }
 
-// Returns explicit name when provided, otherwise the lower-cased ticket slug
-// extracted from the branch. Throws the exact AC error string when neither is
-// available — callers surface that to the user verbatim.
+// Normalizes a user-supplied slug fragment: lowercase, collapse non-[a-z0-9_-]
+// runs into a single underscore, trim leading/trailing underscores. Returns
+// the sanitized string or null if nothing usable remains.
+export function sanitizeSlugFragment(raw: string): string | null {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+// Composes the migration name baked into the filename:
+//   - No `explicit` → ticket slug alone (e.g. "rep-39")
+//   - With `explicit` → "<ticket-slug>_<sanitized-explicit>" (e.g. "rep-39_add_users")
+//   - No slug WITH `explicit` → sanitized explicit alone
+//   - No slug AND no `explicit` → throw the exact AC error string
 export function resolveMigrationName(input: {
   explicit: string | undefined;
   branch: string;
 }): string {
-  if (input.explicit !== undefined) return input.explicit;
   const slug = extractTicketSlug(input.branch);
-  if (slug) return slug.toLowerCase();
-  throw new Error(
-    `Could not derive migration name from branch '${input.branch}'. Pass an explicit name.`
-  );
+  const slugLc = slug ? slug.toLowerCase() : null;
+  if (input.explicit === undefined) {
+    if (slugLc) return slugLc;
+    throw new Error(
+      `Could not derive migration name from branch '${input.branch}'. Pass an explicit name.`
+    );
+  }
+  const cleaned = sanitizeSlugFragment(input.explicit);
+  if (!cleaned) {
+    throw new Error(
+      `Migration name '${input.explicit}' sanitized to empty. Pass a name containing alphanumerics, '_', or '-'.`
+    );
+  }
+  return slugLc ? `${slugLc}_${cleaned}` : cleaned;
 }
 
 // Reads MIGRATIONS_DIR (or override) and returns base filenames sorted by
-// numeric unix-ms prefix. Filter intentionally excludes README/.d.ts/subdirs.
+// numeric unix-ms prefix. Single positive regex — anything not matching is
+// skipped (covers README, .d.ts files, subdirectories, editor backups, etc.).
 export function listFsMigrations(dir: string = MIGRATIONS_DIR): string[] {
+  const PATTERN = /^(\d+)_[a-z0-9_-]+\.ts$/i;
   const entries = readdirSync(dir, { withFileTypes: true });
   const names: string[] = [];
   for (const e of entries) {
     if (!e.isFile()) continue;
-    if (e.name.endsWith('.d.ts')) continue;
-    if (!/^\d+_.*\.ts$/.test(e.name)) continue;
+    if (!PATTERN.test(e.name)) continue;
     names.push(e.name.replace(/\.ts$/, ''));
   }
   names.sort(function (a, b) {
@@ -145,9 +174,7 @@ export function renderStatusTable(input: PartitionResult): string {
   return [header, separator, body].join('\n');
 }
 
-// Pure routing for node-pg-migrate's `runner` option object. Keeps the
-// handler itself a one-line call site (testable via this function instead
-// of mock.module on node-pg-migrate).
+// Pure routing for node-pg-migrate's `runner` option object.
 export function buildRunnerOptions(
   direction: 'up' | 'down',
   target: string | undefined,
@@ -172,8 +199,8 @@ export function buildRunnerOptions(
 }
 
 // Pulls the absolute generated migration path out of `node-pg-migrate create`
-// stdout. Returns null when the marker isn't present so the caller can fall
-// back to a directory-newest-mtime scan.
+// stdout. Returns null when the marker isn't present so the caller can throw
+// a clear error — no newest-mtime fallback per DR-REP-39-2 follow-up.
 export function parseGeneratedPath(stdout: string): string | null {
   const m = stdout.match(/Created migration -- (.+\.ts)\s*$/m);
   return m ? m[1] : null;

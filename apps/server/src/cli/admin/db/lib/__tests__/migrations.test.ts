@@ -18,6 +18,7 @@ import {
   partitionStatus,
   renderStatusTable,
   resolveMigrationName,
+  sanitizeSlugFragment,
 } from '../migrations.ts';
 
 describe('MIGRATIONS_DIR', function () {
@@ -68,14 +69,45 @@ describe('formatHeader', function () {
   });
 });
 
-describe('resolveMigrationName', function () {
-  test('explicit name wins', function () {
-    expect(resolveMigrationName({ explicit: 'foo', branch: 'main' })).toBe(
-      'foo'
-    );
+describe('sanitizeSlugFragment', function () {
+  test('lowercases and replaces non-[a-z0-9_-] runs with single underscore', function () {
+    expect(sanitizeSlugFragment('Add Users!!')).toBe('add_users');
   });
 
-  test('derives lower-case slug from branch', function () {
+  test('preserves underscores and hyphens', function () {
+    expect(sanitizeSlugFragment('add_user-table')).toBe('add_user-table');
+  });
+
+  test('trims leading and trailing underscores', function () {
+    expect(sanitizeSlugFragment('__foo__')).toBe('foo');
+  });
+
+  test('returns null when nothing usable remains', function () {
+    expect(sanitizeSlugFragment('!!!')).toBeNull();
+    expect(sanitizeSlugFragment('')).toBeNull();
+  });
+});
+
+describe('resolveMigrationName', function () {
+  test('explicit alone is appended to ticket slug when branch has one', function () {
+    expect(
+      resolveMigrationName({
+        explicit: 'add_users',
+        branch: 'kylemuldoon15/rep-39-foo',
+      })
+    ).toBe('rep-39_add_users');
+  });
+
+  test('explicit is sanitized before composition', function () {
+    expect(
+      resolveMigrationName({
+        explicit: 'Add Users!',
+        branch: 'kylemuldoon15/rep-39-foo',
+      })
+    ).toBe('rep-39_add_users');
+  });
+
+  test('no explicit → ticket slug alone (lower-cased)', function () {
     expect(
       resolveMigrationName({
         explicit: undefined,
@@ -84,12 +116,24 @@ describe('resolveMigrationName', function () {
     ).toBe('rep-39');
   });
 
-  test('throws exact AC error string when no slug and no name', function () {
+  test('no slug WITH explicit → sanitized explicit alone', function () {
+    expect(
+      resolveMigrationName({ explicit: 'add_users', branch: 'main' })
+    ).toBe('add_users');
+  });
+
+  test('throws exact AC error string when no slug AND no name', function () {
     expect(function () {
       resolveMigrationName({ explicit: undefined, branch: 'main' });
     }).toThrow(
       "Could not derive migration name from branch 'main'. Pass an explicit name."
     );
+  });
+
+  test('throws when explicit sanitizes to empty', function () {
+    expect(function () {
+      resolveMigrationName({ explicit: '!!!', branch: 'main' });
+    }).toThrow(/sanitized to empty/);
   });
 });
 
@@ -102,16 +146,21 @@ describe('listFsMigrations', function () {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test('returns base filenames sorted ascending by unix-ms prefix, excludes .d.ts and non-matching', function () {
+  test('keeps <digits>_<slug>.ts, excludes README, .d.ts, subdirs, and unprefixed .ts', function () {
     writeFileSync(join(dir, '1777002187000_rep-9.ts'), '');
     writeFileSync(join(dir, '1700000000000_rep-1.ts'), '');
+    writeFileSync(join(dir, '1750000000000_rep-39_add_users.ts'), '');
     writeFileSync(join(dir, 'README.md'), '');
     writeFileSync(join(dir, 'helpers.d.ts'), '');
     writeFileSync(join(dir, 'foo.ts'), '');
     mkdirSync(join(dir, 'subdir'));
 
     const result = listFsMigrations(dir);
-    expect(result).toEqual(['1700000000000_rep-1', '1777002187000_rep-9']);
+    expect(result).toEqual([
+      '1700000000000_rep-1',
+      '1750000000000_rep-39_add_users',
+      '1777002187000_rep-9',
+    ]);
   });
 
   test('returns empty array for an empty directory', function () {
