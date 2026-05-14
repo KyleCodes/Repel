@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Repos } from '../repos.ts';
+import type { Repos } from '../../core/repos.ts';
 import { runInOrgTx, runInTx, withTxContext } from '../tx.ts';
 
 // These tests exercise the three ambient-tx guard cases in the decorators.

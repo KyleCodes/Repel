@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sanitizeBranchToDbName } from '../service.ts';
+import { sanitizeBranchToDbName } from '../admin-ops.ts';
 
 describe('sanitizeBranchToDbName', function () {
   test('ticket-shaped names keep their hyphen', function () {

@@ -1,5 +1,5 @@
-import type { Repos } from '../../db/repos.ts';
 import { runInOrgTx, runInTx } from '../../db/tx.ts';
+import type { Repos } from '../repos.ts';
 import { orgRowToOrg } from './mappers.ts';
 import type { CreateOrgInput, Org } from './types.ts';
 

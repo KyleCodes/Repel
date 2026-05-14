@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'kysely';
-import { type Repos, makeRepos } from './repos.ts';
+import { type Repos, makeRepos } from '../core/repos.ts';
 import { getDb } from './runtime.ts';
 
 // Runtime context tracked per transaction. runInOrgTx/runInTx stash this on
