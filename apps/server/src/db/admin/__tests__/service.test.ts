@@ -2,21 +2,23 @@ import { describe, expect, test } from 'bun:test';
 import { sanitizeBranchToDbName } from '../service.ts';
 
 describe('sanitizeBranchToDbName', function () {
-  test('ticket-shaped names', function () {
-    expect(sanitizeBranchToDbName('REP-99')).toBe('repel_rep_99');
+  test('ticket-shaped names keep their hyphen', function () {
+    expect(sanitizeBranchToDbName('REP-99')).toBe('repel_rep-99');
   });
 
-  test('slashes collapse to underscores', function () {
+  test('slashes collapse to underscores; hyphens preserved', function () {
     expect(sanitizeBranchToDbName('REP-7/some-feature')).toBe(
-      'repel_rep_7_some_feature'
+      'repel_rep-7_some-feature'
     );
   });
 
-  test('runs of non-alphanumerics collapse to a single underscore', function () {
-    expect(sanitizeBranchToDbName('foo---bar...baz')).toBe('repel_foo_bar_baz');
+  test('runs of non-[a-z0-9_-] collapse to a single underscore; runs of hyphens preserved', function () {
+    expect(sanitizeBranchToDbName('foo---bar...baz')).toBe(
+      'repel_foo---bar_baz'
+    );
   });
 
-  test('leading and trailing non-alphanumerics are trimmed', function () {
+  test('leading and trailing separators are trimmed', function () {
     expect(sanitizeBranchToDbName('---foo---')).toBe('repel_foo');
   });
 

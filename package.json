@@ -14,9 +14,6 @@
     "dev:web": "cd apps/web && bun run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "migrate:create": "cd apps/server && bun --bun x node-pg-migrate create --migrations-dir src/db/migrations --migration-file-language ts",
-    "migrate:down": "cd apps/server && bun --bun x node-pg-migrate down --migrations-dir src/db/migrations",
-    "migrate:up": "cd apps/server && bun --bun x node-pg-migrate up --migrations-dir src/db/migrations",
     "prepare": "husky",
     "test": "bun test",
     "typecheck": "bun run clean && tsc --build"

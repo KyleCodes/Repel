@@ -1,14 +1,14 @@
 import { Client } from 'pg';
 import { buildDatabaseUrl } from './lib/admin-url.ts';
+import { sanitizeSlug } from './lib/slug.ts';
 
-// Sanitizes a branch name into a valid Postgres identifier.
-// Lowercases, replaces runs of non-alphanumerics with a single underscore,
-// trims leading/trailing underscores, prefixes with "repel_".
+// Sanitizes a branch name into a valid Postgres database name. Returns
+// "repel_<slug>" where <slug> is produced by the shared sanitizer
+// (lowercase, runs of non-[a-z0-9_-] collapsed to `_`, trim `_`).
+// The resulting name may contain `-` and `_` — that's fine because every
+// callsite double-quotes via `ident()`.
 export function sanitizeBranchToDbName(branch: string): string {
-  const slug = branch
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+  const slug = sanitizeSlug(branch);
   if (!slug)
     throw new Error(`branch "${branch}" produced an empty database slug`);
   return `repel_${slug}`;

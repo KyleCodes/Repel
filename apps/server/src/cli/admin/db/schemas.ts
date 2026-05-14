@@ -1,0 +1,43 @@
+import { z } from 'zod';
+
+// Convention: zod schemas are exported as `*InputSchema`; the inferred TS type
+// drops `Schema` and is exported as `*Input`. `CloneInputSchema` (the validator)
+// → `CloneInput` (the type).
+
+const DEFAULT_TEMPLATE = 'repel_dev';
+
+export const CloneInputSchema = z.object({
+  branch: z.string().min(1, 'branch is required'),
+  template: z.string().min(1).default(DEFAULT_TEMPLATE),
+  envFile: z.string().min(1).default('.env.local'),
+  force: z.boolean().default(false),
+});
+export type CloneInput = z.infer<typeof CloneInputSchema>;
+
+export const DropInputSchema = z.object({
+  branch: z.string().min(1, 'branch is required'),
+});
+export type DropInput = z.infer<typeof DropInputSchema>;
+
+export const RefreshTemplateInputSchema = z.object({
+  template: z.string().min(1).default(DEFAULT_TEMPLATE),
+});
+export type RefreshTemplateInput = z.infer<typeof RefreshTemplateInputSchema>;
+
+export const MigrateCreateInputSchema = z.object({
+  name: z.string().min(1).optional(),
+});
+export type MigrateCreateInput = z.infer<typeof MigrateCreateInputSchema>;
+
+export const MigrateUpInputSchema = z.object({
+  match: z.string().min(1).optional(),
+});
+export type MigrateUpInput = z.infer<typeof MigrateUpInputSchema>;
+
+export const MigrateDownInputSchema = z.object({
+  match: z.string().min(1).optional(),
+});
+export type MigrateDownInput = z.infer<typeof MigrateDownInputSchema>;
+
+export const StatusInputSchema = z.object({});
+export type StatusInput = z.infer<typeof StatusInputSchema>;

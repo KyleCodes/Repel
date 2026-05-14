@@ -155,6 +155,16 @@ export interface AcmeTable {
   updatedAt: Generated<Date>;
 }
 
+// node-pg-migrate's bookkeeping table. Not an app-domain table — owned by the
+// migration runner itself. Included in the DB type so `core/migrations/` can
+// query it through the normal Kysely repo path (ADR-009/010) rather than
+// dropping to raw pg.
+export interface PgMigrationsTable {
+  id: Generated<number>;
+  name: string;
+  runOn: Date;
+}
+
 // The top-level keys here MUST match the real table names in the database.
 // CamelCasePlugin only rewrites column identifiers, not table identifiers —
 // so these stay snake_case (or quoted, for the reserved "user" keyword).
@@ -170,6 +180,7 @@ export interface DB {
   attachment: AttachmentTable;
   job_queue: JobQueueTable;
   acme: AcmeTable;
+  pgmigrations: PgMigrationsTable;
 }
 
 // A Kysely instance bound to DB, or a transaction against it.
@@ -202,3 +213,5 @@ export type NewJobQueue = Insertable<JobQueueTable>;
 export type AcmeRow = Selectable<AcmeTable>;
 export type NewAcme = Insertable<AcmeTable>;
 export type AcmeUpdate = Updateable<AcmeTable>;
+
+export type PgMigrationsRow = Selectable<PgMigrationsTable>;
