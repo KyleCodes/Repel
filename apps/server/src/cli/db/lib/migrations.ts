@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { RunnerOption } from 'node-pg-migrate';
-import { sanitizeSlug } from '../../../../db/admin/lib/slug.ts';
+import { sanitizeSlug } from '../../../lib/slug.ts';
 import { extractTicketSlug } from './branch.ts';
 
 // Walks up from process.cwd() looking for the repo root marker. The marker

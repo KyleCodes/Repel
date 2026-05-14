@@ -72,6 +72,7 @@ Flow services that need multiple services inside one transaction (e.g. `account-
 ### Positive
 
 - Transport layers are ignorant of transactions. One rule: call services.
+- **Parallel transport trees.** `apps/server/src/cli/` and `apps/server/src/api/` are peer transport trees. Both shapes (Commander namespaces under `cli/<ns>/handler.ts`, future Express routes under `api/<resource>/<route>.ts`) validate raw external input at the entrypoint and call `core/` service singletons directly. Neither tree imports `core/*/repo.ts` or `db/tx.ts` — the service decorator owns the transaction. See ADR-012 for the CLI tree shape.
 - Services are stateless module singletons — no per-request construction.
 - Cross-service composition is implicit and atomic. Nested decorated calls join the ambient tx via AsyncLocalStorage.
 - One surface per service method. No dual API.
@@ -115,6 +116,7 @@ Flow services that need multiple services inside one transaction (e.g. `account-
 
 - **2026-04-13** — Original decision: caller-owned `withTx(fn)` and `withOrgTx(orgId, fn)` functions in `db/tx.ts`. Services accepted `Repos` via `makeXService(repos)` factory. Route handlers opened `withOrgTx` themselves.
 - **2026-04-18** — Rewrite: transaction ownership moved from caller to service via `runInOrgTx` / `runInTx` decorators. AsyncLocalStorage carries an ambient `TxContext = { repos, orgId | null }` so nested decorated calls automatically join instead of opening fresh transactions. Transport layers call service singletons directly and no longer import any tx primitive. Validated end-to-end in `~/Developer/monorepo_template` (see its ADR-009 for the sibling implementation); REP-9 carries the code migration in this repo. The `SET LOCAL`-inside-a-transaction mechanism from 2026-04-13 is retained unchanged — only the callsite that initiates the transaction changes.
+- **2026-05-13** — Added the "Parallel transport trees" consequence to make the cli/api peer relationship explicit. No decision change; the codification was previously implicit. See ADR-012 for the CLI tree shape. REP-42 carries the addition.
 
 ## Related
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { Repos } from '../../../db/repos.ts';
 import { withTxContext } from '../../../db/tx.ts';
 import type { PgMigrationsRow } from '../../../db/types.ts';
+import type { Repos } from '../../repos.ts';
 import { migrationsService } from '../service.ts';
 
 function makeFakeRepos(rows: PgMigrationsRow[]): Repos {

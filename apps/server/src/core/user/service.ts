@@ -1,5 +1,5 @@
-import type { Repos } from '../../db/repos.ts';
 import { runInOrgTx, runInTx } from '../../db/tx.ts';
+import type { Repos } from '../repos.ts';
 import { userRowToUser } from './mappers.ts';
 import type { CreateUserInput, User } from './types.ts';
 

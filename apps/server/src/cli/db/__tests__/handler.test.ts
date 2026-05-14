@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerDevDbCommands } from '../handler.ts';
+import { registerDbCommands } from '../handler.ts';
 
-describe('registerDevDbCommands', function () {
-  test('registers db migrate create|up|down and db status on a fresh Command', function () {
+describe('registerDbCommands', function () {
+  test('registers db clone|drop|refresh-template|status and the migrate subgroup', function () {
     const program = new Command();
-    registerDevDbCommands(program);
+    registerDbCommands(program);
     const db = program.commands.find(function (c) {
       return c.name() === 'db';
     });
@@ -13,7 +13,11 @@ describe('registerDevDbCommands', function () {
     const subNames = db!.commands.map(function (c) {
       return c.name();
     });
+    expect(subNames).toContain('clone');
+    expect(subNames).toContain('drop');
+    expect(subNames).toContain('refresh-template');
     expect(subNames).toContain('status');
+
     const migrate = db!.commands.find(function (c) {
       return c.name() === 'migrate';
     });

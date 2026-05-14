@@ -1,6 +1,6 @@
-import type { Repos } from '../../db/repos.ts';
 import { runInTx } from '../../db/tx.ts';
 import { orgServiceImpl } from '../org/service.ts';
+import type { Repos } from '../repos.ts';
 import { userServiceImpl } from '../user/service.ts';
 import type { BootstrapInput, BootstrapResult } from './types.ts';
 
