@@ -18,15 +18,15 @@ describe('registerDbCommands', function () {
     expect(subNames).toContain('refresh-template');
     expect(subNames).toContain('status');
 
-    const migrate = db!.commands.find(function (c) {
-      return c.name() === 'migrate';
+    const migrations = db!.commands.find(function (c) {
+      return c.name() === 'migrations';
     });
-    expect(migrate).toBeDefined();
-    const migrateSubs = migrate!.commands.map(function (c) {
+    expect(migrations).toBeDefined();
+    const migrationsSubs = migrations!.commands.map(function (c) {
       return c.name();
     });
-    expect(migrateSubs).toContain('create');
-    expect(migrateSubs).toContain('up');
-    expect(migrateSubs).toContain('down');
+    expect(migrationsSubs).toContain('create');
+    expect(migrationsSubs).toContain('up');
+    expect(migrationsSubs).toContain('down');
   });
 });

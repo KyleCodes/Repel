@@ -10,7 +10,7 @@ Kysely's query builder exposes column names to TypeScript exactly as they appear
 
 ## Decision
 
-Enable Kysely's `CamelCasePlugin` in `db/client.ts`. All TypeScript code uses camelCase (`orgId`, `createdAt`, `isActive`). SQL column names and migration files remain snake_case. The `DB` interface in `db/types.ts` uses camelCase keys; the plugin rewrites them to snake_case identifiers at SQL-generation time.
+Enable Kysely's `CamelCasePlugin` in `infra/db/client.ts`. All TypeScript code uses camelCase (`orgId`, `createdAt`, `isActive`). SQL column names and migration files remain snake_case. The `DB` interface in `infra/db/types.ts` uses camelCase keys; the plugin rewrites them to snake_case identifiers at SQL-generation time.
 
 ## Alternatives Considered
 
@@ -30,7 +30,7 @@ Enable Kysely's `CamelCasePlugin` in `db/client.ts`. All TypeScript code uses ca
 
 ### Negative / Trade-offs
 
-- The `DB` interface in `db/types.ts` is hand-maintained in camelCase — adding a column requires updating both the SQL migration and `types.ts` with a camelCase key
+- The `DB` interface in `infra/db/types.ts` is hand-maintained in camelCase — adding a column requires updating both the SQL migration and `types.ts` with a camelCase key
 - `app.current_org_id` (the Postgres session variable name) stays snake_case — it is not a column identifier and is not transformed by the plugin
 - Table names in `DB` (e.g., `connected_account`, `job_queue`) stay snake_case — the plugin only rewrites column identifiers, not table names
 
@@ -40,9 +40,9 @@ Enable Kysely's `CamelCasePlugin` in `db/client.ts`. All TypeScript code uses ca
 
 ## Compliance
 
-- MUST: All column keys in `db/types.ts` interfaces MUST be camelCase
+- MUST: All column keys in `infra/db/types.ts` interfaces MUST be camelCase
 - MUST: Table name keys in the `DB` interface MUST match the actual SQL table name (snake_case or reserved words as-is)
-- MUST NOT: Use snake_case column keys in `db/types.ts` interfaces
+- MUST NOT: Use snake_case column keys in `infra/db/types.ts` interfaces
 - MUST NOT: Manually map snake_case → camelCase in repo code — the plugin handles this
 - SHOULD: When adding a column, add it snake_case in SQL, camelCase in `types.ts`, and verify with a type check run
 

@@ -22,8 +22,10 @@ import {
 } from '../migrations.ts';
 
 describe('MIGRATIONS_DIR', function () {
-  test('points at apps/server/src/db/migrations', function () {
-    expect(MIGRATIONS_DIR.endsWith('apps/server/src/db/migrations')).toBe(true);
+  test('points at apps/server/src/infra/db/migrations', function () {
+    expect(MIGRATIONS_DIR.endsWith('apps/server/src/infra/db/migrations')).toBe(
+      true
+    );
   });
 });
 
@@ -272,7 +274,7 @@ describe('resolveMigrationMatch', function () {
   test('zero hits → throws no-match error', function () {
     expect(function () {
       resolveMigrationMatch('nonexistent', 'up', fs);
-    }).toThrow('db migrate up: no migration matches "nonexistent"');
+    }).toThrow('db migrations up: no migration matches "nonexistent"');
   });
 
   test('multiple hits → throws ambiguity error with candidates', function () {
@@ -292,7 +294,7 @@ describe('resolveMigrationMatch', function () {
     expect(captured!.message).toContain('1700000000000_rep-1');
     expect(captured!.message).toContain('1750000000000_rep-39_add_users');
     expect(captured!.message).toContain('1777002187000_rep-9');
-    expect(captured!.message).toContain('db migrate down:');
+    expect(captured!.message).toContain('db migrations down:');
   });
 });
 

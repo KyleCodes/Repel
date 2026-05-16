@@ -1,13 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Command } from 'commander';
-import { migrationsService } from '../../core/migrations/service.ts';
 import {
   cloneDatabase,
   dropDatabase,
   refreshTemplate,
-} from '../../db/admin-ops.ts';
-import { resolveAdminUrl } from '../../db/lib/admin-url.ts';
+} from '../../infra/db/admin-ops.ts';
+import { resolveAdminUrl } from '../../infra/db/lib/admin-url.ts';
+import { migrationsService } from '../../infra/db/migrations-tracking/service.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
 import {
   listFsMigrations,

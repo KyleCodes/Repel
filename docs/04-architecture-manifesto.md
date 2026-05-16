@@ -36,15 +36,15 @@ The application source tree is the following. Each directory has one purpose, st
 apps/server/src/
   features/                 # product capabilities
     accounts/               # org + user lifecycle
-      flows/                # sync writes (use-case shaped); orchestrators
-      views/                # sync reads (query-shaped)
+      flows/                # one file per write use case; each owns its query
+      views/                # one file per read use case; each owns its query
       handlers/             # async-triggered work owned by this feature
-      service.ts            # business logic; composable; called by flows/handlers/views and by other features' services
-      types.ts              # domain types shared within this feature
+      service.ts            # public surface; decorates flows/views; owns business rules
+      error.ts              # feature-local error hierarchy (extends lib/error.ts AppError)
     messaging/              # threads, messages, contacts, attachments
-      flows/  views/  handlers/  service.ts  types.ts
+      flows/  views/  handlers/  service.ts  error.ts
     categorization/         # categories, classification results
-      flows/  views/  handlers/  service.ts  types.ts
+      flows/  views/  handlers/  service.ts  error.ts
   processing-pipeline/      # async orchestrator
     registry.ts             # nodeId → handler import
     topology.ts             # event → next-handlers wiring
@@ -76,15 +76,15 @@ This section defines the vocabulary used throughout the document and throughout 
 
 **Feature.** A product capability — a thing the application does that a user could reasonably toggle on or off, and that a separate engineer could reasonably own. "Messaging" is a feature. "Threads" is not — threading is how messaging organizes its data. "Categorization" is a feature. "Bootstrap" is not — it is one flow inside the accounts feature. The unit-test for whether a candidate is a feature is in §4 above and is elaborated with worked examples in Appendix A.
 
-**Flow.** A synchronous, use-case-shaped unit of work. A flow is triggered by a facade — an HTTP route handler or a CLI command handler invokes it. It opens one transaction, ideally executes one round trip to the database, and returns a typed domain result. A flow is the smallest meaningful write operation in the system. Flows live in `features/<feature>/flows/<verb-noun>/` (e.g. `features/accounts/flows/onboard-user/`).
+**Flow.** A synchronous write. A flow is one async function that takes a `Tx` and a typed input, runs one SQL statement (a writeable CTE when more than one table is involved), and returns the shape Kysely infers from the query. Flows live at `features/<feature>/flows/<verb-noun>.ts`. A flow does not open transactions and is not decorated; the service that calls it does.
 
-**View.** A synchronous read. A view executes one query, returns the shape its consumer needs (not a generic domain object), and never mutates state. A view is the smallest meaningful read operation in the system. Views live in `features/<feature>/views/<list-x.ts>` or `features/<feature>/views/<get-x.ts>`. The shape a view returns is determined by what its callers need to display or process — not by what tables it reads from.
+**View.** A synchronous read. Same shape as a flow but read-only: one async function taking a `Tx` and input, running one SQL statement, returning the Kysely-inferred shape. Views live at `features/<feature>/views/<verb-noun>.ts`. A view does not open transactions and is not decorated; the service that calls it does.
 
 **Handler.** An asynchronously triggered unit of work. A handler has the same internal shape as a flow — typed input, typed result, runs under a transaction — but is invoked by the processing pipeline rather than by a facade. A handler receives an envelope from the queue, does its work, and may return a list of further envelopes to enqueue. Handlers live in `features/<feature>/handlers/`.
 
-**Service.** The business-logic core of a feature. A feature has exactly one `service.ts` file. The service exposes operations that flows, handlers, views, and other features' services can call. The service contains the rules of the feature — what an "admin" can do versus a "member", what counts as a duplicate message, when a categorization is considered stale — and is the natural composition point for cross-feature writes. Service operations are not transaction-aware on their own; they are called from inside a transaction opened by the flow or handler that invoked them, and they propagate that transaction context downward.
+**Service.** The public surface of a feature. A feature has exactly one `service.ts`. The service imports flows and views, decorates each public operation with `runInTx` or `runInOrgTx`, and applies feature-level business rules (uniqueness checks, defaults, validation). `runInOrgTx` adds `orgId: string` to the public input type; the inner flow/view never declares it — Postgres RLS scoped at `SET LOCAL` does the tenant filtering. Services throw errors that extend the feature's `error.ts` base (which extends the shared `AppError` in `lib/error.ts`); facades catch and map by `instanceof`.
 
-**Queries.** Typed Kysely query and write expressions. Queries are called by services, by views, and (occasionally) by flows and handlers directly. The mapping from row shapes to domain shapes happens inline with the query that produces the row — there is no separate mappers layer. Where queries physically live within a feature directory is intentionally not prescribed by this document; the right shape will emerge from PR review as the codebase matures. A reasonable starting point is to colocate queries with the use case that invokes them and lift them upward when a second use case needs the same query.
+**Queries.** Kysely expressions defined inside the flow or view that uses them. Each flow/view declares a private builder (`buildX(trx, input) => trx.selectFrom(...)…`), derives its result type from the builder via Kysely's type inference (e.g. `InferResult<ReturnType<typeof buildX>>[number]`), and exports the resulting type alongside the async runner. There is no per-feature query bundle and no parallel domain-type layer — Kysely's `DB` schema in `infra/db/types.ts` is the source of truth, and every return type reaches the rest of the application through inference. Use raw `sql` templates only when Kysely cannot express the statement; raw SQL is opaque to inference and forces hand-written types back into the file. Input shapes are the one exception that must be hand-written: they live next to the function that consumes them. Cross-feature reads still go through `views/` per Rule 1b.
 
 **Envelope.** The contract between the queue (transport) and handlers. An envelope has the shape `{ kind: NodeId; orgId: string; payload: unknown; idempotencyKey?: string }`. The `kind` field identifies which handler in the registry should process it. The `orgId` field identifies the tenant the work belongs to. The `payload` is handler-specific and is typed at the handler boundary. The `idempotencyKey` is an optional deduplication hint.
 
@@ -124,17 +124,15 @@ Two-round-trip writes (read a row, decide something in application code, write a
 
 The day the wire shape diverges from the flow result — a field is added to the API response that the flow does not produce, or a field is renamed, or two flows are combined into one endpoint — the change is contained to the reshape function. Without the reshape, the divergence either bloats the flow's return type with API-shaped fields or leaks internal fields into the public surface. The cost of writing the reshape on day one is trivial; the cost of retrofitting it later is significant, because every consumer of the unified type must be re-examined.
 
-**Rule 5. Feature internal structure: `flows/`, `views/`, `handlers/`, `service.ts`, `types.ts`.** Each feature directory contains these five top-level entries. Additional files or directories within a feature are permitted as the shape of the codebase clarifies.
+**Rule 5. Feature internal structure: `flows/`, `views/`, `handlers/`, `service.ts`, `error.ts`.** Each feature directory contains these five top-level entries. Additional files or directories within a feature are permitted as the shape of the codebase clarifies.
 
-- **`flows/<verb-noun>/`** — sync entry points, one directory per use case. A flow validates input, opens a transaction, calls into its feature's service, and returns a typed result. A flow is one file (`index.ts`) until it grows past approximately 150 lines, at which point it is split into step-files (for example, `normalize.ts`, `persist.ts`, `index.ts`) by the steps of the operation.
-- **`views/`** — sync read endpoints. A view executes one query and returns the shape its consumer needs. A view may call into the feature's service for shaping, or call into queries directly when the read is a pure projection.
-- **`handlers/`** — async entry points, one file per handler. Same shape as a flow internally; invoked by the processing pipeline rather than by a facade.
-- **`service.ts`** — exactly one file per feature, until and unless it grows uncomfortable. The business-logic core. Exports operations the feature's flows, views, handlers, and other features' services may call. Does not open transactions itself; it propagates the transaction context of its caller. When the file grows uncomfortable, the split is by operation cluster, not by entity — a `service/` directory with `service/categorize.ts`, `service/reclassify.ts` is acceptable; `service/category.ts`, `service/result.ts` is not.
-- **`types.ts`** — domain types shared within the feature.
+- **`flows/<verb-noun>.ts`** — one file per write use case. Plain `async (trx, input) => ...`; owns its query builder and its inferred result type. Promoted to a `<verb-noun>/` directory with step-files only when a single flow grows past approximately 150 lines.
+- **`views/<verb-noun>.ts`** — one file per read use case. Same shape as a flow but read-only.
+- **`handlers/`** — async entry points consumed by `processing-pipeline/`. Same shape as a flow.
+- **`service.ts`** — exactly one per feature. Decorates flows/views with `runInTx`/`runInOrgTx`, owns business rules, and is the only legitimate import target for facade code and other features' services. When the file grows uncomfortable, the split is by operation cluster, not by entity — `service/categorize.ts`, `service/reclassify.ts` is acceptable; `service/category.ts`, `service/result.ts` is not.
+- **`error.ts`** — feature-local error hierarchy: an abstract feature-base extending `AppError`, plus concrete subclasses thrown by service methods.
 
-Where queries physically live within a feature is intentionally not prescribed. Queries may live in a feature-level `queries.ts`, or colocated with the use case that calls them, or in a hybrid arrangement; the right shape will surface through PR review as the codebase matures. The constraint that does hold: queries are not split by entity, and the mapping from row to domain shape happens inline with the query that produces the row — there is no separate mappers layer.
-
-This structure is small but opinionated about the parts that matter. It rules out the per-entity quartet pattern (which created ceremony per table without insulation). It does not pre-prescribe the parts of the structure where the right answer is not yet clear; those are left to crystallize in code review. When a pattern stabilizes, this document is amended and the pattern becomes prescribed for all features.
+Each flow/view file is the smallest meaningful unit of database work — one query, one inferred type, one runner. `service.ts` is the only file that opens transactions and applies business rules. The five-entry shape rules out both the per-entity quartet pattern and the per-feature query bundle: every read or write is owned by the file that names the use case.
 
 **Rule 6. Adapters never import features; features never import adapters.** Adapters communicate with features exclusively through transport envelopes — adapter ingress emits envelopes; handlers consume them; handler-emitted envelopes are routed back to adapter egress.
 
@@ -311,7 +309,7 @@ The unit-test in §4 — could a user reasonably toggle this on or off; could a 
 
 The pattern that emerges from these examples is the following. If the candidate is a noun for data — threads, attachments, contacts, messages — it is almost never a feature; it is part of whichever feature owns the data. If the candidate is a verb the product performs — categorize, search, send — or a coherent capability the product offers — messaging, accounts, preferences — it usually is a feature. When uncertain, the safer default is to start as a sub-area inside an existing feature; promotion later, when the sub-area earns its own boundary, is cheaper than demotion when an over-eager feature directory turns out to have been an entity in disguise.
 
-A sub-area is not a feature. It does not get its own `service.ts` or `types.ts`; it lives inside the parent feature's files. Promoting a sub-area to a feature is the act of giving it the structure described in Rule 5.
+A sub-area is not a feature. It does not get its own `service.ts` or `error.ts`; it lives inside the parent feature's files. Promoting a sub-area to a feature is the act of giving it the structure described in Rule 5.
 
 ## Further Reading
 

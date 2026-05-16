@@ -3,14 +3,14 @@ import { Command } from 'commander';
 import { registerMigrationsCommands } from '../handler.ts';
 
 describe('registerMigrationsCommands', function () {
-  test('attaches migrate create|up|down to a db Command', function () {
+  test('attaches migrations create|up|down to a db Command', function () {
     const db = new Command('db');
     registerMigrationsCommands(db);
-    const migrate = db.commands.find(function (c) {
-      return c.name() === 'migrate';
+    const migrations = db.commands.find(function (c) {
+      return c.name() === 'migrations';
     });
-    expect(migrate).toBeDefined();
-    const subs = migrate!.commands.map(function (c) {
+    expect(migrations).toBeDefined();
+    const subs = migrations!.commands.map(function (c) {
       return c.name();
     });
     expect(subs).toContain('create');

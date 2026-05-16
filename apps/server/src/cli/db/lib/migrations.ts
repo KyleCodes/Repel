@@ -23,11 +23,11 @@ function findRepoRoot(): string {
 // Boot-time existsSync check surfaces a clear error if the path drifts.
 export const MIGRATIONS_DIR = join(
   findRepoRoot(),
-  'apps/server/src/db/migrations'
+  'apps/server/src/infra/db/migrations'
 );
 if (!existsSync(MIGRATIONS_DIR)) {
   throw new Error(
-    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — repo layout drifted from apps/server/src/db/migrations.`
+    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — repo layout drifted from apps/server/src/infra/db/migrations.`
   );
 }
 
@@ -195,11 +195,13 @@ export function resolveMigrationMatch(
     return n.includes(match);
   });
   if (hits.length === 0) {
-    throw new Error(`db migrate ${direction}: no migration matches "${match}"`);
+    throw new Error(
+      `db migrations ${direction}: no migration matches "${match}"`
+    );
   }
   if (hits.length > 1) {
     throw new Error(
-      `db migrate ${direction}: "${match}" matches multiple migrations:\n  - ${hits.join('\n  - ')}`
+      `db migrations ${direction}: "${match}" matches multiple migrations:\n  - ${hits.join('\n  - ')}`
     );
   }
   return { file: hits[0] };
