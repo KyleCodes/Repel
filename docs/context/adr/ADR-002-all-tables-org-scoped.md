@@ -36,13 +36,13 @@ Denormalize `org_id` onto every table that is directly queried from the API or p
 
 ### Risks
 
-- RISK: Bootstrap or migration scripts run without `app.current_org_id` set and violate RLS | MITIGATION: Bootstrap runs under a BYPASSRLS role (see ADR-009 for the full transaction/RLS interaction); `withOrgTx` enforces `SET LOCAL` for all runtime queries
+- RISK: Bootstrap or migration scripts run without `app.current_org_id` set and violate RLS | MITIGATION: Bootstrap runs under a BYPASSRLS role (see ADR-010 for the decorator that owns `SET LOCAL`); `runInOrgTx` enforces `SET LOCAL` for all runtime queries
 
 ## Compliance
 
 - MUST: Every table queryable from the API or processing layer MUST include `org_id`
 - MUST: Every such table MUST have a `tenant_isolation` RLS policy using `org_id = current_setting('app.current_org_id')::uuid`
-- MUST: All tenant-scoped runtime queries MUST go through `withOrgTx` (see ADR-009)
+- MUST: All tenant-scoped runtime queries MUST go through `runInOrgTx` (see ADR-010)
 - MUST NOT: Set `app.current_org_id` via `SET` (session-scoped) — always use `SET LOCAL` (transaction-scoped)
 - SHOULD: New migration files include RLS policy creation alongside `CREATE TABLE`
 

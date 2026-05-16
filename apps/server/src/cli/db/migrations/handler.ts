@@ -25,7 +25,7 @@ import {
 } from './schemas/index.ts';
 
 export function registerMigrationsCommands(db: Command): void {
-  const migrate = db.command('migrate').description('Migration lifecycle');
+  const migrate = db.command('migrations').description('Migration lifecycle');
 
   migrate
     .command('create [name]')
@@ -80,7 +80,7 @@ export async function runMigrateCreate(
   if (!filePath || !existsSync(filePath)) {
     const trimmed = stdout.trim().slice(-200);
     throw new Error(
-      `db migrate create: could not locate generated file (stdout tail: ${trimmed})`
+      `db migrations create: could not locate generated file (stdout tail: ${trimmed})`
     );
   }
   const header = formatHeader({
@@ -90,7 +90,7 @@ export async function runMigrateCreate(
     createdAt: new Date(),
   });
   applyHeaderToFile(filePath, header);
-  console.error(`db migrate create: wrote ${filePath}`);
+  console.error(`db migrations create: wrote ${filePath}`);
 }
 
 export async function runMigrateUp(input: MigrateUpInput): Promise<void> {
