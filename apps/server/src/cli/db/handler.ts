@@ -4,11 +4,14 @@ import type { Command } from 'commander';
 import {
   cloneDatabase,
   dropDatabase,
+  nukeDatabase,
   refreshTemplate,
 } from '../../infra/db/admin-ops.ts';
 import { resolveAdminUrl } from '../../infra/db/lib/admin-url.ts';
 import { migrationsService } from '../../infra/db/migrations-tracking/service.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
+import { runCodegen } from './lib/codegen.ts';
+import { readDatabaseUrlFromEnvLocal } from './lib/env-local.ts';
 import {
   listFsMigrations,
   partitionStatus,
@@ -18,8 +21,12 @@ import { registerMigrationsCommands } from './migrations/handler.ts';
 import {
   type CloneInput,
   CloneInputSchema,
+  type CodegenInput,
+  CodegenInputSchema,
   type DropInput,
   DropInputSchema,
+  type NukeInput,
+  NukeInputSchema,
   type RefreshTemplateInput,
   RefreshTemplateInputSchema,
   type StatusInput,
@@ -90,6 +97,25 @@ export function registerDbCommands(program: Command): void {
       const input = parseOrExit(StatusInputSchema, {});
       await runStatus(input);
     });
+
+  db.command('nuke')
+    .description(
+      'Reset the per-branch database to empty (drops the public schema, including pgmigrations) so migrations re-apply from zero'
+    )
+    .option('--yes', 'skip the confirmation prompt')
+    .action(async function (opts: { yes?: boolean }) {
+      const input = parseOrExit(NukeInputSchema, { yes: opts.yes });
+      await runNuke(input);
+    });
+
+  db.command('codegen')
+    .description(
+      'Regenerate infra/db/generated.ts from the live database schema'
+    )
+    .action(async function () {
+      const input = parseOrExit(CodegenInputSchema, {});
+      await runCodegenCommand(input);
+    });
 }
 
 export async function runClone(input: CloneInput): Promise<void> {
@@ -131,6 +157,25 @@ export async function runRefreshTemplate(
   console.error(
     `db refresh-template: next steps — run migrations and bootstrap against ${input.template}`
   );
+}
+
+export async function runNuke(input: NukeInput): Promise<void> {
+  if (!input.yes) {
+    throw new Error(
+      'db nuke: refusing to wipe the database without confirmation — pass --yes'
+    );
+  }
+  const databaseUrl = readDatabaseUrlFromEnvLocal();
+  await nukeDatabase({ databaseUrl });
+  console.error(
+    'db nuke: dropped and recreated the public schema — run `repel db migrations up` to re-apply migrations from zero'
+  );
+  // Regenerate types to reflect the now-empty schema.
+  await runCodegen();
+}
+
+export async function runCodegenCommand(_input: CodegenInput): Promise<void> {
+  await runCodegen();
 }
 
 export async function runStatus(_input: StatusInput): Promise<void> {

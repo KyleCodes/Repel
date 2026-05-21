@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerDbCommands } from '../handler.ts';
+import { registerDbCommands, runNuke } from '../handler.ts';
 
 describe('registerDbCommands', function () {
-  test('registers db clone|drop|refresh-template|status and the migrate subgroup', function () {
+  test('registers db clone|drop|refresh-template|status|nuke|codegen and the migrate subgroup', function () {
     const program = new Command();
     registerDbCommands(program);
     const db = program.commands.find(function (c) {
@@ -17,6 +17,8 @@ describe('registerDbCommands', function () {
     expect(subNames).toContain('drop');
     expect(subNames).toContain('refresh-template');
     expect(subNames).toContain('status');
+    expect(subNames).toContain('nuke');
+    expect(subNames).toContain('codegen');
 
     const migrations = db!.commands.find(function (c) {
       return c.name() === 'migrations';
@@ -28,5 +30,13 @@ describe('registerDbCommands', function () {
     expect(migrationsSubs).toContain('create');
     expect(migrationsSubs).toContain('up');
     expect(migrationsSubs).toContain('down');
+  });
+});
+
+describe('runNuke', function () {
+  test('refuses to run without --yes (no db connection attempted)', async function () {
+    await expect(runNuke({ yes: false })).rejects.toThrow(
+      'refusing to wipe the database without confirmation'
+    );
   });
 });

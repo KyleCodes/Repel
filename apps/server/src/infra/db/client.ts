@@ -1,6 +1,6 @@
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
-import type { DB } from './types.ts';
+import type { DB } from './generated.ts';
 
 // Builds a fresh Kysely instance over a new pg Pool. Normal app code should
 // not call this directly — use getDb() from runtime.ts to get the lazily

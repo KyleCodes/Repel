@@ -4,6 +4,7 @@ import type { Command } from 'commander';
 import runner from 'node-pg-migrate';
 import { parseOrExit } from '../../lib/parse-or-exit.ts';
 import { extractTicketSlug, getCurrentBranch } from '../lib/branch.ts';
+import { runCodegen } from '../lib/codegen.ts';
 import { readDatabaseUrlFromEnvLocal } from '../lib/env-local.ts';
 import {
   MIGRATIONS_DIR,
@@ -100,6 +101,9 @@ export async function runMigrateUp(input: MigrateUpInput): Promise<void> {
       databaseUrl: readDatabaseUrlFromEnvLocal(),
     })
   );
+  // Regenerate infra/db/generated.ts so the Kysely types reflect the schema
+  // change just applied. Keeps the committed types from drifting.
+  await runCodegen();
 }
 
 export async function runMigrateDown(input: MigrateDownInput): Promise<void> {
@@ -113,4 +117,6 @@ export async function runMigrateDown(input: MigrateDownInput): Promise<void> {
       databaseUrl: readDatabaseUrlFromEnvLocal(),
     })
   );
+  // Regenerate types to reflect the rolled-back schema.
+  await runCodegen();
 }

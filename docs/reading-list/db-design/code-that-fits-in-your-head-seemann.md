@@ -6,4 +6,4 @@ General software-engineering book, but two threads matter for DB design. First, 
 
 Second, his treatment of validation and parsing at the boundary: parse once at the edge, hand typed values inward, never re-validate. Maps directly onto the "parse the request → run one query → return" shape of vertical slices.
 
-Light on SQL specifics — read it for the design principles that justify _why_ the flow-shaped service is easier to reason about than the layered one. The companion blog (https://blog.ploeh.dk/) has many shorter posts in the same vein.
+Light on SQL specifics — ead it for the design principles that justify _why_ the flow-shaped service is easier to reason about than the layered one. The companion blog (<https://blog.ploeh.dk/>) has many shorter posts in the same vein.
