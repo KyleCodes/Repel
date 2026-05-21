@@ -34,3 +34,13 @@ export type NukeInput = z.infer<typeof NukeInputSchema>;
 
 export const CodegenInputSchema = z.object({});
 export type CodegenInput = z.infer<typeof CodegenInputSchema>;
+
+export const ConnectInputSchema = z.object({});
+export type ConnectInput = z.infer<typeof ConnectInputSchema>;
+
+export const QueryInputSchema = z.object({
+  // The literal `-` is the stdin sentinel (DR-REP-40-2); the handler reads SQL
+  // from stdin when it sees it. Any other non-empty string is literal SQL.
+  sql: z.string().min(1, 'sql is required'),
+});
+export type QueryInput = z.infer<typeof QueryInputSchema>;
