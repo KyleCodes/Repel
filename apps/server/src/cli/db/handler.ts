@@ -11,22 +11,27 @@ import { resolveAdminUrl } from '../../infra/db/lib/admin-url.ts';
 import { migrationsService } from '../../infra/db/migrations-tracking/service.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
 import { runCodegen } from './lib/codegen.ts';
+import { runConnect } from './lib/connect.ts';
 import { readDatabaseUrlFromEnvLocal } from './lib/env-local.ts';
 import {
   listFsMigrations,
   partitionStatus,
   renderStatusTable,
 } from './lib/migrations.ts';
+import { runQuery } from './lib/query.ts';
 import { registerMigrationsCommands } from './migrations/handler.ts';
 import {
   type CloneInput,
   CloneInputSchema,
   type CodegenInput,
   CodegenInputSchema,
+  ConnectInputSchema,
   type DropInput,
   DropInputSchema,
   type NukeInput,
   NukeInputSchema,
+  type QueryInput,
+  QueryInputSchema,
   type RefreshTemplateInput,
   RefreshTemplateInputSchema,
   type StatusInput,
@@ -115,6 +120,22 @@ export function registerDbCommands(program: Command): void {
     .action(async function () {
       const input = parseOrExit(CodegenInputSchema, {});
       await runCodegenCommand(input);
+    });
+
+  db.command('connect')
+    .description('Open an interactive pgcli session against the worktree DB')
+    .action(function () {
+      parseOrExit(ConnectInputSchema, {});
+      runConnect();
+    });
+
+  db.command('query <sql>')
+    .description(
+      'Run SQL against the worktree DB and print JSON rows to stdout (pass `-` to read SQL from stdin)'
+    )
+    .action(async function (sql: string) {
+      const input = parseOrExit(QueryInputSchema, { sql });
+      await runQuery(input);
     });
 }
 
