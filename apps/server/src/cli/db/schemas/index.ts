@@ -26,3 +26,11 @@ export type RefreshTemplateInput = z.infer<typeof RefreshTemplateInputSchema>;
 
 export const StatusInputSchema = z.object({});
 export type StatusInput = z.infer<typeof StatusInputSchema>;
+
+export const NukeInputSchema = z.object({
+  yes: z.boolean().default(false),
+});
+export type NukeInput = z.infer<typeof NukeInputSchema>;
+
+export const CodegenInputSchema = z.object({});
+export type CodegenInput = z.infer<typeof CodegenInputSchema>;

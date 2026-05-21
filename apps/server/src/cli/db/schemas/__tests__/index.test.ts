@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
   CloneInputSchema,
+  CodegenInputSchema,
   DropInputSchema,
+  NukeInputSchema,
   RefreshTemplateInputSchema,
   StatusInputSchema,
 } from '../index.ts';
@@ -64,6 +66,26 @@ describe('DropInputSchema', function () {
 describe('StatusInputSchema', function () {
   test('accepts empty object', function () {
     expect(StatusInputSchema.parse({})).toEqual({});
+  });
+});
+
+describe('NukeInputSchema', function () {
+  test('defaults yes to false', function () {
+    expect(NukeInputSchema.parse({})).toEqual({ yes: false });
+  });
+
+  test('accepts an explicit yes', function () {
+    expect(NukeInputSchema.parse({ yes: true })).toEqual({ yes: true });
+  });
+
+  test('rejects non-boolean yes', function () {
+    expect(NukeInputSchema.safeParse({ yes: 'true' }).success).toBe(false);
+  });
+});
+
+describe('CodegenInputSchema', function () {
+  test('accepts empty object', function () {
+    expect(CodegenInputSchema.parse({})).toEqual({});
   });
 });
 

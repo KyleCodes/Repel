@@ -98,6 +98,30 @@ export async function dropDatabase(
   });
 }
 
+export interface NukeDatabaseInput {
+  databaseUrl: string;
+}
+
+// Wipes a database back to empty: drops the `public` schema with everything in
+// it (tables, enums, sequences, functions) — including node-pg-migrate's
+// `pgmigrations` bookkeeping table — then recreates an empty `public` schema.
+// The database itself is preserved; only its contents are reset. With
+// `pgmigrations` gone, the next `migrations up` runs from zero.
+//
+// Unlike clone/drop/refresh-template this connects to the target database
+// directly (DATABASE_URL), not the admin/maintenance database, because
+// DROP SCHEMA operates inside the connected database.
+export async function nukeDatabase(input: NukeDatabaseInput): Promise<void> {
+  const client = new Client({ connectionString: input.databaseUrl });
+  await client.connect();
+  try {
+    await client.query('DROP SCHEMA IF EXISTS public CASCADE');
+    await client.query('CREATE SCHEMA public');
+  } finally {
+    await client.end();
+  }
+}
+
 export interface RefreshTemplateInput {
   adminUrl: string;
   template: string;
