@@ -104,6 +104,7 @@ export interface Message {
   subject: string | null;
   threadId: string | null;
   updatedAt: Generated<Timestamp>;
+  userId: string;
 }
 
 export interface MessageRaw {
@@ -153,6 +154,7 @@ export interface Thread {
   orgId: string;
   subject: string | null;
   updatedAt: Generated<Timestamp>;
+  userId: string;
 }
 
 export interface User {
