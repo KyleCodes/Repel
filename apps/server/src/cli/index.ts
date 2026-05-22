@@ -3,11 +3,13 @@ import { closeDb } from '../infra/db/runtime.ts';
 import { registerAccountsCommands } from './accounts/handler.ts';
 import { registerDbCommands } from './db/handler.ts';
 import { handleCliError } from './lib/handle-cli-error.ts';
+import { registerOrgsCommands } from './orgs/handler.ts';
 
 const program = new Command();
 
 program.name('repel').description('Repel CLI').version('0.0.1');
 
+registerOrgsCommands(program);
 registerAccountsCommands(program);
 registerDbCommands(program);
 

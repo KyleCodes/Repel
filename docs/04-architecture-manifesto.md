@@ -61,12 +61,14 @@ apps/server/src/
     middleware/             # auth, error mapping, telemetry
     routes/                 # file-based routing; schemas colocated per route
   cli/                      # CLI facade
-    index.ts                # composer
-    commands/               # file-based routing in parity with api/routes/
+    index.ts                # composer — registers each namespace
+    <namespace>/            # one dir per command namespace
+      handler.ts            # registers the namespace's commands
+      schemas/index.ts      # colocated zod input schemas
   main.ts                   # process entrypoint
 ```
 
-The five top-level non-facade directories — `features/`, `processing-pipeline/`, `adapters/`, `infra/`, plus the `api/` and `cli/` facades — partition the application into concerns that change for different reasons. Adding a new product capability adds a directory under `features/`. Adding a new external provider adds a directory under `adapters/`. Adding a new piece of provisioned infrastructure (a cache, a search index) adds a directory under `infra/`. Adding a new HTTP endpoint adds files under `api/routes/` and (in parity) `cli/commands/`. Adding a new asynchronous handler adds a file under the relevant feature's `handlers/` and one line in `processing-pipeline/registry.ts`.
+The five top-level non-facade directories — `features/`, `processing-pipeline/`, `adapters/`, `infra/`, plus the `api/` and `cli/` facades — partition the application into concerns that change for different reasons. Adding a new product capability adds a directory under `features/`. Adding a new external provider adds a directory under `adapters/`. Adding a new piece of provisioned infrastructure (a cache, a search index) adds a directory under `infra/`. Adding a new HTTP endpoint adds files under `api/routes/` and (in parity) `cli/`. Adding a new asynchronous handler adds a file under the relevant feature's `handlers/` and one line in `processing-pipeline/registry.ts`.
 
 Nothing else is added at the top level without an amendment to this document.
 
@@ -168,19 +170,13 @@ api/routes/
       index.ts              # POST /accounts/provider-accounts
       schema.ts
 
-cli/commands/
-  threads/
-    list.ts                 # repel threads list
-    schema.ts
-    [threadId]/
-      get.ts
-      schema.ts
+cli/
+  orgs/
+    handler.ts              # registers `repel orgs ...` (bootstrap)
+    schemas/index.ts
   accounts/
-    bootstrap.ts            # repel accounts bootstrap
-    schema.ts
-    provider-accounts/
-      create.ts
-      schema.ts
+    handler.ts              # registers `repel accounts ...` (list/show/rm/add)
+    schemas/index.ts
 ```
 
 Each route or command directory contains its handler (the file that exports the route or command function), its zod schema (the file that defines the input validation), and any small reshape helpers required to map between wire shapes and feature flow types. If a route grows complex enough to warrant additional helpers, they live in the same directory.
@@ -189,7 +185,7 @@ The composer at the top of each facade — `api/router.ts` and `cli/index.ts` �
 
 CLI parity is a stated goal during the pre-frontend period. The CLI is intended for internal developer use, not for end customers, and exists primarily to give engineers a way to exercise the public API surface from a terminal while the frontend is being built. If at scale CLI parity becomes infeasible — because the API surface grows into shapes that do not translate well to command-line arguments — this document will be amended. Until then, parity is the rule.
 
-Cross-feature orchestration commands belong at the facade level. A hypothetical `repel demo-seed` command that creates an organization, attaches provider accounts, and ingests a fixture mailbox spans three features (accounts, messaging, possibly categorization). Such a command lives in `cli/commands/`, not inside any feature directory. The facade is the only legitimate place for code that orchestrates work across feature boundaries.
+Cross-feature orchestration commands belong at the facade level. A hypothetical `repel demo-seed` command that creates an organization, attaches provider accounts, and ingests a fixture mailbox spans three features (accounts, messaging, possibly categorization). Such a command lives in `cli/`, not inside any feature directory. The facade is the only legitimate place for code that orchestrates work across feature boundaries.
 
 The wire shapes of HTTP responses and CLI outputs are not the same as the internal flow result types. Even when they appear identical on the day a route is first written, the explicit reshape function exists. This is Rule 4, restated here because facade authors are the people most often tempted to skip the reshape on the grounds that it looks like duplication.
 
