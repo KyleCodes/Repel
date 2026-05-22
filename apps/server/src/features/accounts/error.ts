@@ -12,3 +12,9 @@ export class UserAlreadyExistsError extends AccountsServiceError {
     super(message);
   }
 }
+
+export class ProviderAccountNotFoundError extends AccountsServiceError {
+  constructor(message: string) {
+    super(message);
+  }
+}
