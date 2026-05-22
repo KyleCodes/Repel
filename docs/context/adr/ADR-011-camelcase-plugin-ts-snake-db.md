@@ -4,6 +4,12 @@
 **Status:** ACCEPTED
 **Domain:** data-access, conventions
 
+## Amendment — 2026-05-21 (Review Trigger fired)
+
+The Review Trigger below — adoption of `kysely-codegen --camel-case` — has occurred (REP-45). `infra/db/generated.ts` is now produced by `kysely-codegen` from the live database schema, not hand-maintained. `runCodegen` (`apps/server/src/cli/db/lib/codegen.ts`) regenerates it and runs as a post-step of every migration command (`up`/`down`/`nuke`), so the generated types cannot drift from the schema; `repel db codegen` exposes it for manual runs. `infra/db/types.ts` retains only the hand-written `Db`/`Tx` aliases that re-export the generated `DB` interface.
+
+The core decision is unchanged: TypeScript uses camelCase, the database stays snake_case, via `CamelCasePlugin`. What changed is that the camelCase `DB` interface is now generated rather than hand-written — so the "hand-maintained `types.ts`" statements in the original text below (Negative trade-off 1, the Risk, and the `SHOULD`) are superseded by codegen: adding a column means writing the SQL migration and running codegen, not editing `types.ts` by hand.
+
 ## Context
 
 Kysely's query builder exposes column names to TypeScript exactly as they appear in the database — snake_case. TypeScript convention is camelCase for object properties. Manually mapping between the two at every callsite (or living with `user.org_id` in TS code) was error-prone and inconsistent with the rest of the codebase.
