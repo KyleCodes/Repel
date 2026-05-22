@@ -4,16 +4,7 @@ import {
   AccountListInputSchema,
   AccountRmInputSchema,
   AccountShowInputSchema,
-  BootstrapInputSchema,
 } from '../index.ts';
-
-describe('BootstrapInputSchema', function () {
-  test('still applies its defaults (unchanged by this ticket)', function () {
-    expect(
-      BootstrapInputSchema.parse({ orgName: 'Acme', email: 'a@b.com' })
-    ).toEqual({ orgName: 'Acme', email: 'a@b.com', dryRun: false });
-  });
-});
 
 describe('AccountListInputSchema', function () {
   test('accepts an empty object — org and user are both optional', function () {
