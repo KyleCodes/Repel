@@ -1,12 +1,31 @@
 import { runInOrgTx, runInTx } from '../../infra/db/tx.ts';
-import { UserAlreadyExistsError } from './error.ts';
+import {
+  ProviderAccountNotFoundError,
+  UserAlreadyExistsError,
+} from './error.ts';
 import { type BootstrapResult, bootstrap } from './flows/bootstrap.ts';
+import {
+  type DeactivateProviderAccountInput,
+  deactivateProviderAccount,
+} from './flows/deactivate-provider-account.ts';
+import {
+  type FindProviderAccountsByRefInput,
+  findProviderAccountsByRef,
+} from './views/find-provider-accounts-by-ref.ts';
 import {
   type FindUserByEmailInput,
   findUserByEmail,
 } from './views/find-user-by-email.ts';
 import { type GetOrgByIdInput, getOrgById } from './views/get-org-by-id.ts';
+import {
+  type GetProviderAccountInput,
+  getProviderAccount,
+} from './views/get-provider-account.ts';
 import { type GetUserByIdInput, getUserById } from './views/get-user-by-id.ts';
+import {
+  type ListProviderAccountsInput,
+  listProviderAccounts,
+} from './views/list-provider-accounts.ts';
 import { listUsersInOrg } from './views/list-users-in-org.ts';
 
 // Public surface of the accounts feature. The service owns transactions
@@ -61,5 +80,45 @@ export const accountsService = {
 
   listUsersInOrg: runInOrgTx(async function (trx) {
     return listUsersInOrg(trx);
+  }),
+
+  listProviderAccounts: runInOrgTx(async function (
+    trx,
+    input: ListProviderAccountsInput
+  ) {
+    return listProviderAccounts(trx, input);
+  }),
+
+  getProviderAccount: runInOrgTx(async function (
+    trx,
+    input: GetProviderAccountInput
+  ) {
+    const row = await getProviderAccount(trx, input);
+    if (!row) {
+      throw new ProviderAccountNotFoundError(
+        `provider account ${input.id} not found`
+      );
+    }
+    return row;
+  }),
+
+  findProviderAccountsByRef: runInOrgTx(async function (
+    trx,
+    input: FindProviderAccountsByRefInput
+  ) {
+    return findProviderAccountsByRef(trx, input);
+  }),
+
+  deactivateProviderAccount: runInOrgTx(async function (
+    trx,
+    input: DeactivateProviderAccountInput
+  ) {
+    const row = await deactivateProviderAccount(trx, input);
+    if (!row) {
+      throw new ProviderAccountNotFoundError(
+        `provider account ${input.id} not found`
+      );
+    }
+    return row;
   }),
 };

@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc --build",
     "cli": "bun run src/cli/index.ts",
     "dev": "bun run --watch src/main.ts",
-    "start": "bun run src/main.ts"
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --build"
   },
   "dependencies": {
     "@repel/shared": "workspace:*",

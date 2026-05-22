@@ -9,6 +9,7 @@ import {
 } from '../../infra/db/admin-ops.ts';
 import { resolveAdminUrl } from '../../infra/db/lib/admin-url.ts';
 import { migrationsService } from '../../infra/db/migrations-tracking/service.ts';
+import { confirm } from '../lib/confirm.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
 import { runCodegen } from './lib/codegen.ts';
 import { runConnect } from './lib/connect.ts';
@@ -107,7 +108,7 @@ export function registerDbCommands(program: Command): void {
     .description(
       'Reset the per-branch database to empty (drops the public schema, including pgmigrations) so migrations re-apply from zero'
     )
-    .option('--yes', 'skip the confirmation prompt')
+    .option('-y, --yes', 'skip the confirmation prompt')
     .action(async function (opts: { yes?: boolean }) {
       const input = parseOrExit(NukeInputSchema, { yes: opts.yes });
       await runNuke(input);
@@ -180,11 +181,22 @@ export async function runRefreshTemplate(
   );
 }
 
-export async function runNuke(input: NukeInput): Promise<void> {
+export async function runNuke(
+  input: NukeInput,
+  stdin: NodeJS.ReadableStream = process.stdin
+): Promise<void> {
   if (!input.yes) {
-    throw new Error(
-      'db nuke: refusing to wipe the database without confirmation — pass --yes'
+    // Destructive: drops the public schema. Prompt unless --yes was passed.
+    // A declined prompt (or non-TTY stdin) leaves the database untouched.
+    // `stdin` is injectable so tests can drive the prompt without a real TTY.
+    const ok = await confirm(
+      'db nuke: drop and recreate the public schema? [y/N] ',
+      stdin
     );
+    if (!ok) {
+      console.error('db nuke: cancelled');
+      return;
+    }
   }
   const databaseUrl = readDatabaseUrlFromEnvLocal();
   await nukeDatabase({ databaseUrl });
