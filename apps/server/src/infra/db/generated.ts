@@ -36,14 +36,18 @@ export type Provider = 'generic_imap' | 'gmail' | 'icloud';
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface Attachment {
+  bytes: Buffer;
+  contentId: string | null;
   contentType: string | null;
   createdAt: Generated<Timestamp>;
+  disposition: string | null;
+  externalAttachmentId: string | null;
   filename: string;
   id: Generated<string>;
   messageId: string;
   orgId: string;
   sizeBytes: Int8 | null;
-  storagePath: string;
+  userId: string;
 }
 
 export interface Contact {
@@ -53,6 +57,7 @@ export interface Contact {
   name: string | null;
   orgId: string;
   updatedAt: Generated<Timestamp>;
+  userId: string;
 }
 
 export interface ContactHandle {
@@ -62,6 +67,8 @@ export interface ContactHandle {
   handle: string;
   id: Generated<string>;
   isPrimary: Generated<boolean>;
+  orgId: string;
+  userId: string;
 }
 
 export interface JobQueue {
@@ -81,37 +88,55 @@ export interface JobQueue {
 }
 
 export interface Message {
-  bccAddresses: Generated<string[] | null>;
   bodyHtml: string | null;
   bodyText: string | null;
-  ccAddresses: Generated<string[] | null>;
   channel: Channel;
   createdAt: Generated<Timestamp>;
   direction: string;
   externalMessageId: string;
   id: Generated<string>;
+  inReplyTo: string | null;
   isArchived: Generated<boolean>;
   isDeleted: Generated<boolean>;
   isRead: Generated<boolean>;
   isStarred: Generated<boolean>;
+  messageIdHeader: string | null;
   orgId: string;
   providerAccountId: string;
+  rawMessageId: string;
   receivedAt: Timestamp | null;
-  recipientAddresses: Generated<string[]>;
-  senderAddress: string;
-  senderName: string | null;
+  references: string[] | null;
   sentAt: Timestamp;
+  snippet: string | null;
   subject: string | null;
   threadId: string | null;
   updatedAt: Generated<Timestamp>;
   userId: string;
 }
 
-export interface MessageRaw {
-  contentType: string;
+export interface MessageParticipant {
+  contactId: string | null;
   createdAt: Generated<Timestamp>;
+  displayName: string | null;
+  handle: string;
+  id: Generated<string>;
   messageId: string;
+  orgId: string;
+  role: string;
+  userId: string;
+}
+
+export interface MessageRaw {
+  channel: Channel;
+  createdAt: Generated<Timestamp>;
+  externalMessageId: string;
+  id: Generated<string>;
+  orgId: string;
   payload: Json;
+  payloadSchema: string;
+  providerAccountId: string;
+  syncTaskId: string;
+  userId: string;
 }
 
 export interface Org {
@@ -152,6 +177,7 @@ export interface Thread {
   lastMessageAt: Timestamp | null;
   messageCount: Generated<number>;
   orgId: string;
+  providerAccountId: string;
   subject: string | null;
   updatedAt: Generated<Timestamp>;
   userId: string;
@@ -173,6 +199,7 @@ export interface DB {
   contactHandle: ContactHandle;
   jobQueue: JobQueue;
   message: Message;
+  messageParticipant: MessageParticipant;
   messageRaw: MessageRaw;
   org: Org;
   pgmigrations: Pgmigrations;
