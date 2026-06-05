@@ -4,7 +4,7 @@
 
 This is the canonical statement of how the application is organized. It defines the top-level directory layout, the vocabulary contributors share when discussing code, and the rules that govern where new code goes and how modules may depend on each other.
 
-It is for every contributor — human or AI agent — before they add code. The intended workflow is: read it once, top to bottom; then refer back to the rules section (§5) when adding a new flow, view, handler, route, command, adapter, or piece of infrastructure. New contributors should expect to spend roughly twenty minutes reading the document end to end.
+It is for every contributor — human or AI agent — before they add code. The intended workflow is: read it once, top to bottom; then refer back to the rules section (§5) when adding a new mutation, view, handler, route, command, adapter, or piece of infrastructure. New contributors should expect to spend roughly twenty minutes reading the document end to end.
 
 The document does not prescribe schema. It does not pick libraries beyond those already in use. It does not address operational concerns (deployment, observability, scaling). It does not critique prior shapes the codebase has taken; the source of truth is the target state described here, and the codebase is conformed to it through normal tickets rather than opportunistic rewrites. Migration narratives belong in pull request descriptions and ticket comments, not here.
 
@@ -20,13 +20,13 @@ The architecture is downstream of seven beliefs. Every rule in §5, every layout
 
 **Triggers are details; outcomes are structure.** A unit of work belongs to the part of the system whose outcome it produces, regardless of whether a user clicked a button (HTTP), an engineer ran a command (CLI), or a job was dequeued (envelope from the queue). When a message is categorized, the code that does the categorization lives where categorization lives, even if the trigger came from a message-arrival event in a different capability. This keeps capabilities coherent: everything about how categorization works is in the categorization directory, not scattered across whatever subsystems happen to invoke it.
 
-**Facades shape the wire; features shape the work.** Public surfaces — HTTP endpoints, CLI commands, and later MCP tool calls — are concerned with how requests arrive and responses go out: validation, authentication, error mapping, the exact shape of JSON payloads. Internal capabilities are concerned with the work itself. The two should not share types, because they answer different questions. A flow returns a result that captures the outcome of an operation; a route reshapes that result into a response shape its consumers can rely on. Even when the two shapes are identical on the day a flow is first written, the explicit reshape is preserved so that when they diverge, the divergence is contained to one place.
+**Facades shape the wire; features shape the work.** Public surfaces — HTTP endpoints, CLI commands, and later MCP tool calls — are concerned with how requests arrive and responses go out: validation, authentication, error mapping, the exact shape of JSON payloads. Internal capabilities are concerned with the work itself. The two should not share types, because they answer different questions. A mutation returns a result that captures the outcome of an operation; a route reshapes that result into a response shape its consumers can rely on. Even when the two shapes are identical on the day a mutation is first written, the explicit reshape is preserved so that when they diverge, the divergence is contained to one place.
 
 **Infrastructure is what you provision; adapters are how you talk to things.** Postgres is infrastructure: you stand up a database server, configure connection pooling, run migrations against it. Gmail is not infrastructure: you do not provision Gmail; you integrate with it. The distinction matters because the two have different lifecycles, different failure modes, and different testing strategies. Infrastructure deserves its own top-level directory because it is the substrate the application runs on. Adapters deserve their own top-level directory because they are translation layers between the application and external systems whose APIs the application does not control.
 
-**Transactions are short and use-case-shaped.** A transaction exists to make a logically atomic operation atomic at the database level. The smaller it is — fewer statements, less elapsed time, fewer rows touched — the lower the contention it creates with concurrent transactions and the smaller the blast radius if it fails. The natural unit is one flow: one call into the application, one transaction, ideally one round trip to the database (a CTE that does many writes is one round trip). Multi-statement, multi-round-trip transactions are a code smell that usually indicates the use case has been decomposed into entity operations rather than expressed as a flow.
+**Transactions are short and use-case-shaped.** A transaction exists to make a logically atomic operation atomic at the database level. The smaller it is — fewer statements, less elapsed time, fewer rows touched — the lower the contention it creates with concurrent transactions and the smaller the blast radius if it fails. The natural unit is one mutation: one call into the application, one transaction, ideally one round trip to the database (a CTE that does many writes is one round trip). Multi-statement, multi-round-trip transactions are a code smell that usually indicates the use case has been decomposed into entity operations rather than expressed as a single mutation.
 
-**Read paths and write paths are different shapes.** A function that reads "give me everything I need to display the inbox screen" returns a shape determined by the screen, joins tables freely, and never mutates anything. A function that writes "ingest this batch of messages from Gmail" upserts into many tables atomically and returns minimal acknowledgment. Forcing both through a unified service-and-repository layer that pretends they have the same shape is the source of much accidental complexity. The application instead distinguishes them at the directory level: writes live in `flows/`, reads live in `views/`. They are not symmetric operations on a shared model.
+**Read paths and write paths are different shapes.** A function that reads "give me everything I need to display the inbox screen" returns a shape determined by the screen, joins tables freely, and never mutates anything. A function that writes "ingest this batch of messages from Gmail" upserts into many tables atomically and returns minimal acknowledgment. Forcing both through a unified service-and-repository layer that pretends they have the same shape is the source of much accidental complexity. The application instead distinguishes them at the directory level: writes live in `mutations/`, reads live in `views/`. They are not symmetric operations on a shared model.
 
 ## 3. Top-Level Layout
 
@@ -36,15 +36,15 @@ The application source tree is the following. Each directory has one purpose, st
 apps/server/src/
   features/                 # product capabilities
     accounts/               # org + user lifecycle
-      flows/                # one file per write use case; each owns its query
+      mutations/            # one file per write use case; each owns its query
       views/                # one file per read use case; each owns its query
       handlers/             # async-triggered work owned by this feature
-      service.ts            # public surface; decorates flows/views; owns business rules
+      service.ts            # public surface; decorates mutations/views; owns business rules
       error.ts              # feature-local error hierarchy (extends lib/error.ts AppError)
     messaging/              # threads, messages, contacts, attachments
-      flows/  views/  handlers/  service.ts  error.ts
+      mutations/  views/  handlers/  service.ts  error.ts
     categorization/         # categories, classification results
-      flows/  views/  handlers/  service.ts  error.ts
+      mutations/  views/  handlers/  service.ts  error.ts
   processing-pipeline/      # async orchestrator
     registry.ts             # nodeId → handler import
     topology.ts             # event → next-handlers wiring
@@ -76,17 +76,17 @@ Nothing else is added at the top level without an amendment to this document.
 
 This section defines the vocabulary used throughout the document and throughout the codebase. Contributors should use these terms with these meanings, and should resist the urge to introduce new terms ("module", "package", "library", "domain") that overlap with these.
 
-**Feature.** A product capability — a thing the application does that a user could reasonably toggle on or off, and that a separate engineer could reasonably own. "Messaging" is a feature. "Threads" is not — threading is how messaging organizes its data. "Categorization" is a feature. "Bootstrap" is not — it is one flow inside the accounts feature. The unit-test for whether a candidate is a feature is in §4 above and is elaborated with worked examples in Appendix A.
+**Feature.** A product capability — a thing the application does that a user could reasonably toggle on or off, and that a separate engineer could reasonably own. "Messaging" is a feature. "Threads" is not — threading is how messaging organizes its data. "Categorization" is a feature. "Bootstrap" is not — it is one mutation inside the accounts feature. The unit-test for whether a candidate is a feature is in §4 above and is elaborated with worked examples in Appendix A.
 
-**Flow.** A synchronous write. A flow is one async function that takes a `Tx` and a typed input, runs one SQL statement (a writeable CTE when more than one table is involved), and returns the shape Kysely infers from the query. Flows live at `features/<feature>/flows/<verb-noun>.ts`. A flow does not open transactions and is not decorated; the service that calls it does.
+**Mutation.** A synchronous write. A mutation is one async function that takes a `Tx` and a typed input, runs one SQL statement (a writeable CTE when more than one table is involved), and returns the shape Kysely infers from the query. Mutations live at `features/<feature>/mutations/<verb-noun>.ts`. A mutation does not open transactions and is not decorated; the service that calls it does. (The term "flow" is deliberately avoided for this concept — it is reserved for multi-step processes such as an interactive OAuth flow, which are not database writes.)
 
-**View.** A synchronous read. Same shape as a flow but read-only: one async function taking a `Tx` and input, running one SQL statement, returning the Kysely-inferred shape. Views live at `features/<feature>/views/<verb-noun>.ts`. A view does not open transactions and is not decorated; the service that calls it does.
+**View.** A synchronous read. Same shape as a mutation but read-only: one async function taking a `Tx` and input, running one SQL statement, returning the Kysely-inferred shape. Views live at `features/<feature>/views/<verb-noun>.ts`. A view does not open transactions and is not decorated; the service that calls it does.
 
-**Handler.** An asynchronously triggered unit of work. A handler has the same internal shape as a flow — typed input, typed result, runs under a transaction — but is invoked by the processing pipeline rather than by a facade. A handler receives an envelope from the queue, does its work, and may return a list of further envelopes to enqueue. Handlers live in `features/<feature>/handlers/`.
+**Handler.** An asynchronously triggered unit of work. A handler has the same internal shape as a mutation — typed input, typed result, runs under a transaction — but is invoked by the processing pipeline rather than by a facade. A handler receives an envelope from the queue, does its work, and may return a list of further envelopes to enqueue. Handlers live in `features/<feature>/handlers/`.
 
-**Service.** The public surface of a feature. A feature has exactly one `service.ts`. The service imports flows and views, decorates each public operation with `runInTx` or `runInOrgTx`, and applies feature-level business rules (uniqueness checks, defaults, validation). `runInOrgTx` adds `orgId: string` to the public input type; the inner flow/view never declares it — Postgres RLS scoped at `SET LOCAL` does the tenant filtering. Services throw errors that extend the feature's `error.ts` base (which extends the shared `AppError` in `lib/error.ts`); facades catch and map by `instanceof`.
+**Service.** The public surface of a feature. A feature has exactly one `service.ts`. The service imports mutations and views, decorates each public operation with `runInTx` or `runInOrgTx`, and applies feature-level business rules (uniqueness checks, defaults, validation). `runInOrgTx` adds `orgId: string` to the public input type; the inner mutation/view never declares it — Postgres RLS scoped at `SET LOCAL` does the tenant filtering. Services throw errors that extend the feature's `error.ts` base (which extends the shared `AppError` in `lib/error.ts`); facades catch and map by `instanceof`.
 
-**Queries.** Kysely expressions defined inside the flow or view that uses them. Each flow/view declares a private builder (`buildX(trx, input) => trx.selectFrom(...)…`), derives its result type from the builder via Kysely's type inference (e.g. `InferResult<ReturnType<typeof buildX>>[number]`), and exports the resulting type alongside the async runner. There is no per-feature query bundle and no parallel domain-type layer — Kysely's `DB` schema in `infra/db/types.ts` is the source of truth, and every return type reaches the rest of the application through inference. Use raw `sql` templates only when Kysely cannot express the statement; raw SQL is opaque to inference and forces hand-written types back into the file. Input shapes are the one exception that must be hand-written: they live next to the function that consumes them. Cross-feature reads still go through `views/` per Rule 1b.
+**Queries.** Kysely expressions defined inside the mutation or view that uses them. Each mutation/view declares a private builder (`buildX(trx, input) => trx.selectFrom(...)…`), derives its result type from the builder via Kysely's type inference (e.g. `InferResult<ReturnType<typeof buildX>>[number]`), and exports the resulting type alongside the async runner. There is no per-feature query bundle and no parallel domain-type layer — Kysely's `DB` schema in `infra/db/types.ts` is the source of truth, and every return type reaches the rest of the application through inference. Use raw `sql` templates only when Kysely cannot express the statement; raw SQL is opaque to inference and forces hand-written types back into the file. Input shapes are the one exception that must be hand-written: they live next to the function that consumes them. Cross-feature reads still go through `views/` per Rule 1b.
 
 **Envelope.** The contract between the queue (transport) and handlers. An envelope has the shape `{ kind: NodeId; orgId: string; payload: unknown; idempotencyKey?: string }`. The `kind` field identifies which handler in the registry should process it. The `orgId` field identifies the tenant the work belongs to. The `payload` is handler-specific and is typed at the handler boundary. The `idempotencyKey` is an optional deduplication hint.
 
@@ -94,7 +94,7 @@ This section defines the vocabulary used throughout the document and throughout 
 
 **Adapter.** A translation layer between an external provider's API or protocol and the application's normalized envelope shape. Each adapter has an ingress side (incoming data from the provider becomes envelopes) and an egress side (envelopes for outbound actions become provider API calls). Adapters live in `adapters/<provider>/`.
 
-**Facade.** The HTTP API and CLI directories — `api/` and `cli/`. A facade owns the wire-shape of public requests and responses, the file-based routing structure, validation schemas, authentication and error-handling middleware, and any reshaping required between wire types and feature flow types. A facade is the only legitimate place for cross-feature orchestration code. Features never import from facades.
+**Facade.** The HTTP API and CLI directories — `api/` and `cli/`. A facade owns the wire-shape of public requests and responses, the file-based routing structure, validation schemas, authentication and error-handling middleware, and any reshaping required between wire types and feature mutation/view result types. A facade is the only legitimate place for cross-feature orchestration code. Features never import from facades.
 
 **Infra.** Provisioned things — the database, the queue. Infra is the substrate the application runs on. Adapters are not infra (you do not provision Gmail). Infra lives in `infra/`.
 
@@ -104,7 +104,7 @@ This section defines the vocabulary used throughout the document and throughout 
 
 The following rules are stated as single sentences so violations can be identified by code review, by lint configuration, or by `grep`. Each rule is followed by the rationale and the typical failure mode it prevents.
 
-**Rule 1a. Facade direction.** Files under `api/` and `cli/` may import from `features/*/{flows,views,handlers,service,types}`. Files under `features/` may NEVER import from `api/` or `cli/`.
+**Rule 1a. Facade direction.** Files under `api/` and `cli/` may import from `features/*/{mutations,views,handlers,service,types}`. Files under `features/` may NEVER import from `api/` or `cli/`.
 
 This is the architectural backbone of the system. The facade layer is a consumer of features; features must not depend on the consumers that happen to call them, because that coupling makes it impossible to add a new consumer (a worker, an MCP surface, a script) without dragging changes through every feature. The rule can be enforced with an ESLint `no-restricted-imports` configuration; failures show up as imports that originate in `features/` and target `api/` or `cli/`.
 
@@ -112,29 +112,29 @@ This is the architectural backbone of the system. The facade layer is a consumer
 
 `views/` is the public read interface of a feature. Reading through views means the read shape is stable and the underlying queries can change without forcing changes in the consumer. Reaching into another feature's database-access code directly couples the consumer to the producer's internals and erodes the boundary that makes features independently ownable.
 
-**Rule 2. Cross-feature writes compose through services.** When a write operation in one feature needs to invoke work owned by another, the calling feature's service may import the called feature's service and call its operations directly. Flows do not import sibling features' flows; flows orchestrate their own feature's service, which may in turn call other features' services.
+**Rule 2. Cross-feature writes compose through services.** When a write operation in one feature needs to invoke work owned by another, the calling feature's service may import the called feature's service and call its operations directly. Mutations do not import sibling features' mutations; mutations orchestrate their own feature's service, which may in turn call other features' services.
 
-This is a deliberate two-tier structure. Flows are the "what the user asked for" layer — they should be readable as one operation in one feature, even when the underlying work spans capabilities. Services are the "how the work happens" layer — composable across features, free to invoke each other when the use case crosses a boundary. The constraint that flows do not import sibling flows preserves flow readability; the freedom for services to import other services keeps cross-cutting writes ergonomic without resorting to events when events are not yet warranted.
+This is a deliberate two-tier structure. Mutations are the "what the user asked for" layer — they should be readable as one operation in one feature, even when the underlying work spans capabilities. Services are the "how the work happens" layer — composable across features, free to invoke each other when the use case crosses a boundary. The constraint that mutations do not import sibling mutations preserves their readability; the freedom for services to import other services keeps cross-cutting writes ergonomic without resorting to events when events are not yet warranted.
 
 The longer-term tightening — "cross-feature writes coordinate through events, not through direct service imports" — is deferred until either the second asynchronous handler exists or a second engineer joins the codebase. When that point arrives, services that currently import other services will be refactored to enqueue envelopes; the events-based pattern becomes the default and direct service imports become the exception that requires justification. The deferral is deliberate: imposing the events-based pattern now means building transport, an envelope catalog, and handlers for work that does not yet need them. Imposing it later is a bounded refactor.
 
-**Rule 3. One flow = one transaction = one round trip when possible.** A flow opens exactly one transaction. Inside that transaction, the flow executes as few SQL statements as the use case allows — ideally one. If a flow opens more than one query inside its transaction, the additional queries are justified in a code comment.
+**Rule 3. One mutation = one transaction = one round trip when possible.** A mutation opens exactly one transaction. Inside that transaction, the mutation executes as few SQL statements as the use case allows — ideally one. If a mutation opens more than one query inside its transaction, the additional queries are justified in a code comment.
 
 Two-round-trip writes (read a row, decide something in application code, write a row) introduce a window during which concurrent transactions can invalidate the decision. They are sometimes unavoidable when the decision genuinely depends on application logic (for example, an LLM call), but when the decision is a uniqueness check, a foreign key lookup, or a conditional update, the database can do it atomically with `ON CONFLICT`, `RETURNING`, or a `WHERE` clause on the write. The rule's purpose is to make every multi-round-trip transaction visible: the comment is the place where the author proves the use case requires it.
 
-**Rule 4. Flows return domain results; facades shape wire responses.** A flow's return type is shaped by the work it performs, not by what an HTTP response or a CLI output happens to look like. Facades wrap flows: the route handler calls the flow, then maps the result to a wire response. Even when the two shapes are identical on the day the flow is written, the explicit reshape function exists.
+**Rule 4. Mutations return domain results; facades shape wire responses.** A mutation's return type is shaped by the work it performs, not by what an HTTP response or a CLI output happens to look like. Facades wrap mutations: the route handler calls the mutation, then maps the result to a wire response. Even when the two shapes are identical on the day the mutation is written, the explicit reshape function exists.
 
-The day the wire shape diverges from the flow result — a field is added to the API response that the flow does not produce, or a field is renamed, or two flows are combined into one endpoint — the change is contained to the reshape function. Without the reshape, the divergence either bloats the flow's return type with API-shaped fields or leaks internal fields into the public surface. The cost of writing the reshape on day one is trivial; the cost of retrofitting it later is significant, because every consumer of the unified type must be re-examined.
+The day the wire shape diverges from the mutation result — a field is added to the API response that the mutation does not produce, or a field is renamed, or two mutations are combined into one endpoint — the change is contained to the reshape function. Without the reshape, the divergence either bloats the mutation's return type with API-shaped fields or leaks internal fields into the public surface. The cost of writing the reshape on day one is trivial; the cost of retrofitting it later is significant, because every consumer of the unified type must be re-examined.
 
-**Rule 5. Feature internal structure: `flows/`, `views/`, `handlers/`, `service.ts`, `error.ts`.** Each feature directory contains these five top-level entries. Additional files or directories within a feature are permitted as the shape of the codebase clarifies.
+**Rule 5. Feature internal structure: `mutations/`, `views/`, `handlers/`, `service.ts`, `error.ts`.** Each feature directory contains these five top-level entries. Additional files or directories within a feature are permitted as the shape of the codebase clarifies.
 
-- **`flows/<verb-noun>.ts`** — one file per write use case. Plain `async (trx, input) => ...`; owns its query builder and its inferred result type. Promoted to a `<verb-noun>/` directory with step-files only when a single flow grows past approximately 150 lines.
-- **`views/<verb-noun>.ts`** — one file per read use case. Same shape as a flow but read-only.
-- **`handlers/`** — async entry points consumed by `processing-pipeline/`. Same shape as a flow.
-- **`service.ts`** — exactly one per feature. Decorates flows/views with `runInTx`/`runInOrgTx`, owns business rules, and is the only legitimate import target for facade code and other features' services. When the file grows uncomfortable, the split is by operation cluster, not by entity — `service/categorize.ts`, `service/reclassify.ts` is acceptable; `service/category.ts`, `service/result.ts` is not.
+- **`mutations/<verb-noun>.ts`** — one file per write use case. Plain `async (trx, input) => ...`; owns its query builder and its inferred result type. Promoted to a `<verb-noun>/` directory with step-files only when a single mutation grows past approximately 150 lines.
+- **`views/<verb-noun>.ts`** — one file per read use case. Same shape as a mutation but read-only.
+- **`handlers/`** — async entry points consumed by `processing-pipeline/`. Same shape as a mutation.
+- **`service.ts`** — exactly one per feature. Decorates mutations/views with `runInTx`/`runInOrgTx`, owns business rules, and is the only legitimate import target for facade code and other features' services. When the file grows uncomfortable, the split is by operation cluster, not by entity — `service/categorize.ts`, `service/reclassify.ts` is acceptable; `service/category.ts`, `service/result.ts` is not.
 - **`error.ts`** — feature-local error hierarchy: an abstract feature-base extending `AppError`, plus concrete subclasses thrown by service methods.
 
-Each flow/view file is the smallest meaningful unit of database work — one query, one inferred type, one runner. `service.ts` is the only file that opens transactions and applies business rules. The five-entry shape rules out both the per-entity quartet pattern and the per-feature query bundle: every read or write is owned by the file that names the use case.
+Each mutation/view file is the smallest meaningful unit of database work — one query, one inferred type, one runner. `service.ts` is the only file that opens transactions and applies business rules. The five-entry shape rules out both the per-entity quartet pattern and the per-feature query bundle: every read or write is owned by the file that names the use case.
 
 **Rule 6. Adapters never import features; features never import adapters.** Adapters communicate with features exclusively through transport envelopes — adapter ingress emits envelopes; handlers consume them; handler-emitted envelopes are routed back to adapter egress.
 
@@ -179,7 +179,7 @@ cli/
     schemas/index.ts
 ```
 
-Each route or command directory contains its handler (the file that exports the route or command function), its zod schema (the file that defines the input validation), and any small reshape helpers required to map between wire shapes and feature flow types. If a route grows complex enough to warrant additional helpers, they live in the same directory.
+Each route or command directory contains its handler (the file that exports the route or command function), its zod schema (the file that defines the input validation), and any small reshape helpers required to map between wire shapes and feature mutation/view result types. If a route grows complex enough to warrant additional helpers, they live in the same directory.
 
 The composer at the top of each facade — `api/router.ts` and `cli/index.ts` — is responsible for traversing the directory tree at boot time and registering routes and commands. The composer should be small and mechanical; it does not contain domain logic.
 
@@ -187,7 +187,7 @@ CLI parity is a stated goal during the pre-frontend period. The CLI is intended 
 
 Cross-feature orchestration commands belong at the facade level. A hypothetical `repel demo-seed` command that creates an organization, attaches provider accounts, and ingests a fixture mailbox spans three features (accounts, messaging, possibly categorization). Such a command lives in `cli/`, not inside any feature directory. The facade is the only legitimate place for code that orchestrates work across feature boundaries.
 
-The wire shapes of HTTP responses and CLI outputs are not the same as the internal flow result types. Even when they appear identical on the day a route is first written, the explicit reshape function exists. This is Rule 4, restated here because facade authors are the people most often tempted to skip the reshape on the grounds that it looks like duplication.
+The wire shapes of HTTP responses and CLI outputs are not the same as the internal mutation result types. Even when they appear identical on the day a route is first written, the explicit reshape function exists. This is Rule 4, restated here because facade authors are the people most often tempted to skip the reshape on the grounds that it looks like duplication.
 
 ## 7. Asynchronous Work and the Processing Pipeline
 
@@ -201,7 +201,7 @@ The processing pipeline carries asynchronously triggered work. It has three resp
 
 **Types.** `processing-pipeline/types.ts` defines `NodeId`, `Envelope`, `HandlerResult`, and any other types shared by registry, topology, and runner.
 
-The pipeline directory is empty in shape until a second handler exists. The structure is reserved; the code is not written prematurely. The first handler — whenever it appears — can run from a feature directory directly, invoked synchronously from a flow, with the pipeline's machinery introduced when the second handler creates a real need for orchestration.
+The pipeline directory is empty in shape until a second handler exists. The structure is reserved; the code is not written prematurely. The first handler — whenever it appears — can run from a feature directory directly, invoked synchronously from a mutation, with the pipeline's machinery introduced when the second handler creates a real need for orchestration.
 
 A handler is unit-testable without a queue. The test feeds an envelope in, asserts on the returned next-events and on the database state after the handler runs. Transport is mockable behind a single `Transport` interface; the runner is integration-testable against a fake transport. This separation — handlers as pure(-ish) functions that take an envelope and return events, transport as the system that moves them — is what makes the eventual swap to an external queue (SQS, RabbitMQ, Kafka, Inngest, Temporal) a transport replacement rather than a handler rewrite.
 
@@ -229,7 +229,7 @@ The architectural commitment in the product specification — that the processin
 
 Infrastructure code lives in `infra/`. The application's infrastructure today is the Postgres database and (eventually) the asynchronous job queue.
 
-**`infra/db/`.** Contains the Kysely client, the `DB` interface that mirrors the SQL schema, the lazy-initialized runtime singleton, the transaction decorators (`runInOrgTx` for tenant-scoped flows that activate row-level security via `SET LOCAL app.current_org_id`, and `runInTx` for unscoped operations like bootstrap), the migrations directory, and shared SQL helpers. The transaction decorators are the load-bearing abstraction here — every flow and every handler runs inside one of them, which is what guarantees that transactions are short and that tenant isolation is enforced at the database level rather than relying on application discipline.
+**`infra/db/`.** Contains the Kysely client, the `DB` interface that mirrors the SQL schema, the lazy-initialized runtime singleton, the transaction decorators (`runInOrgTx` for tenant-scoped mutations that activate row-level security via `SET LOCAL app.current_org_id`, and `runInTx` for unscoped operations like bootstrap), the migrations directory, and shared SQL helpers. The transaction decorators are the load-bearing abstraction here — every mutation and every handler runs inside one of them, which is what guarantees that transactions are short and that tenant isolation is enforced at the database level rather than relying on application discipline.
 
 **`infra/transport/`.** Contains the queue. Today this is implemented in Postgres (either via a hand-rolled `job_queue` table or via a library such as pg-boss). The queue is not domain data — it is plumbing — and the table that backs it should be treated as opaque infrastructure rather than as something application code queries directly. Replacing this directory with an external system (SQS, RabbitMQ, Kafka, or a managed orchestration service) is the eventual evolution path; the design constraint is that nothing outside `infra/transport/` and `processing-pipeline/runner.ts` should know which implementation is in use.
 
@@ -245,7 +245,7 @@ The schema of the eventual asynchronous job event log is open. The expectation i
 
 The public API contract is not defined here. Each feature owns the shape of its public endpoints, subject to the facade rules in §6.
 
-A testing strategy beyond the points already noted ("handlers are testable without a queue, flows are testable without a server") is not prescribed here. Test conventions are documented separately.
+A testing strategy beyond the points already noted ("handlers are testable without a queue, mutations are testable without a server") is not prescribed here. Test conventions are documented separately.
 
 Authorization beyond the existing tenant-isolation pattern (row-level security keyed on `app.current_org_id`) is not addressed here. Per-route authorization, per-resource authorization, and per-field authorization are facade-level concerns; when they are introduced, they live in `api/middleware/` and are documented separately.
 
@@ -255,7 +255,7 @@ Operational concerns — deployment topology, monitoring, alerting, SLOs, on-cal
 
 The document is intentionally durable, not eternal. Several conditions should trigger a review of one or more of its rules.
 
-A feature directory whose `flows/`, `views/`, or `handlers/` exceeds approximately eight entries is a signal to consider splitting the feature. The fix is usually to identify a subset of operations that share an internal coherence and promote them to a sibling feature directory. The wrong fix is to nest `flows/` deeper.
+A feature directory whose `mutations/`, `views/`, or `handlers/` exceeds approximately eight entries is a signal to consider splitting the feature. The fix is usually to identify a subset of operations that share an internal coherence and promote them to a sibling feature directory. The wrong fix is to nest `mutations/` deeper.
 
 Two engineers — or two AI agents — repeatedly needing to edit the same feature for unrelated reasons is a similar signal. A feature should be ownable by one contributor at a time; concurrent unrelated edits to it usually mean it has accreted more than one capability.
 
@@ -265,7 +265,7 @@ The existence of a third asynchronous DAG is the trigger to consider whether `to
 
 A non-Postgres data store entering the picture (a search index that owns part of the read path, a cache that owns part of the write path) is the trigger to re-examine the "database is a participant" principle and the related rules about transactions and round trips.
 
-Reaching the point where the codebase has a second engineer, or where the second asynchronous handler is being written, is the trigger to revisit Rule 2 and consider tightening cross-feature write coordination to flow-through-events.
+Reaching the point where the codebase has a second engineer, or where the second asynchronous handler is being written, is the trigger to revisit Rule 2 and consider tightening cross-feature write coordination to run through events.
 
 ## 12. Amendment Process
 
@@ -289,17 +289,17 @@ The unit-test in §4 — could a user reasonably toggle this on or off; could a 
 
 **`accounts` — YES.** Org and user lifecycle is independently ownable. "The system has accounts" is a togglable surface in the sense that a single-tenant deployment without orgs is a coherent product variant; the multi-tenant feature is something the product offers, not the substrate the product runs on.
 
-**`provider-accounts` — JUDGMENT CALL.** Provider accounts (the records linking a user to a Gmail or iCloud login) currently live inside `features/accounts/` as a sub-area, because one engineer reasonably owns the whole user/org/provider-account graph. Promote provider accounts to their own feature `features/provider-accounts/` when either of two conditions holds: a non-trivial provider-account UI exists with its own flows (connection management, OAuth dance, scope changes), or it acquires its own asynchronous handlers (token refresh, connection health monitoring). Until either of those conditions holds, sub-area is the right shape.
+**`provider-accounts` — JUDGMENT CALL.** Provider accounts (the records linking a user to a Gmail or iCloud login) currently live inside `features/accounts/` as a sub-area, because one engineer reasonably owns the whole user/org/provider-account graph. Promote provider accounts to their own feature `features/provider-accounts/` when either of two conditions holds: a non-trivial provider-account UI exists with its own mutations (connection management, the OAuth flow, scope changes), or it acquires its own asynchronous handlers (token refresh, connection health monitoring). Until either of those conditions holds, sub-area is the right shape.
 
 **`categorization` — YES.** Independently togglable: the inbox can ship in a v0 form without categorization; categorization plugs in later. Independently ownable: the skill set involved (LLM prompt engineering, evaluation harnesses, category taxonomy design) is different from the skill set involved in messaging. Has its own user-facing configuration surface (categories, prompts, scoring).
 
 **`search` — YES (when it exists).** Cross-cuts messaging, categorization, and contacts but is its own capability. The fact that search reads from multiple features does not make it part of any of them; it imports their `views/` to compose the search index or to serve query results.
 
-**`preferences` — YES (when it exists).** User-level configuration that affects many features but belongs to none of them. The right shape is a small feature whose flows update preference rows and whose views expose them; consuming features read preferences through the preferences view, just as cross-feature reads do everywhere else.
+**`preferences` — YES (when it exists).** User-level configuration that affects many features but belongs to none of them. The right shape is a small feature whose mutations update preference rows and whose views expose them; consuming features read preferences through the preferences view, just as cross-feature reads do everywhere else.
 
 **`migrations` — NO.** Infrastructure. Lives in `infra/db/` (or wherever the migration runner is hosted), not under `features/`. There is no user-facing surface for migrations and no engineer would meaningfully "own" them as a product capability.
 
-**`bootstrap` — NO.** Bootstrap is a single flow inside `features/accounts/` that creates the first organization and the first user atomically. It is one operation, not a coherent capability. Cross-feature seed and demo flows that do more than bootstrap (creating an org, attaching provider accounts, ingesting a fixture mailbox) live at the facade level, not inside any feature.
+**`bootstrap` — NO.** Bootstrap is a single mutation inside `features/accounts/` that creates the first organization and the first user atomically. It is one operation, not a coherent capability. Cross-feature seed and demo routines that do more than bootstrap (creating an org, attaching provider accounts, ingesting a fixture mailbox) live at the facade level, not inside any feature.
 
 **`async jobs` / `processing-pipeline` — NO.** Plumbing. The processing pipeline is the carrier of asynchronous work; it lives at the top level alongside `features/`. The work it carries — categorization, draft generation, automation firing — belongs to the features that own the outcomes. The carrier is not a feature.
 

@@ -10,7 +10,7 @@
 // Rule 1b (cross-feature reads go through views/) is NOT encoded here: it needs
 // a same-layer allow/deny that no-restricted-imports' path globs express poorly
 // (a feature importing its OWN siblings' views is legal; importing their
-// flows/service is not). It stays a documented convention until a type-aware
+// mutations/service is not). It stays a documented convention until a type-aware
 // boundary plugin is justified. See DR-REP-13-1.
 //
 // Matching is on relative import specifiers. Source imports in this repo carry

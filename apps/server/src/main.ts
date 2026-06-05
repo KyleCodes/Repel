@@ -1,9 +1,10 @@
 import { startApi } from './api/router.ts';
+import { getOptionalEnvVar } from './lib/env.ts';
 
 type Mode = 'all' | 'api' | 'worker';
 
 async function main() {
-  const mode = (process.env.MODE ?? 'all') as Mode;
+  const mode = getOptionalEnvVar('MODE', 'all') as Mode;
 
   console.log(`Starting in mode: ${mode}`);
 

@@ -1,4 +1,5 @@
 import express, { Application, NextFunction, Request, Response } from 'express';
+import { getOptionalEnvVar } from '../lib/env.ts';
 
 // Augment Express Request with the org id resolved by middleware.
 // Route handlers call decorated service singletons directly (e.g.
@@ -50,7 +51,7 @@ export function createRouter(): Application {
 export function startApi(): Promise<void> {
   return new Promise(function (resolve) {
     const app = createRouter();
-    const port = process.env.PORT ?? 3000;
+    const port = getOptionalEnvVar('PORT', '3000');
     app.listen(port, function () {
       console.log(`API listening on port ${port}`);
       resolve();

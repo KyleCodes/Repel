@@ -1,5 +1,6 @@
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { getRequiredEnvVar } from '../../lib/env.ts';
 import type { DB } from './generated.ts';
 
 // Builds a fresh Kysely instance over a new pg Pool. Normal app code should
@@ -7,8 +8,7 @@ import type { DB } from './generated.ts';
 // instantiated singleton. This factory exists so tests (or CLI scripts that
 // need to tear down explicitly) can construct their own instance.
 export function makeDb(): Kysely<DB> {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is required');
+  const url = getRequiredEnvVar('DATABASE_URL');
 
   return new Kysely<DB>({
     dialect: new PostgresDialect({
