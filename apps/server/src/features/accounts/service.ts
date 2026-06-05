@@ -3,11 +3,11 @@ import {
   ProviderAccountNotFoundError,
   UserAlreadyExistsError,
 } from './error.ts';
-import { type BootstrapResult, bootstrap } from './flows/bootstrap.ts';
+import { type BootstrapResult, bootstrap } from './mutations/bootstrap.ts';
 import {
   type DeactivateProviderAccountInput,
   deactivateProviderAccount,
-} from './flows/deactivate-provider-account.ts';
+} from './mutations/deactivate-provider-account.ts';
 import {
   type FindProviderAccountsByRefInput,
   findProviderAccountsByRef,

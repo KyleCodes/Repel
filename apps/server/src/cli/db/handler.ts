@@ -9,6 +9,7 @@ import {
 } from '../../infra/db/admin-ops.ts';
 import { resolveAdminUrl } from '../../infra/db/lib/admin-url.ts';
 import { migrationsService } from '../../infra/db/migrations-tracking/service.ts';
+import { getOptionalEnvVar } from '../../lib/env.ts';
 import { confirm } from '../lib/confirm.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
 import { runCodegen } from './lib/codegen.ts';
@@ -41,8 +42,8 @@ import {
 
 function readAdminUrlFromEnv(): string {
   return resolveAdminUrl({
-    pgAdminUrl: process.env.PG_ADMIN_URL,
-    databaseUrl: process.env.DATABASE_URL,
+    pgAdminUrl: getOptionalEnvVar('PG_ADMIN_URL'),
+    databaseUrl: getOptionalEnvVar('DATABASE_URL'),
   });
 }
 

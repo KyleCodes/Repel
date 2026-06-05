@@ -2,7 +2,7 @@ import type { InferResult } from 'kysely';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
 import type { Tx } from '../../../infra/db/types.ts';
 
-// Bootstrap flow: create the first org and its admin user in one round trip.
+// Bootstrap mutation: create the first org and its admin user in one round trip.
 //
 // Writeable CTE chains both inserts inside a single statement. The final
 // SELECT projects each inserted row as a JSON object via jsonObjectFrom,
