@@ -17,7 +17,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "prepare": "husky",
-    "test": "bun test",
+    "test": "bun test apps/*/src packages/*/src",
     "typecheck": "bun run clean && tsc --build"
   },
   "lint-staged": {

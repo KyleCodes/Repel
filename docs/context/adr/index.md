@@ -15,6 +15,7 @@
 | ADR-011 | CamelCasePlugin — TypeScript camelCase, DB snake_case             | data-access, conventions                  | Accepted | docs/context/adr/ADR-011-camelcase-plugin-ts-snake-db.md            |
 | ADR-012 | CLI Structure — handler + sibling `schemas/`                      | conventions, architecture                 | Accepted | docs/context/adr/ADR-012-cli-structure-namespace-and-schemas.md     |
 | ADR-013 | User-Scoped Feeds — Org-Only RLS Now, User Dimension Denormalized | data-storage, multi-tenancy, data-access  | Accepted | docs/context/adr/ADR-013-user-scoped-feeds-org-rls.md               |
+| ADR-014 | Credential Encryption at Rest — App-Side AES-256-GCM              | data-storage, infrastructure              | Accepted | docs/context/adr/ADR-014-credential-encryption-at-rest.md           |
 
 ## Domain Tags
 

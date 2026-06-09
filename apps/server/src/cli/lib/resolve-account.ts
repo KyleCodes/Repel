@@ -3,7 +3,7 @@ import { accountsService } from '../../features/accounts/service.ts';
 import type { GetProviderAccountResult } from '../../features/accounts/views/get-provider-account.ts';
 import { AccountTokenSchema } from '../accounts/schemas/index.ts';
 
-// Resolves a `<account>` CLI token to exactly one provider-account row.
+// Resolves a `<account>` CLI token to exactly one provider account.
 //
 // Classification (first match wins):
 //   1. a uuid (the configuration id we assign) → look up by id.
@@ -18,50 +18,48 @@ import { AccountTokenSchema } from '../accounts/schemas/index.ts';
 
 export type ResolveAccountContext = { orgId: string };
 
-// The full provider_account row. Both the by-id view and the by-ref view
-// project the same columns, so one alias covers both lookup paths.
-export type AccountRow = GetProviderAccountResult;
-
 function isProviderSlug(value: string): value is ProviderSlug {
   return Object.values(Provider).includes(value as ProviderSlug);
 }
 
 // Renders one candidate for an ambiguity error.
-function describe(row: AccountRow): string {
-  return `${row.id} (alias=${row.alias ?? '-'}, ${row.provider}:${row.externalAccountId})`;
+function describe(account: GetProviderAccountResult): string {
+  return `${account.id} (alias=${account.alias ?? '-'}, ${account.provider}:${account.externalAccountId})`;
 }
 
 export async function resolveAccount(
   token: string,
   ctx: ResolveAccountContext
-): Promise<AccountRow> {
+): Promise<GetProviderAccountResult> {
   // 1. uuid → by id.
   if (AccountTokenSchema.safeParse(token).success) {
-    const row = await accountsService.getProviderAccount({
+    const providerAccount = await accountsService.getProviderAccount({
       orgId: ctx.orgId,
-      id: token,
+      providerAccount: { id: token },
     });
-    if (!row) {
+    if (!providerAccount) {
       throw new Error(
         `account not found: no provider account with id ${token}`
       );
     }
-    return row;
+    return providerAccount;
   }
 
   // 2/3. provider:ext when the prefix is a known provider, else alias.
   const colon = token.indexOf(':');
-  let matches: AccountRow[];
+  let matches: GetProviderAccountResult[];
   if (colon > 0 && isProviderSlug(token.slice(0, colon))) {
     matches = await accountsService.findProviderAccountsByRef({
       orgId: ctx.orgId,
-      provider: token.slice(0, colon) as ProviderSlug,
-      externalAccountId: token.slice(colon + 1),
+      providerAccount: {
+        provider: token.slice(0, colon) as ProviderSlug,
+        externalAccountId: token.slice(colon + 1),
+      },
     });
   } else {
     matches = await accountsService.findProviderAccountsByRef({
       orgId: ctx.orgId,
-      alias: token,
+      providerAccount: { alias: token },
     });
   }
 

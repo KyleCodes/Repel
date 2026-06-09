@@ -48,9 +48,8 @@ export async function runBootstrap(input: BootstrapInput): Promise<void> {
   }
 
   const { org, user } = await accountsService.bootstrap({
-    orgName: input.orgName,
-    userEmail: input.email,
-    userName: input.name,
+    org: { name: input.orgName },
+    user: { email: input.email, name: input.name ?? null },
   });
 
   console.log('Created org:');

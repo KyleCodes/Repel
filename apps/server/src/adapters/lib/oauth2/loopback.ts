@@ -5,15 +5,18 @@ import {
   createServer,
 } from 'node:http';
 import { platform } from 'node:os';
+import type { HttpDeps } from '../../../lib/http/client.ts';
+import type {
+  ProviderAuth,
+  ProviderAuthContext,
+  ProviderAuthorization,
+} from '../../types.ts';
 import {
   OAuth2DeniedError,
   OAuth2Error,
   OAuth2StateMismatchError,
   OAuth2TimeoutError,
 } from './error.ts';
-import { buildAuthUrl } from './flow.ts';
-import { generatePkce, generateState } from './pkce.ts';
-import type { OAuth2Config } from './types.ts';
 
 export const LOOPBACK_TIMEOUT_MS = 120_000;
 
@@ -70,102 +73,111 @@ const SUCCESS_HTML =
 const FAILURE_HTML =
   '<!doctype html><meta charset="utf-8"><title>Authorization failed</title><p>Authorization failed. Return to your terminal for details.</p>';
 
-// The impure half: bind an ephemeral loopback listener, open the browser, await
-// the redirect, validate state, and resolve with the code + verifier +
-// redirectUri. The redirectUri is derived once from the bound port and threaded
-// out so the caller's token exchange byte-matches the auth URL. Always closes
-// the server and clears the timer.
-export function runLoopbackFlow(args: {
-  config: Omit<OAuth2Config, 'redirectUri'>;
-  pkce?: { verifier: string; challenge: string };
-  state?: string;
-  openBrowser?: (url: string) => void | Promise<void>;
-  timeoutMs?: number;
-}): Promise<{ code: string; verifier: string; redirectUri: string }> {
-  const {
-    config,
-    pkce = generatePkce(),
-    state = generateState(),
-    openBrowser = realOpenBrowser,
-    timeoutMs = LOOPBACK_TIMEOUT_MS,
-  } = args;
+// A bound loopback listener awaiting a single OAuth redirect. `redirectUri` is
+// derived from the ephemeral port and is the URI handed to both authorize and
+// exchange. `setExpectedState` arms the state check before the browser opens (a
+// redirect can only arrive after that). `awaitRedirect` resolves with the parsed
+// result of the first request and never again. `close` is idempotent.
+interface LoopbackListener {
+  readonly redirectUri: string;
+  setExpectedState(state: string): void;
+  readonly awaitRedirect: Promise<RedirectResult>;
+  close(): void;
+}
 
+// Bind an ephemeral loopback server and resolve once it is listening. The
+// request handler parses the first redirect, replies with a terminal HTML page,
+// and settles awaitRedirect. Rejects if the port cannot be bound.
+function bindLoopbackListener(): Promise<LoopbackListener> {
   return new Promise(function (resolve, reject) {
     const server = createServer();
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let closed = false;
+    let expectedState = '';
 
-    function finish(fn: () => void): void {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
+    function close(): void {
+      if (closed) return;
+      closed = true;
       server.close();
-      fn();
     }
+
+    let onRedirect: (result: RedirectResult) => void;
+    const awaitRedirect = new Promise<RedirectResult>(function (res) {
+      onRedirect = res;
+    });
 
     server.on('request', function (req: IncomingMessage, res: ServerResponse) {
       const result = handleRedirect({
         url: req.url ?? '/',
-        expectedState: state,
+        expectedState,
       });
       res.writeHead(result.ok ? 200 : 400, { 'content-type': 'text/html' });
       res.end(result.ok ? SUCCESS_HTML : FAILURE_HTML);
-
-      if (result.ok) {
-        finish(function () {
-          resolve({
-            code: result.code,
-            verifier: pkce.verifier,
-            redirectUri,
-          });
-        });
-        return;
-      }
-      finish(function () {
-        reject(redirectError(result));
-      });
+      onRedirect(result);
     });
 
     server.on('error', function (err: Error) {
-      finish(function () {
-        reject(new OAuth2Error(`loopback server failed: ${err.message}`));
-      });
+      close();
+      reject(new OAuth2Error(`loopback server failed: ${err.message}`));
     });
 
-    let redirectUri = '';
     server.listen(0, '127.0.0.1', function () {
       const address = server.address();
       if (address === null || typeof address === 'string') {
-        finish(function () {
-          reject(new OAuth2Error('failed to bind loopback port'));
-        });
+        close();
+        reject(new OAuth2Error('failed to bind loopback port'));
         return;
       }
-      redirectUri = `http://127.0.0.1:${address.port}/`;
-      timer = setTimeout(function () {
-        finish(function () {
-          reject(new OAuth2TimeoutError('timed out waiting for authorization'));
-        });
-      }, timeoutMs);
-
-      const url = buildAuthUrl({
-        config: { ...config, redirectUri },
-        state,
-        challenge: pkce.challenge,
-      });
-      void Promise.resolve(openBrowser(url)).catch(function (err: unknown) {
-        finish(function () {
-          reject(
-            new OAuth2Error(
-              `failed to open browser: ${err instanceof Error ? err.message : String(err)}`
-            )
-          );
-        });
+      resolve({
+        redirectUri: `http://127.0.0.1:${address.port}/`,
+        setExpectedState(state: string): void {
+          expectedState = state;
+        },
+        awaitRedirect,
+        close,
       });
     });
   });
 }
 
+// Race a promise against a timeout, clearing the timer on settle either way.
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  onTimeout: () => Error
+): Promise<T> {
+  return new Promise<T>(function (resolve, reject) {
+    const timer = setTimeout(function () {
+      reject(onTimeout());
+    }, ms);
+    promise.then(
+      function (value) {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      function (err: unknown) {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+// Open the browser, mapping any failure to an OAuth2Error. Accepts sync or async
+// openers (the real one is sync; tests inject async).
+async function openBrowserOrThrow(
+  openBrowser: (url: string) => void | Promise<void>,
+  url: string
+): Promise<void> {
+  try {
+    await openBrowser(url);
+  } catch (err: unknown) {
+    throw new OAuth2Error(
+      `failed to open browser: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+// Map a failed redirect parse to the corresponding OAuth2 error.
 function redirectError(
   result: Extract<RedirectResult, { ok: false }>
 ): OAuth2Error {
@@ -178,4 +190,59 @@ function redirectError(
     );
   }
   return new OAuth2Error('redirect carried no authorization code');
+}
+
+// Drive an interactive OAuth2 authorization-code flow over a loopback listener,
+// generic over any oauth2 adapter. Bind an ephemeral port, ask the adapter to
+// build the consent URL (authorize), open the browser, await the single redirect
+// under a timeout, validate it, then hand the code back to the adapter (exchange)
+// for its ProviderAuthorization. The redirectUri is derived once and threaded
+// into both authorize and exchange so the token exchange byte-matches the consent
+// URL. The listener is always closed (finally), on every path.
+export async function runLoopbackFlow(
+  auth: Extract<ProviderAuth, { method: 'oauth2' }>,
+  ctx: ProviderAuthContext,
+  deps?: {
+    openBrowser?: (url: string) => void | Promise<void>;
+    timeoutMs?: number;
+    http?: HttpDeps;
+  }
+): Promise<ProviderAuthorization> {
+  const openBrowser = deps?.openBrowser ?? realOpenBrowser;
+  const timeoutMs = deps?.timeoutMs ?? LOOPBACK_TIMEOUT_MS;
+
+  const listener = await bindLoopbackListener();
+  try {
+    const { authUrl, state, pkceVerifier } = await auth.authorize({
+      ...ctx,
+      redirectUri: listener.redirectUri,
+    });
+    // Arm the state check before the browser opens — a redirect can only arrive
+    // after this point.
+    listener.setExpectedState(state);
+
+    await openBrowserOrThrow(openBrowser, authUrl);
+
+    const result = await withTimeout(
+      listener.awaitRedirect,
+      timeoutMs,
+      () => new OAuth2TimeoutError('timed out waiting for authorization')
+    );
+    if (!result.ok) {
+      throw redirectError(result);
+    }
+
+    return await auth.exchange(
+      {
+        code: result.code,
+        state,
+        expectedState: state,
+        pkceVerifier,
+        redirectUri: listener.redirectUri,
+      },
+      deps?.http
+    );
+  } finally {
+    listener.close();
+  }
 }

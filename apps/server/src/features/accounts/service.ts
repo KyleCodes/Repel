@@ -1,9 +1,21 @@
+import { DBUniqueViolationError } from '../../infra/db/error.ts';
 import { runInOrgTx, runInTx } from '../../infra/db/tx.ts';
 import {
+  DuplicateProviderAccountError,
+  OrgNotFoundError,
   ProviderAccountNotFoundError,
   UserAlreadyExistsError,
+  UserNotFoundError,
 } from './error.ts';
-import { type BootstrapResult, bootstrap } from './mutations/bootstrap.ts';
+import {
+  type AddProviderAccountInput,
+  addProviderAccount,
+} from './mutations/add-provider-account.ts';
+import {
+  type BootstrapInput,
+  type BootstrapResult,
+  bootstrap,
+} from './mutations/bootstrap.ts';
 import {
   type DeactivateProviderAccountInput,
   deactivateProviderAccount,
@@ -38,28 +50,20 @@ import { listUsersInOrg } from './views/list-users-in-org.ts';
 // public input type. The view/flow inner function never sees `orgId` — it
 // relies on RLS, scoped at SET LOCAL by the decorator.
 
-export type BootstrapInput = {
-  orgName: string;
-  userEmail: string;
-  userName?: string;
-};
-
 export const accountsService = {
   bootstrap: runInTx(async function (
     trx,
     input: BootstrapInput
   ): Promise<BootstrapResult> {
-    const existing = await findUserByEmail(trx, { email: input.userEmail });
+    const existing = await findUserByEmail(trx, {
+      user: { email: input.user.email },
+    });
     if (existing) {
       throw new UserAlreadyExistsError(
-        `already bootstrapped — user ${input.userEmail} exists in org ${existing.orgId}`
+        `already bootstrapped — user ${input.user.email} exists in org ${existing.orgId}`
       );
     }
-    return bootstrap(trx, {
-      orgName: input.orgName,
-      userEmail: input.userEmail,
-      userName: input.userName ?? null,
-    });
+    return bootstrap(trx, input);
   }),
 
   findUserByEmail: runInTx(async function (trx, input: FindUserByEmailInput) {
@@ -67,15 +71,15 @@ export const accountsService = {
   }),
 
   getOrgById: runInOrgTx(async function (trx, input: GetOrgByIdInput) {
-    const row = await getOrgById(trx, input);
-    if (!row) throw new Error(`Org ${input.id} not found`);
-    return row;
+    const org = await getOrgById(trx, input);
+    if (!org) throw new OrgNotFoundError(`org ${input.org.id} not found`);
+    return org;
   }),
 
   getUserById: runInOrgTx(async function (trx, input: GetUserByIdInput) {
-    const row = await getUserById(trx, input);
-    if (!row) throw new Error(`User ${input.id} not found`);
-    return row;
+    const user = await getUserById(trx, input);
+    if (!user) throw new UserNotFoundError(`user ${input.user.id} not found`);
+    return user;
   }),
 
   listUsersInOrg: runInOrgTx(async function (trx) {
@@ -93,13 +97,13 @@ export const accountsService = {
     trx,
     input: GetProviderAccountInput
   ) {
-    const row = await getProviderAccount(trx, input);
-    if (!row) {
+    const providerAccount = await getProviderAccount(trx, input);
+    if (!providerAccount) {
       throw new ProviderAccountNotFoundError(
-        `provider account ${input.id} not found`
+        `provider account ${input.providerAccount.id} not found`
       );
     }
-    return row;
+    return providerAccount;
   }),
 
   findProviderAccountsByRef: runInOrgTx(async function (
@@ -109,16 +113,32 @@ export const accountsService = {
     return findProviderAccountsByRef(trx, input);
   }),
 
+  addProviderAccount: runInOrgTx(async function (
+    trx,
+    input: AddProviderAccountInput
+  ) {
+    try {
+      return await addProviderAccount(trx, input);
+    } catch (e) {
+      if (e instanceof DBUniqueViolationError) {
+        throw new DuplicateProviderAccountError(
+          `provider account for ${input.providerAccount.provider}:${input.providerAccount.externalAccountId} already exists`
+        );
+      }
+      throw e;
+    }
+  }),
+
   deactivateProviderAccount: runInOrgTx(async function (
     trx,
     input: DeactivateProviderAccountInput
   ) {
-    const row = await deactivateProviderAccount(trx, input);
-    if (!row) {
+    const providerAccount = await deactivateProviderAccount(trx, input);
+    if (!providerAccount) {
       throw new ProviderAccountNotFoundError(
-        `provider account ${input.id} not found`
+        `provider account ${input.providerAccount.id} not found`
       );
     }
-    return row;
+    return providerAccount;
   }),
 };

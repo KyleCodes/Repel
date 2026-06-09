@@ -1,5 +1,5 @@
-import type { InferResult } from 'kysely';
-import type { ProviderSlug } from '@repel/shared';
+import type { InferResult, Selectable } from 'kysely';
+import type { ProviderAccount } from '../../../infra/db/generated.ts';
 import type { Tx } from '../../../infra/db/types.ts';
 
 // Resolves a provider-account reference. A reference is one of two shapes:
@@ -9,11 +9,15 @@ import type { Tx } from '../../../infra/db/types.ts';
 // Returns an array (never throws on 0/many) — the CLI resolver decides how
 // to handle no-match and ambiguity. RLS scopes the query to the current org.
 
-export type FindProviderAccountsByAliasInput = { alias: string };
+export type FindProviderAccountsByAliasInput = {
+  providerAccount: Pick<Selectable<ProviderAccount>, 'alias'>;
+};
 
 export type FindProviderAccountsByProviderRefInput = {
-  provider: ProviderSlug;
-  externalAccountId: string;
+  providerAccount: Pick<
+    Selectable<ProviderAccount>,
+    'provider' | 'externalAccountId'
+  >;
 };
 
 export type FindProviderAccountsByRefInput =
@@ -25,12 +29,12 @@ const buildFindProviderAccountsByRef = (
   input: FindProviderAccountsByRefInput
 ) => {
   const base = trx.selectFrom('providerAccount').selectAll();
-  if ('alias' in input) {
-    return base.where('alias', '=', input.alias);
+  if ('alias' in input.providerAccount) {
+    return base.where('alias', '=', input.providerAccount.alias);
   }
   return base
-    .where('provider', '=', input.provider)
-    .where('externalAccountId', '=', input.externalAccountId);
+    .where('provider', '=', input.providerAccount.provider)
+    .where('externalAccountId', '=', input.providerAccount.externalAccountId);
 };
 
 export type FindProviderAccountsByRefResult = InferResult<

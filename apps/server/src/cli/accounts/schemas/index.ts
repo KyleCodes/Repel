@@ -1,5 +1,14 @@
 import { z } from 'zod';
-import { Provider } from '@repel/shared';
+import { Provider, type ProviderSlug } from '@repel/shared';
+
+// The Provider enum values as a non-empty tuple typed to ProviderSlug, so
+// z.enum infers the ProviderSlug union (not bare string). This is the single
+// boundary cast — `Object.values` widens to string[], and the tuple form is
+// what z.enum needs. Downstream consumers get ProviderSlug with no further cast.
+const PROVIDER_VALUES = Object.values(Provider) as [
+  ProviderSlug,
+  ...ProviderSlug[],
+];
 
 // Convention: zod schemas are exported as `*InputSchema`; the inferred TS type
 // drops `Schema` and is exported as `*Input`. `AccountListInputSchema` (the
@@ -28,12 +37,13 @@ export const AccountRmInputSchema = z.object({
 export type AccountRmInput = z.infer<typeof AccountRmInputSchema>;
 
 // Provider slug values are sourced from @repel/shared — the single source of
-// truth for the enum. `add` is stubbed (the token flow lands in REP-22) but
-// the provider is still validated here so the stub fails fast on a typo.
+// truth for the enum. `--alias` is an optional human label for the account; an
+// empty string is rejected so `--alias ''` fails fast rather than storing blank.
 export const AccountAddInputSchema = z.object({
   org: z.string().optional(),
   user: z.string().optional(),
-  provider: z.enum(Object.values(Provider) as [string, ...string[]]),
+  provider: z.enum(PROVIDER_VALUES),
+  alias: z.string().min(1).optional(),
 });
 export type AccountAddInput = z.infer<typeof AccountAddInputSchema>;
 

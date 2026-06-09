@@ -18,6 +18,9 @@ apps/web/vite.config.d.ts.map
 # Environment
 .env
 .env.local
+# Shared dev secrets — symlinked per worktree, distributed privately, never
+# committed. The committed template is apps/server/.env.development.example.
+.env.development
 
 # Data
 data/pg/

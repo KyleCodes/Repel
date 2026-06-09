@@ -2,17 +2,20 @@
 // an external provider (Gmail, iCloud, …) and the application's normalized
 // message shape. Concrete adapters live in adapters/<provider>/; this file is
 // only the shared contract.
-import type { ChannelSlug, ProviderSlug } from '@repel/shared';
+import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/shared';
 import type {
   Message,
   MessageParticipant,
   MessageRaw,
   Thread,
 } from '../infra/db/generated.ts';
+import type { HttpDeps } from '../lib/http/client.ts';
 import type { AdapterError } from './error.ts';
 
 // What a provider can do, declared once per adapter as a const. Per-account
-// variance (e.g. scope-driven send/receive toggles) isn't modeled yet.
+// variance (e.g. scope-driven send/receive toggles) isn't modeled yet. The auth
+// method an adapter uses is discoverable via `auth.method`, so it is not
+// duplicated here.
 export interface Capabilities {
   readonly channel: ChannelSlug;
   readonly canSend: boolean;
@@ -29,6 +32,58 @@ export interface ProviderAuthContext {
   readonly userId: string;
 }
 
+// The two-phase OAuth 2.1 primitives, named for the spec phases: `authorize`
+// builds the authorization request (the consent URL + state + PKCE verifier);
+// `exchange` is the token request (validate the echoed state, exchange the code,
+// read the account identity). The loopback orchestration that bridges them lives
+// once in adapters/lib/oauth2 as a generic free function.
+//
+// `redirectUri` is threaded through both: it must byte-match between the consent
+// URL and the token exchange, and is only known after the loopback binds its
+// ephemeral port — so `authorize` receives it and `exchange` carries it.
+export interface OAuthAuthorize {
+  readonly authUrl: string;
+  readonly state: string;
+  readonly pkceVerifier: string;
+}
+
+export interface OAuthExchangeInput {
+  readonly code: string;
+  readonly state: string;
+  readonly expectedState: string;
+  readonly pkceVerifier: string;
+  readonly redirectUri: string;
+}
+
+export interface OAuth2Auth {
+  readonly method: 'oauth2';
+  authorize(
+    ctx: ProviderAuthContext & { redirectUri: string }
+  ): Promise<OAuthAuthorize>;
+  exchange(
+    input: OAuthExchangeInput,
+    deps?: HttpDeps
+  ): Promise<ProviderAuthorization>;
+}
+
+// Single-step auth methods. Unlike OAuth's two-phase redirect dance, an app
+// password or an API key is collected and validated in one call. These are
+// type stubs for the union — no adapter implements them yet.
+export interface AppPasswordAuth {
+  readonly method: 'app_password';
+  authorize(ctx: ProviderAuthContext): Promise<ProviderAuthorization>;
+}
+
+export interface ApiKeyAuth {
+  readonly method: 'api_key';
+  authorize(ctx: ProviderAuthContext): Promise<ProviderAuthorization>;
+}
+
+// The auth surface is a method-discriminated union (DR-REP-27-1) keyed on
+// AuthMethodSlug. Only oauth2 is implemented today; the password / api-key
+// members are stubs. Callers narrow on `auth.method` before composing a flow.
+export type ProviderAuth = OAuth2Auth | AppPasswordAuth | ApiKeyAuth;
+
 // The result of a successful authorization, persisted on a provider_account.
 // `credentials` is opaque to the platform (an OAuth token set, an app password,
 // an api key); the platform stores it encrypted and hands it back to
@@ -36,7 +91,7 @@ export interface ProviderAuthContext {
 // platform never refreshes directly.
 export interface ProviderAuthorization {
   readonly externalAccountId: string;
-  readonly authMethod: 'oauth2' | 'app_password' | 'api_key';
+  readonly authMethod: AuthMethodSlug;
   readonly credentials: unknown;
 }
 
@@ -166,12 +221,7 @@ export type AdapterEvent =
 export interface IProviderAdapter {
   readonly capabilities: Capabilities;
 
-  // Interactive flow that produces fresh credentials to persist on a
-  // provider_account. The adapter owns the UX (browser loopback for OAuth, a
-  // password prompt, a paste-token flow).
-  promptUserAuthorization(
-    input: ProviderAuthContext
-  ): Promise<ProviderAuthorization>;
+  readonly auth: ProviderAuth;
 
   // Run a sync as a stream of events. Reads stored credentials and refreshes
   // them transparently; throws only when a refresh fails terminally.

@@ -7,7 +7,7 @@ import type {
   NormalizedMessage,
   RawMessage,
 } from '../types.ts';
-import { promptUserAuthorization } from './auth.ts';
+import { gmailAuth } from './auth.ts';
 import { send } from './egress/send.ts';
 import { GmailNotImplementedError } from './error.ts';
 
@@ -31,7 +31,7 @@ function normalizeStub(_raw: RawMessage): NormalizedMessage {
 
 export const gmailAdapter: IProviderAdapter = {
   capabilities: gmailCapabilities,
-  promptUserAuthorization,
+  auth: gmailAuth,
   ingest: ingestStub,
   send,
   normalize: normalizeStub,

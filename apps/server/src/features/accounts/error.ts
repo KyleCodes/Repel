@@ -18,3 +18,21 @@ export class ProviderAccountNotFoundError extends AccountsServiceError {
     super(message);
   }
 }
+
+export class OrgNotFoundError extends AccountsServiceError {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class UserNotFoundError extends AccountsServiceError {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class DuplicateProviderAccountError extends AccountsServiceError {
+  constructor(message: string) {
+    super(message);
+  }
+}

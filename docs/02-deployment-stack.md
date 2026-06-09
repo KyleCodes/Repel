@@ -101,10 +101,10 @@ A full OAuth flow with in-app consent screens is deferred until multi-user suppo
 
 ### Credential Storage
 
-OAuth tokens and app-specific passwords are stored in `connected_account.credentials_encrypted` as a `bytea` column.
+OAuth tokens and app-specific passwords are stored in `provider_account.credentials_encrypted` as a `bytea` column.
 
-- **Development**: plaintext JSON in the column. No encryption overhead during iteration.
-- **Production**: `pgp_sym_encrypt` via `pgcrypto` extension. Encryption key injected as `ENCRYPTION_KEY` env var.
+- Encryption is **application-side AES-256-GCM** (`lib/crypto/encryption.ts`), not DB-side `pgcrypto`. The app encrypts before the bytes reach Postgres, so the database only ever holds ciphertext and never sees the key — keeping a DB-only or backup leak non-catastrophic, and adding no external Postgres-extension dependency to the self-hosted image. The stored blob is `iv(12) || authTag(16) || ciphertext`; GCM makes it tamper-evident.
+- The 32-byte key is injected as the `ENCRYPTION_KEY` env var (hex-encoded), the same in every environment. Generate one with `repel db encryption generate-key`. There is no plaintext-in-development mode.
 
 The credential blob is a JSON object whose shape varies by `auth_method`:
 
