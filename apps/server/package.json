@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --build",
     "cli": "bun --env-file=.env.development --env-file=.env.local run src/cli/index.ts",
-    "cli:debug": "bun --inspect-brk --env-file=.env.development --env-file=.env.local run src/cli/index.ts",
+    "cli:debug": "bun run bin/cli-debug.ts",
     "dev": "bun --env-file=.env.development --env-file=.env.local run --watch src/main.ts",
     "start": "bun --env-file=.env.development --env-file=.env.local run src/main.ts",
     "typecheck": "tsc --build"
