@@ -1,35 +1,51 @@
 import { AuthMethod } from '@repel/shared';
-import { exchangeCode } from '../lib/oauth2/flow.ts';
-import { runLoopbackFlow } from '../lib/oauth2/loopback.ts';
-import type { ProviderAuthContext, ProviderAuthorization } from '../types.ts';
+import type { HttpDeps } from '../../lib/http/client.ts';
+import { OAuth2StateMismatchError } from '../lib/oauth2/error.ts';
+import { buildAuthUrl, exchangeCode } from '../lib/oauth2/flow.ts';
+import { generatePkce, generateState } from '../lib/oauth2/pkce.ts';
+import type {
+  OAuth2Auth,
+  OAuthAuthorize,
+  OAuthExchangeInput,
+} from '../types.ts';
 import { loadGmailOAuthConfig, withRedirectUri } from './oauth.ts';
 import { getGmailProfile } from './profile.ts';
 
-// Interactive OAuth: run the loopback consent flow, exchange the code for
-// tokens, then read the account address to use as the external account id.
-// loadGmailOAuthConfig returns the config without a redirect URI because the
-// URI is only known once the loopback listener binds an ephemeral port;
-// runLoopbackFlow derives it and hands it back, and withRedirectUri stamps it
-// onto the config so the token-exchange redirect_uri byte-matches the consent
-// URL's.
-export async function promptUserAuthorization(
-  _input: ProviderAuthContext
-): Promise<ProviderAuthorization> {
-  const baseConfig = loadGmailOAuthConfig();
+export const gmailAuth: OAuth2Auth = {
+  method: 'oauth2',
 
-  const { code, verifier, redirectUri } = await runLoopbackFlow({
-    config: baseConfig,
-  });
+  // Authorization request: build the consent URL with the bound redirect URI, a
+  // fresh PKCE pair, and a state nonce. The verifier is returned to the caller
+  // and never placed in the URL (only the challenge is sent to Google).
+  async authorize(ctx): Promise<OAuthAuthorize> {
+    const config = withRedirectUri(loadGmailOAuthConfig(), ctx.redirectUri);
+    const { verifier, challenge } = generatePkce();
+    const state = generateState();
+    const authUrl = buildAuthUrl({ config, state, challenge });
+    return { authUrl, state, pkceVerifier: verifier };
+  },
 
-  const config = withRedirectUri(baseConfig, redirectUri);
-  const credentials = await exchangeCode({ config, code, verifier });
-  const profile = await getGmailProfile({
-    accessToken: credentials.accessToken,
-  });
-
-  return {
-    externalAccountId: profile.emailAddress.toLowerCase(),
-    authMethod: AuthMethod.oauth2,
-    credentials,
-  };
-}
+  // Token request: validate the echoed state (a CSRF guard), exchange the code
+  // for tokens, then read the authenticated account's email as the external
+  // account id. `deps` is threaded to both network calls so tests can inject a
+  // fetch stub.
+  async exchange(input: OAuthExchangeInput, deps?: HttpDeps) {
+    if (input.state !== input.expectedState) {
+      throw new OAuth2StateMismatchError('state nonce did not match');
+    }
+    const config = withRedirectUri(loadGmailOAuthConfig(), input.redirectUri);
+    const credentials = await exchangeCode(
+      { config, code: input.code, verifier: input.pkceVerifier },
+      deps
+    );
+    const profile = await getGmailProfile(
+      { accessToken: credentials.accessToken },
+      deps
+    );
+    return {
+      externalAccountId: profile.emailAddress.toLowerCase(),
+      authMethod: AuthMethod.oauth2,
+      credentials,
+    };
+  },
+};

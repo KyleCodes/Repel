@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc --build",
-    "cli": "bun run src/cli/index.ts",
-    "dev": "bun run --watch src/main.ts",
-    "start": "bun run src/main.ts",
+    "cli": "bun --env-file=.env.development --env-file=.env.local run src/cli/index.ts",
+    "cli:debug": "bun --inspect-brk --env-file=.env.development --env-file=.env.local run src/cli/index.ts",
+    "dev": "bun --env-file=.env.development --env-file=.env.local run --watch src/main.ts",
+    "start": "bun --env-file=.env.development --env-file=.env.local run src/main.ts",
     "typecheck": "tsc --build"
   },
   "dependencies": {

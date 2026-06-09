@@ -115,4 +115,21 @@ describe('AccountAddInputSchema', function () {
   test('rejects a missing provider', function () {
     expect(AccountAddInputSchema.safeParse({}).success).toBe(false);
   });
+
+  test('accepts an optional alias', function () {
+    expect(
+      AccountAddInputSchema.parse({ provider: 'gmail', alias: 'work' })
+    ).toEqual({ provider: 'gmail', alias: 'work' });
+  });
+
+  test('parses alias as undefined when omitted', function () {
+    const parsed = AccountAddInputSchema.parse({ provider: 'gmail' });
+    expect(parsed.alias).toBeUndefined();
+  });
+
+  test('rejects an empty alias (min 1)', function () {
+    expect(
+      AccountAddInputSchema.safeParse({ provider: 'gmail', alias: '' }).success
+    ).toBe(false);
+  });
 });

@@ -1,10 +1,20 @@
 import type { Command } from 'commander';
-import { accountsService } from '../../features/accounts/service.ts';
+import {
+  resolveProviderAdapter as defaultResolveProviderAdapter,
+  runLoopbackFlow as defaultRunLoopbackFlow,
+} from '../../adapters/index.ts';
+import { accountsService as defaultAccountsService } from '../../features/accounts/service.ts';
+import {
+  decrypt,
+  encrypt,
+  loadEncryptionKey,
+} from '../../lib/crypto/encryption.ts';
 import { confirm } from '../lib/confirm.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
 import { resolveAccount } from '../lib/resolve-account.ts';
 import { resolveOrgId } from '../lib/resolve-org.ts';
 import { resolveUserId } from '../lib/resolve-user.ts';
+import { UnsupportedAuthMethodError } from './error.ts';
 import {
   type AccountAddInput,
   AccountAddInputSchema,
@@ -20,8 +30,8 @@ import {
 // a user links to an org. Distinct from `orgs`, which owns org + user
 // lifecycle (the `bootstrap` verb lives there).
 //
-// Today `list`, `show`, `rm`, and `add` are registered (`add` is stubbed —
-// the token flow lands in REP-22).
+// Today `list`, `show`, `rm`, and `add` are registered; `add` runs the real
+// interactive OAuth flow.
 
 export function registerAccountsCommands(program: Command): void {
   const accounts = program
@@ -72,17 +82,19 @@ export function registerAccountsCommands(program: Command): void {
 
   accounts
     .command('add <provider>')
-    .description('Add a provider account (stubbed — token flow is REP-22)')
+    .description('Add a provider account via interactive OAuth')
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
+    .option('--alias <name>', 'human label for the account')
     .action(async function (
       provider: string,
-      opts: { org?: string; user?: string }
+      opts: { org?: string; user?: string; alias?: string }
     ) {
       const input = parseOrExit(AccountAddInputSchema, {
         org: opts.org,
         user: opts.user,
         provider,
+        alias: opts.alias,
       });
       await runAccountsAdd(input);
     });
@@ -94,21 +106,29 @@ export function registerAccountsCommands(program: Command): void {
 export async function runAccountsList(input: AccountListInput): Promise<void> {
   const orgId = resolveOrgId(input.org);
   const userId = resolveUserId(input.user);
-  const rows = await accountsService.listProviderAccounts({ orgId, userId });
-  process.stdout.write(JSON.stringify(rows) + '\n');
+  const accounts = await defaultAccountsService.listProviderAccounts({
+    orgId,
+    providerAccount: { userId },
+  });
+  process.stdout.write(JSON.stringify(accounts) + '\n');
 }
 
 export async function runAccountsShow(input: AccountShowInput): Promise<void> {
   const orgId = resolveOrgId(input.org);
-  const row = await resolveAccount(input.account, { orgId });
-  // Replace the raw credential bytes with their base64 string (or null).
-  // No other masking — the operator running the CLI is already trusted.
-  const credentials = row.credentialsEncrypted;
-  const out = {
-    ...row,
-    credentialsEncrypted:
-      credentials === null ? null : credentials.toString('base64'),
-  };
+  const account = await resolveAccount(input.account, { orgId });
+  // Decrypt the stored credentials for display. The operator running the CLI is
+  // already trusted, so this is an inspection aid, not a leak — and a row that
+  // won't decrypt (wrong key / tampered) throws through the CLI error boundary.
+  // The raw `credentialsEncrypted` bytes are dropped from the output in favour
+  // of the decrypted `credentials` object.
+  const { credentialsEncrypted, ...rest } = account;
+  const credentials =
+    credentialsEncrypted === null
+      ? null
+      : JSON.parse(
+          decrypt(loadEncryptionKey(), credentialsEncrypted).toString('utf8')
+        );
+  const out = { ...rest, credentials };
   process.stdout.write(JSON.stringify(out) + '\n');
 }
 
@@ -123,16 +143,84 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
       return;
     }
   }
-  await accountsService.deactivateProviderAccount({ orgId, id: account.id });
+  await defaultAccountsService.deactivateProviderAccount({
+    orgId,
+    providerAccount: { id: account.id },
+  });
   console.error(`accounts rm: deactivated ${account.id}`);
 }
 
-export async function runAccountsAdd(input: AccountAddInput): Promise<void> {
-  // Resolve scope so a misconfigured invocation fails the same way the real
-  // verb will — but the OAuth/token flow itself is out of scope (REP-22).
-  resolveOrgId(input.org);
-  resolveUserId(input.user);
-  throw new Error(
-    `token flow for ${input.provider} not yet implemented — see REP-22`
+// Injectable seams so the OAuth + persistence path can be unit-tested without
+// touching a real browser, network, or database. The two adapter functions and
+// the service are module-imported, so a fetch/spy seam can't reach them cleanly
+// (and mock.module mutates the registry process-globally); an optional deps
+// param is the contained, justified seam. Production calls pass nothing.
+export interface AccountsAddDeps {
+  resolveProviderAdapter?: typeof defaultResolveProviderAdapter;
+  runLoopbackFlow?: typeof defaultRunLoopbackFlow;
+  accountsService?: Pick<typeof defaultAccountsService, 'addProviderAccount'>;
+}
+
+export async function runAccountsAdd(
+  input: AccountAddInput,
+  deps: AccountsAddDeps = {}
+): Promise<void> {
+  const resolveProviderAdapter =
+    deps.resolveProviderAdapter ?? defaultResolveProviderAdapter;
+  const runLoopbackFlow = deps.runLoopbackFlow ?? defaultRunLoopbackFlow;
+  const accountsService = deps.accountsService ?? defaultAccountsService;
+
+  // Fail-fast on scope before any OAuth work: a missing org/user should never
+  // open a browser. `input.provider` is already ProviderSlug (the schema's enum).
+  const orgId = resolveOrgId(input.org);
+  const userId = resolveUserId(input.user);
+  const { provider } = input;
+
+  const adapter = resolveProviderAdapter(provider);
+  if (adapter.auth.method !== 'oauth2') {
+    throw new UnsupportedAuthMethodError(
+      `provider ${provider} uses ${adapter.auth.method} auth; only oauth2 is supported by accounts add`
+    );
+  }
+
+  // Run interactive OAuth FIRST, then insert. Awaiting the authorization before
+  // the insert means a timeout, denial, or cancellation rejects with no row
+  // written — there is nothing to clean up.
+  const authorization = await runLoopbackFlow(adapter.auth, {
+    provider,
+    orgId,
+    userId,
+  });
+
+  // Encrypt the credentials before they reach the DB (AES-256-GCM, key from
+  // ENCRYPTION_KEY). The credentials_encrypted column holds ciphertext, never
+  // plaintext. A missing/invalid key throws here, after OAuth but before the
+  // insert — nothing is written.
+  const credentialsEncrypted = encrypt(
+    loadEncryptionKey(),
+    Buffer.from(JSON.stringify(authorization.credentials), 'utf8')
+  );
+
+  const account = await accountsService.addProviderAccount({
+    orgId,
+    providerAccount: {
+      orgId,
+      userId,
+      provider,
+      channel: adapter.capabilities.channel,
+      authMethod: authorization.authMethod,
+      externalAccountId: authorization.externalAccountId,
+      alias: input.alias,
+      credentialsEncrypted,
+    },
+  });
+
+  // Print only non-secret identifiers — never the credentials.
+  process.stdout.write(
+    JSON.stringify({
+      id: account.id,
+      alias: account.alias,
+      externalAccountId: account.externalAccountId,
+    }) + '\n'
   );
 }

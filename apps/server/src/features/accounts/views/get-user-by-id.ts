@@ -1,14 +1,15 @@
-import type { InferResult } from 'kysely';
+import type { InferResult, Selectable } from 'kysely';
+import type { User } from '../../../infra/db/generated.ts';
 import type { Tx } from '../../../infra/db/types.ts';
 
-const buildFindUserById = (trx: Tx, input: { id: string }) =>
-  trx.selectFrom('user').selectAll().where('id', '=', input.id);
+const buildFindUserById = (trx: Tx, input: GetUserByIdInput) =>
+  trx.selectFrom('user').selectAll().where('id', '=', input.user.id);
 
 export type GetUserByIdResult = InferResult<
   ReturnType<typeof buildFindUserById>
 >[number];
 
-export type GetUserByIdInput = { id: string };
+export type GetUserByIdInput = { user: Pick<Selectable<User>, 'id'> };
 
 export async function getUserById(
   trx: Tx,

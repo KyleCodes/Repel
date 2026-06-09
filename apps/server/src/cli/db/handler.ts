@@ -12,6 +12,7 @@ import { migrationsService } from '../../infra/db/migrations-tracking/service.ts
 import { getOptionalEnvVar } from '../../lib/env.ts';
 import { confirm } from '../lib/confirm.ts';
 import { parseOrExit } from '../lib/parse-or-exit.ts';
+import { registerEncryptionCommands } from './encryption/handler.ts';
 import { runCodegen } from './lib/codegen.ts';
 import { runConnect } from './lib/connect.ts';
 import { readDatabaseUrlFromEnvLocal } from './lib/env-local.ts';
@@ -95,6 +96,7 @@ export function registerDbCommands(program: Command): void {
     });
 
   registerMigrationsCommands(db);
+  registerEncryptionCommands(db);
 
   db.command('status')
     .description(

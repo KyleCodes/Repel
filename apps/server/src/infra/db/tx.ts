@@ -1,7 +1,20 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'kysely';
+import { normalizeDbError } from './error.ts';
 import { getDb } from './runtime.ts';
 import type { Tx } from './types.ts';
+
+// Run a decorated operation, classifying any raw pg/Kysely error crossing the
+// tx boundary into the AppError hierarchy (DBError family for genuine DB faults,
+// existing AppErrors passed through). Applied on every fresh-open and ambient-
+// join path so "what a service catches is always an AppError" holds app-wide.
+async function withDbErrorClassification<R>(fn: () => Promise<R>): Promise<R> {
+  try {
+    return await fn();
+  } catch (err) {
+    throw normalizeDbError(err);
+  }
+}
 
 // Runtime context tracked per transaction. runInOrgTx/runInTx stash this on
 // the AsyncLocalStorage so nested service calls can detect an ambient tx
@@ -53,7 +66,7 @@ export function runInOrgTx<A, R>(
             `refusing to join as ${orgId}`
         );
       }
-      return fn(ambient.trx, input);
+      return withDbErrorClassification(() => fn(ambient.trx, input));
     }
     return getDb()
       .transaction()
@@ -62,7 +75,7 @@ export function runInOrgTx<A, R>(
           trx
         );
         return txStorage.run({ trx, orgId }, function () {
-          return fn(trx, input);
+          return withDbErrorClassification(() => fn(trx, input));
         });
       });
   };
@@ -83,13 +96,13 @@ export function runInTx<A, R>(
             '(would bypass RLS)'
         );
       }
-      return fn(ambient.trx, input);
+      return withDbErrorClassification(() => fn(ambient.trx, input));
     }
     return getDb()
       .transaction()
       .execute(async function (trx) {
         return txStorage.run({ trx, orgId: null }, function () {
-          return fn(trx, input);
+          return withDbErrorClassification(() => fn(trx, input));
         });
       });
   };

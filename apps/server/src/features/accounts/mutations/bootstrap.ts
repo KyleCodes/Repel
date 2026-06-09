@@ -1,5 +1,6 @@
-import type { InferResult } from 'kysely';
+import type { InferResult, Insertable } from 'kysely';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
+import type { Org, User } from '../../../infra/db/generated.ts';
 import type { Tx } from '../../../infra/db/types.ts';
 
 // Bootstrap mutation: create the first org and its admin user in one round trip.
@@ -14,13 +15,10 @@ import type { Tx } from '../../../infra/db/types.ts';
 // delivers string. Tracked at kysely-org/kysely#482. The service boundary
 // coerces with new Date() where it matters.
 
-const buildBootstrap = (
-  trx: Tx,
-  input: { orgName: string; userEmail: string; userName: string | null }
-) =>
+const buildBootstrap = (trx: Tx, input: BootstrapInput) =>
   trx
     .with('new_org', (qb) =>
-      qb.insertInto('org').values({ name: input.orgName }).returningAll()
+      qb.insertInto('org').values({ name: input.org.name }).returningAll()
     )
     .with('new_user', (qb) =>
       qb
@@ -31,8 +29,8 @@ const buildBootstrap = (
             .selectFrom('new_org')
             .select((eb2) => [
               'new_org.id as orgId',
-              eb2.val(input.userEmail).as('email'),
-              eb2.val(input.userName).as('name'),
+              eb2.val(input.user.email).as('email'),
+              eb2.val(input.user.name ?? null).as('name'),
               eb2.val<'admin'>('admin').as('role'),
             ])
         )
@@ -56,9 +54,8 @@ export type BootstrapResult = {
 };
 
 export type BootstrapInput = {
-  orgName: string;
-  userEmail: string;
-  userName: string | null;
+  org: Insertable<Org>;
+  user: Omit<Insertable<User>, 'orgId' | 'role'>;
 };
 
 export async function bootstrap(

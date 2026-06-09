@@ -1,18 +1,24 @@
-import type { InferResult } from 'kysely';
+import type { InferResult, Selectable } from 'kysely';
+import type { ProviderAccount } from '../../../infra/db/generated.ts';
 import type { Tx } from '../../../infra/db/types.ts';
 
 // Lookup a single provider account by id. RLS scopes the row to the current
 // org, so a cross-tenant id resolves to undefined rather than another org's
 // row.
 
-const buildGetProviderAccount = (trx: Tx, input: { id: string }) =>
-  trx.selectFrom('providerAccount').selectAll().where('id', '=', input.id);
+const buildGetProviderAccount = (trx: Tx, input: GetProviderAccountInput) =>
+  trx
+    .selectFrom('providerAccount')
+    .selectAll()
+    .where('id', '=', input.providerAccount.id);
 
 export type GetProviderAccountResult = InferResult<
   ReturnType<typeof buildGetProviderAccount>
 >[number];
 
-export type GetProviderAccountInput = { id: string };
+export type GetProviderAccountInput = {
+  providerAccount: Pick<Selectable<ProviderAccount>, 'id'>;
+};
 
 export async function getProviderAccount(
   trx: Tx,

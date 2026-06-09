@@ -38,6 +38,10 @@ describe('gmailCapabilities', function () {
     });
   });
 
+  test('auth method is oauth2', function () {
+    expect(gmailAdapter.auth.method).toBe('oauth2');
+  });
+
   test('canSend is false', function () {
     expect(gmailCapabilities.canSend).toBe(false);
   });
