@@ -115,16 +115,25 @@ export type ProviderCredentials = GmailCredentials;
 
 // Input to a sync. The runner reads provider_account.credentials_encrypted,
 // decrypts it (the adapter can't — the import barrier fences features/ off), and
-// passes the credentials in. `providerSlug` is a routing/logging tag; the
-// credential's own `provider` tag is what the adapter narrows on.
-export interface IngestInput {
-  readonly providerSlug: ProviderSlug;
+// passes the credentials in. `providerSlug` discriminates the union so each
+// adapter receives its own input member (and its own credentials shape) without
+// a cast — mirroring ProviderCredentials.
+interface IngestInputBase {
   readonly orgId: string;
   readonly userId: string;
   readonly providerAccountId: string;
   readonly spec: AdapterSyncSpec;
-  readonly credentials: ProviderCredentials;
 }
+
+export interface GmailIngestInput extends IngestInputBase {
+  readonly providerSlug: 'gmail';
+  readonly credentials: GmailCredentials;
+}
+
+// The union of per-provider sync inputs. Today only Gmail exists; widens as
+// adapters are added. The contract method IProviderAdapter.ingest accepts the
+// union; each concrete adapter is typed to its own member.
+export type IngestInput = GmailIngestInput;
 
 // Input to a single outbound send — one provider API call, no streaming.
 export interface SendInput {
@@ -211,11 +220,14 @@ export interface AdapterStartedEvent {
   readonly estimatedTotal?: number;
 }
 
-// Marks that the adapter refreshed credentials on use, so the runner can persist
-// the rotated token without the credential itself being exposed.
+// Marks whether the adapter refreshed credentials on use. When it did
+// (`refreshed: true`), `credentials` carries the rotated set so the runner can
+// persist it; when the stored token was still valid (`refreshed: false`),
+// `credentials` is absent (nothing changed).
 export interface AdapterAuthEvent {
   readonly type: 'auth';
   readonly refreshed: boolean;
+  readonly credentials?: ProviderCredentials;
 }
 
 export interface AdapterProgressEvent {

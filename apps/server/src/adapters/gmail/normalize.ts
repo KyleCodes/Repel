@@ -73,7 +73,9 @@ export function normalizeGmailMessage(raw: RawMessage): NormalizedMessage {
   };
 }
 
-// Depth-first walk filling body slots and collecting attachments.
+// Depth-first walk collecting attachments and filling the body slots. Body
+// precedence is FIRST-leaf-wins per mime type: each slot is written only while
+// still null, so a later leaf of the same type never overwrites an earlier one.
 function walk(
   part: GmailPart,
   body: { text: string | null; html: string | null },
@@ -89,6 +91,8 @@ function walk(
   }
   const data = part.body?.data;
   if (data === undefined) return;
+  // Fill only an empty slot — first leaf of each type wins, later ones are kept
+  // as raw payload but not promoted to the body.
   if (part.mimeType === 'text/plain' && body.text === null) {
     body.text = decodeBody(data);
   } else if (part.mimeType === 'text/html' && body.html === null) {
@@ -109,20 +113,20 @@ function isAttachment(part: GmailPart): boolean {
 }
 
 function toAttachment(part: GmailPart): NormalizedAttachment {
-  const disposition = header(part, 'content-disposition');
   return {
     filename: part.filename ?? '',
     contentType: part.mimeType ?? null,
     sizeBytes: part.body?.size ?? null,
     externalAttachmentId: part.body?.attachmentId ?? null,
     contentId: header(part, 'content-id'),
-    disposition: disposition === null ? null : dispositionKind(disposition),
+    disposition: dispositionKind(header(part, 'content-disposition')),
   };
 }
 
 // Reduce a Content-Disposition header to its kind (`attachment` / `inline`),
-// dropping params like `; filename="x"`.
-function dispositionKind(value: string): string {
+// dropping params like `; filename="x"`. Passes null through (no header).
+function dispositionKind(value: string | null): string | null {
+  if (value === null) return null;
   return value.split(';')[0]!.trim().toLowerCase();
 }
 

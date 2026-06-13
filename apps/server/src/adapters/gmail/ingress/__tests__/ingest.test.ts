@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { AuthExpiredError } from '../../../error.ts';
+import { AuthExpiredError, InvalidCredentialsError } from '../../../error.ts';
 import type { AdapterEvent, IngestInput } from '../../../types.ts';
 import {
   GmailAttachmentFetchError,
@@ -237,7 +237,7 @@ describe('ingest — auth failures', function () {
     await expect(collect(it)).rejects.toBeInstanceOf(AuthExpiredError);
   });
 
-  test('a missing refresh token throws AuthExpiredError before any fetch', async function () {
+  test('an expired token with no refresh token throws InvalidCredentialsError', async function () {
     const creds = {
       provider: 'gmail' as const,
       tokens: { accessToken: 'a', expiresAt: 0, tokenType: 'Bearer' },
@@ -245,7 +245,72 @@ describe('ingest — auth failures', function () {
     const it = ingest(input({ credentials: creds }), {
       fetchImpl: (async () => json({})) as unknown as typeof fetch,
     });
-    await expect(collect(it)).rejects.toBeInstanceOf(AuthExpiredError);
+    await expect(collect(it)).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+});
+
+describe('ingest — conditional refresh', function () {
+  test('refresh emits the rotated credential on the auth event', async function () {
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (url.includes('/profile'))
+        return json({ emailAddress: 'u@g.com', historyId: '1' });
+      return json({ resultSizeEstimate: 0 });
+    };
+    const events = await collect(
+      ingest(input(), { fetchImpl: fetchImpl as unknown as typeof fetch })
+    );
+    const auth = events.find((e) => e.type === 'auth');
+    if (auth?.type === 'auth') {
+      expect(auth.refreshed).toBe(true);
+      expect(auth.credentials).toEqual({
+        provider: 'gmail',
+        tokens: {
+          accessToken: 'fresh-access',
+          refreshToken: 'r-new',
+          expiresAt: expect.any(Number),
+          scope: undefined,
+          tokenType: 'Bearer',
+        },
+      });
+    } else {
+      throw new Error('expected an auth event');
+    }
+  });
+
+  test('a still-valid access token skips refresh (no /token call, refreshed:false, no credential)', async function () {
+    let tokenCalled = false;
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) {
+        tokenCalled = true;
+        return json(TOKEN_OK);
+      }
+      if (url.includes('/profile'))
+        return json({ emailAddress: 'u@g.com', historyId: '5' });
+      return json({ resultSizeEstimate: 0 });
+    };
+    const validCreds = {
+      provider: 'gmail' as const,
+      tokens: {
+        accessToken: 'still-good',
+        refreshToken: 'r-1',
+        expiresAt: Date.now() + 3_600_000,
+        tokenType: 'Bearer',
+      },
+    };
+    const events = await collect(
+      ingest(input({ credentials: validCreds }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+    );
+    expect(tokenCalled).toBe(false);
+    const auth = events.find((e) => e.type === 'auth');
+    if (auth?.type === 'auth') {
+      expect(auth.refreshed).toBe(false);
+      expect(auth.credentials).toBeUndefined();
+    } else {
+      throw new Error('expected an auth event');
+    }
   });
 });
 

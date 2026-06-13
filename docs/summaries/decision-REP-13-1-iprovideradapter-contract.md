@@ -6,20 +6,6 @@
 **Depends on:** REP-50 (raw + normalized message schema — merged, PR #18)
 **Blocks:** REP-14 (Gmail adapter), REP-21 (sync vertical)
 
-> **Amended by REP-52 (DR-REP-52-1, 2026-06-10).** The Gmail ingest/normalize
-> implementation amended this contract: `AdapterSyncSpec.full` gained `limit?`;
-> `IngestInput` gained `providerSlug` + `credentials: ProviderCredentials` (the
-> adapter cannot load its own credentials — the Rule 6 barrier fences `features/`
-> off, so the runner decrypts and passes them in, superseding D-this-DR's
-> "refresh reads stored credentials" framing in D5 to "the runner supplies
-> decrypted credentials; the adapter refreshes them on use"); `NormalizedMessage`
-> gained `attachments`; `AdapterMessageEvent` gained `attachments` (bytes); the
-> projection types switched from `Omit<Row>` to `Omit<Insertable<Row>>` (D4
-> refinement — bare `Omit` exposed un-constructable `ColumnType` brands); and the
-> deferred `AuthExpiredError` (D7) was added. REP-52 also took the v0 stance of
-> failing the sync on a normalize error rather than emitting `normalized: null`
-> (D3's tolerant path is deferred to production hardening). See DR-REP-52-1.
->
 > **Revised after review (PR #19).** Renamed `AuthPromptInput` →
 > `ProviderAuthContext` (now carries a `provider` slug) and `AuthorizedCredentials`
 > → `ProviderAuthorization`. Replaced the bare `cursor` on `IngestInput` with an
