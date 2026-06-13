@@ -9,8 +9,8 @@
 // status mapping lives in api/middleware/, keyed off the concrete subclass.
 
 export abstract class AppError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = new.target.name;
   }
 }

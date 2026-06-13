@@ -10,3 +10,9 @@ export abstract class AdapterError extends AppError {}
 // internal invariant — facade input validation (CLI zod) resolves slugs to the
 // known Provider enum before they reach the registry.
 export class ProviderNotFoundError extends AdapterError {}
+
+// Raised when a credential refresh fails terminally (refresh token revoked or
+// expired). Cross-provider on purpose: the runner switches on it to flag the
+// account for re-authorization, distinct from a transient provider/network
+// fault it would just retry.
+export class AuthExpiredError extends AdapterError {}

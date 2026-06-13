@@ -1,15 +1,9 @@
 import { Channel } from '@repel/shared';
-import type {
-  AdapterEvent,
-  Capabilities,
-  IProviderAdapter,
-  IngestInput,
-  NormalizedMessage,
-  RawMessage,
-} from '../types.ts';
+import type { Capabilities, IProviderAdapter } from '../types.ts';
 import { gmailAuth } from './auth.ts';
 import { send } from './egress/send.ts';
-import { GmailNotImplementedError } from './error.ts';
+import { ingest } from './ingress/ingest.ts';
+import { normalizeGmailMessage } from './normalize.ts';
 
 export const gmailCapabilities: Capabilities = {
   channel: Channel.email,
@@ -18,21 +12,12 @@ export const gmailCapabilities: Capabilities = {
   ingressMode: 'poll',
 };
 
-// ingest and normalize are throwing stubs at this stage — interactive auth is
-// the only real member. The signatures match the contract so the instance
-// typechecks; the throws are runtime.
-async function* ingestStub(_input: IngestInput): AsyncIterable<AdapterEvent> {
-  throw new GmailNotImplementedError('Gmail ingest is not implemented yet');
-}
-
-function normalizeStub(_raw: RawMessage): NormalizedMessage {
-  throw new GmailNotImplementedError('Gmail normalize is not implemented yet');
-}
-
 export const gmailAdapter: IProviderAdapter = {
   capabilities: gmailCapabilities,
   auth: gmailAuth,
-  ingest: ingestStub,
+  // ingest is wrapped so the contract's 1-arg signature is preserved while the
+  // implementation keeps an injectable fetch seam for tests.
+  ingest: (input) => ingest(input),
   send,
-  normalize: normalizeStub,
+  normalize: normalizeGmailMessage,
 };
