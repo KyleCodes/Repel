@@ -12,3 +12,12 @@ export class OAuth2TimeoutError extends OAuth2Error {}
 
 // The provider redirected with an error (e.g. the user declined consent).
 export class OAuth2DeniedError extends OAuth2Error {}
+
+// A refresh-token grant was rejected by the provider (the refresh token is
+// revoked or expired). Terminal: re-authorization is required.
+export class OAuth2RefreshError extends OAuth2Error {}
+
+// A refresh was needed but the credentials carry no refresh token, so one was
+// never possible. Distinct from OAuth2RefreshError — nothing expired; the
+// credential never permitted a refresh. Also terminal (re-auth required).
+export class OAuth2NoRefreshTokenError extends OAuth2Error {}

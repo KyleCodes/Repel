@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { HttpResponseError } from '../../../../lib/http/error.ts';
-import { buildAuthUrl, exchangeCode, refreshTokens } from '../flow.ts';
-import type { OAuth2Config } from '../types.ts';
+import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from '../error.ts';
+import {
+  buildAuthUrl,
+  exchangeCode,
+  refreshIfExpired,
+  refreshTokens,
+} from '../flow.ts';
+import type { OAuth2Config, TokenSet } from '../types.ts';
 
 const config: OAuth2Config = {
   clientId: 'client-123',
@@ -186,5 +192,92 @@ describe('refreshTokens', function () {
       { fetchImpl: fetchImpl as unknown as typeof fetch }
     );
     expect(tokens.refreshToken).toBe('rt-existing');
+  });
+});
+
+describe('refreshIfExpired', function () {
+  function tokenSet(overrides?: Partial<TokenSet>): TokenSet {
+    return {
+      accessToken: 'at-current',
+      refreshToken: 'rt-current',
+      expiresAt: Date.now() + 3_600_000,
+      tokenType: 'Bearer',
+      ...overrides,
+    };
+  }
+
+  function refreshResponse() {
+    return jsonResponse({
+      access_token: 'at-fresh',
+      expires_in: 3600,
+      token_type: 'Bearer',
+    });
+  }
+
+  test('returns the existing tokens without refreshing when still valid', async function () {
+    let called = false;
+    const fetchImpl = async function () {
+      called = true;
+      return refreshResponse();
+    };
+    const result = await refreshIfExpired(
+      { config, tokens: tokenSet() },
+      { fetchImpl: fetchImpl as unknown as typeof fetch }
+    );
+    expect(called).toBe(false);
+    expect(result.refreshed).toBe(false);
+    expect(result.tokens.accessToken).toBe('at-current');
+  });
+
+  test('refreshes when the token is within the skew window', async function () {
+    const fetchImpl = async function () {
+      return refreshResponse();
+    };
+    // expires in 30s, skew is 60s -> due for refresh
+    const result = await refreshIfExpired(
+      { config, tokens: tokenSet({ expiresAt: Date.now() + 30_000 }) },
+      { fetchImpl: fetchImpl as unknown as typeof fetch }
+    );
+    expect(result.refreshed).toBe(true);
+    expect(result.tokens.accessToken).toBe('at-fresh');
+  });
+
+  test('force refreshes even when the token is still valid', async function () {
+    const fetchImpl = async function () {
+      return refreshResponse();
+    };
+    const result = await refreshIfExpired(
+      { config, tokens: tokenSet(), force: true },
+      { fetchImpl: fetchImpl as unknown as typeof fetch }
+    );
+    expect(result.refreshed).toBe(true);
+    expect(result.tokens.accessToken).toBe('at-fresh');
+  });
+
+  test('throws OAuth2NoRefreshTokenError when a refresh is needed but no refresh token exists', async function () {
+    const fetchImpl = async function () {
+      return refreshResponse();
+    };
+    await expect(
+      refreshIfExpired(
+        {
+          config,
+          tokens: tokenSet({ expiresAt: 0, refreshToken: undefined }),
+        },
+        { fetchImpl: fetchImpl as unknown as typeof fetch }
+      )
+    ).rejects.toBeInstanceOf(OAuth2NoRefreshTokenError);
+  });
+
+  test('wraps a rejected refresh grant in OAuth2RefreshError', async function () {
+    const fetchImpl = async function () {
+      return jsonResponse({ error: 'invalid_grant' }, { status: 400 });
+    };
+    await expect(
+      refreshIfExpired(
+        { config, tokens: tokenSet({ expiresAt: 0 }) },
+        { fetchImpl: fetchImpl as unknown as typeof fetch }
+      )
+    ).rejects.toBeInstanceOf(OAuth2RefreshError);
   });
 });

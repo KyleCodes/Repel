@@ -1,8 +1,6 @@
 import { type HttpDeps } from '../../../lib/http/client.ts';
-import { AuthExpiredError, InvalidCredentialsError } from '../../error.ts';
-import { refreshTokens } from '../../lib/oauth2/flow.ts';
+import { refreshIfExpired } from '../../lib/oauth2/flow.ts';
 import type {
-  AdapterAuthEvent,
   AdapterEvent,
   AttachmentContent,
   GmailIngestInput,
@@ -20,7 +18,6 @@ import { loadGmailOAuthConfig, withRedirectUri } from '../oauth.ts';
 import { getGmailAttachment } from '../queries/attachments.ts';
 import { getGmailMessage, listGmailMessages } from '../queries/messages.ts';
 import { getGmailProfile } from '../queries/profile.ts';
-import type { GmailCredentials } from '../types.ts';
 
 // The resumption cursor emitted on `completed`: Gmail's historyId, the seed for
 // the next incremental sync (REP-53). The runner persists it to
@@ -35,21 +32,6 @@ const DEFAULT_FULL_SYNC_CAP = 100;
 
 // Gmail's per-page list size.
 const PAGE_SIZE = 100;
-
-// Refresh the access token if it expires within this window, not only once it
-// has already expired — avoids it dying mid-sync moments after the check.
-const EXPIRY_SKEW_MS = 60_000;
-
-// Construct the auth event. On a refresh, carry the rotated credential so the
-// runner can persist it; on a skip, omit it (nothing changed).
-function authEvent(
-  refreshed: boolean,
-  credentials?: GmailCredentials
-): AdapterAuthEvent {
-  return credentials === undefined
-    ? { type: 'auth', refreshed }
-    : { type: 'auth', refreshed, credentials };
-}
 
 // Run a v0 capped full sync as a stream of events:
 //   started -> auth -> message* -> completed
@@ -69,7 +51,20 @@ export async function* ingest(
 
   yield { type: 'started' };
 
-  const accessToken = yield* authorize(input.credentials, deps);
+  // Refresh the access token only if it is expired/near-expiry; the policy and
+  // its error vocabulary live in oauth2/. On a refresh, carry the rotated
+  // credential so the runner can persist it.
+  const config = withRedirectUri(loadGmailOAuthConfig(), '');
+  const { tokens, refreshed } = await refreshIfExpired(
+    { config, tokens: input.credentials.tokens },
+    deps
+  );
+  const accessToken = tokens.accessToken;
+  yield {
+    type: 'auth',
+    refreshed,
+    ...(refreshed && { credentials: { provider: 'gmail', tokens } }),
+  };
 
   // Capture the cursor BEFORE listing so the next incremental sync replays
   // anything that arrives during this backfill (no gap).
@@ -94,42 +89,6 @@ export async function* ingest(
   } while (pageToken !== undefined && processed < cap);
 
   yield { type: 'completed', cursor, processed };
-}
-
-// Yield the auth event and return a usable access token. Reuses the stored token
-// when it is still valid; otherwise refreshes (a missing refresh token is then a
-// terminal re-auth condition, distinct from a refresh that fails). Emits the
-// rotated credential on the event so the runner persists it.
-async function* authorize(
-  credentials: GmailCredentials,
-  deps: HttpDeps
-): AsyncGenerator<AdapterEvent, string> {
-  const tokens = credentials.tokens;
-
-  if (tokens.expiresAt > Date.now() + EXPIRY_SKEW_MS) {
-    yield authEvent(false);
-    return tokens.accessToken;
-  }
-
-  if (tokens.refreshToken === undefined) {
-    throw new InvalidCredentialsError(
-      'Gmail credentials have no refresh token; re-auth required'
-    );
-  }
-  const config = withRedirectUri(loadGmailOAuthConfig(), '');
-  let refreshed;
-  try {
-    refreshed = await refreshTokens(
-      { config, refreshToken: tokens.refreshToken },
-      deps
-    );
-  } catch (cause) {
-    throw new AuthExpiredError('Gmail token refresh failed; re-auth required', {
-      cause,
-    });
-  }
-  yield authEvent(true, { provider: 'gmail', tokens: refreshed });
-  return refreshed.accessToken;
 }
 
 // Fetch one message, normalize it, and fetch its attachment bytes. Each step

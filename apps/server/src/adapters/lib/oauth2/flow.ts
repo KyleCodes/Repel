@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { type HttpDeps, httpRequest } from '../../../lib/http/client.ts';
+import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from './error.ts';
 import type { OAuth2Config, TokenSet } from './types.ts';
+
+// Refresh the access token once it expires within this window, not only after it
+// has already expired — avoids a token dying mid-operation moments after a check.
+const DEFAULT_EXPIRY_SKEW_MS = 60_000;
 
 // The provider token response. expires_in is seconds; refresh_token is optional
 // because a refresh grant returns none.
@@ -108,4 +113,45 @@ export async function refreshTokens(
     deps
   );
   return toTokenSet(res, refreshToken);
+}
+
+// Return a TokenSet with a usable access token, refreshing only when the current
+// one is expired/near-expiry (or `force` is set). The shared "don't refresh if we
+// don't need to" policy — identical for every OAuth2 adapter, so it lives here
+// rather than in any one adapter. `refreshed` tells the caller whether the set
+// rotated (and thus needs persisting). Throws OAuth2NoRefreshTokenError when a
+// refresh is needed but no refresh token is present, OAuth2RefreshError when the
+// grant is rejected.
+export async function refreshIfExpired(
+  args: {
+    config: OAuth2Config;
+    tokens: TokenSet;
+    force?: boolean;
+    skewMs?: number;
+  },
+  deps: HttpDeps = {}
+): Promise<{ tokens: TokenSet; refreshed: boolean }> {
+  const { config, tokens, force } = args;
+  const skewMs = args.skewMs ?? DEFAULT_EXPIRY_SKEW_MS;
+
+  if (!force && tokens.expiresAt > Date.now() + skewMs) {
+    return { tokens, refreshed: false };
+  }
+  if (tokens.refreshToken === undefined) {
+    throw new OAuth2NoRefreshTokenError(
+      'credentials have no refresh token; re-auth required'
+    );
+  }
+  let refreshed: TokenSet;
+  try {
+    refreshed = await refreshTokens(
+      { config, refreshToken: tokens.refreshToken },
+      deps
+    );
+  } catch (cause) {
+    throw new OAuth2RefreshError('token refresh failed; re-auth required', {
+      cause,
+    });
+  }
+  return { tokens: refreshed, refreshed: true };
 }

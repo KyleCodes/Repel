@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { AuthExpiredError, InvalidCredentialsError } from '../../../error.ts';
+import {
+  OAuth2NoRefreshTokenError,
+  OAuth2RefreshError,
+} from '../../../lib/oauth2/error.ts';
 import type { AdapterEvent, IngestInput } from '../../../types.ts';
 import {
   GmailAttachmentFetchError,
@@ -224,7 +227,7 @@ describe('ingest — unsupported specs', function () {
 });
 
 describe('ingest — auth failures', function () {
-  test('a revoked refresh token throws AuthExpiredError', async function () {
+  test('a revoked refresh token throws OAuth2RefreshError', async function () {
     const fetchImpl = async function (url: string) {
       if (url.includes('/token')) {
         return json({ error: 'invalid_grant' }, { status: 400 });
@@ -234,10 +237,10 @@ describe('ingest — auth failures', function () {
     const it = ingest(input(), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    await expect(collect(it)).rejects.toBeInstanceOf(AuthExpiredError);
+    await expect(collect(it)).rejects.toBeInstanceOf(OAuth2RefreshError);
   });
 
-  test('an expired token with no refresh token throws InvalidCredentialsError', async function () {
+  test('an expired token with no refresh token throws OAuth2NoRefreshTokenError', async function () {
     const creds = {
       provider: 'gmail' as const,
       tokens: { accessToken: 'a', expiresAt: 0, tokenType: 'Bearer' },
@@ -245,7 +248,7 @@ describe('ingest — auth failures', function () {
     const it = ingest(input({ credentials: creds }), {
       fetchImpl: (async () => json({})) as unknown as typeof fetch,
     });
-    await expect(collect(it)).rejects.toBeInstanceOf(InvalidCredentialsError);
+    await expect(collect(it)).rejects.toBeInstanceOf(OAuth2NoRefreshTokenError);
   });
 });
 
