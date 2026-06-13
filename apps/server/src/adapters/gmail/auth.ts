@@ -9,7 +9,7 @@ import type {
   OAuthExchangeInput,
 } from '../types.ts';
 import { loadGmailOAuthConfig, withRedirectUri } from './oauth.ts';
-import { getGmailProfile } from './profile.ts';
+import { getGmailProfile } from './queries/profile.ts';
 
 export const gmailAuth: OAuth2Auth = {
   method: 'oauth2',

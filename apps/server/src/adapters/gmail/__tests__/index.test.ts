@@ -1,14 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { Channel } from '@repel/shared';
 import { AdapterError } from '../../error.ts';
-import type {
-  IProviderAdapter,
-  IngestInput,
-  RawMessage,
-  SendInput,
-} from '../../types.ts';
+import type { IProviderAdapter, SendInput } from '../../types.ts';
 import { GmailNotImplementedError } from '../error.ts';
 import { gmailAdapter, gmailCapabilities } from '../index.ts';
+import { normalizeGmailMessage } from '../normalize.ts';
 
 // Compile-time assignability: gmailAdapter must satisfy the contract.
 const _contract: IProviderAdapter = gmailAdapter;
@@ -19,13 +15,6 @@ const sendInput: SendInput = {
   userId: 'user',
   providerAccountId: 'pa',
   to: ['x@y.com'],
-};
-
-const ingestInput: IngestInput = {
-  orgId: 'org',
-  userId: 'user',
-  providerAccountId: 'pa',
-  spec: { type: 'full' },
 };
 
 describe('gmailCapabilities', function () {
@@ -47,8 +36,8 @@ describe('gmailCapabilities', function () {
   });
 });
 
-describe('gmailAdapter stubs', function () {
-  test('send rejects with GmailNotImplementedError (an AdapterError)', async function () {
+describe('gmailAdapter wiring', function () {
+  test('send is still a stub — rejects with GmailNotImplementedError', async function () {
     let caught: unknown;
     try {
       await gmailAdapter.send(sendInput);
@@ -59,22 +48,30 @@ describe('gmailAdapter stubs', function () {
     expect(caught).toBeInstanceOf(AdapterError);
   });
 
-  test('normalize throws GmailNotImplementedError', function () {
-    expect(function () {
-      gmailAdapter.normalize({} as RawMessage);
-    }).toThrow(GmailNotImplementedError);
+  test('normalize is wired to the real implementation', function () {
+    expect(gmailAdapter.normalize).toBe(normalizeGmailMessage);
   });
 
-  test('ingest iteration throws GmailNotImplementedError', async function () {
-    let caught: unknown;
-    try {
-      for await (const _event of gmailAdapter.ingest(ingestInput)) {
-        void _event;
-      }
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(GmailNotImplementedError);
+  test('ingest returns an async iterable', function () {
+    const it = gmailAdapter.ingest({
+      providerSlug: 'gmail',
+      orgId: 'org',
+      userId: 'user',
+      providerAccountId: 'pa',
+      spec: { type: 'full', limit: 1 },
+      credentials: {
+        provider: 'gmail',
+        tokens: {
+          accessToken: 'a',
+          refreshToken: 'r',
+          expiresAt: 0,
+          tokenType: 'Bearer',
+        },
+      },
+    });
+    expect(typeof (it as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe(
+      'function'
+    );
   });
 });
 

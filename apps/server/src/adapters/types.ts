@@ -2,8 +2,10 @@
 // an external provider (Gmail, iCloud, …) and the application's normalized
 // message shape. Concrete adapters live in adapters/<provider>/; this file is
 // only the shared contract.
+import type { Insertable } from 'kysely';
 import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/shared';
 import type {
+  Attachment,
   Message,
   MessageParticipant,
   MessageRaw,
@@ -11,6 +13,7 @@ import type {
 } from '../infra/db/generated.ts';
 import type { HttpDeps } from '../lib/http/client.ts';
 import type { AdapterError } from './error.ts';
+import type { GmailCredentials } from './gmail/types.ts';
 
 // What a provider can do, declared once per adapter as a const. Per-account
 // variance (e.g. scope-driven send/receive toggles) isn't modeled yet. The auth
@@ -97,19 +100,40 @@ export interface ProviderAuthorization {
 
 // Which kind of sync the caller is asking for. Values match the persisted
 // sync_kind column. `incremental` resumes from an opaque provider cursor;
-// `range` pulls a bounded window; `full` pulls everything.
+// `range` pulls a bounded window; `full` pulls everything. `full.limit` is a
+// dev/debug cap on messages fetched (a production full sync omits it).
 export type AdapterSyncSpec =
   | { readonly type: 'incremental'; readonly cursor: unknown }
   | { readonly type: 'range'; readonly from?: Date; readonly to?: Date }
-  | { readonly type: 'full' };
+  | { readonly type: 'full'; readonly limit?: number };
 
-// Input to a sync. The adapter loads the account's stored credentials itself.
-export interface IngestInput {
+// The decrypted credentials the runner hands an adapter, one member per
+// provider. Today only Gmail exists. The adapter narrows to its own member on
+// the `provider` tag — no cast. When a second provider lands, this union widens
+// and the narrow stops compiling until a discriminant check is added.
+export type ProviderCredentials = GmailCredentials;
+
+// Input to a sync. The runner reads provider_account.credentials_encrypted,
+// decrypts it (the adapter can't — the import barrier fences features/ off), and
+// passes the credentials in. `providerSlug` discriminates the union so each
+// adapter receives its own input member (and its own credentials shape) without
+// a cast — mirroring ProviderCredentials.
+interface IngestInputBase {
   readonly orgId: string;
   readonly userId: string;
   readonly providerAccountId: string;
   readonly spec: AdapterSyncSpec;
 }
+
+export interface GmailIngestInput extends IngestInputBase {
+  readonly providerSlug: 'gmail';
+  readonly credentials: GmailCredentials;
+}
+
+// The union of per-provider sync inputs. Today only Gmail exists; widens as
+// adapters are added. The contract method IProviderAdapter.ingest accepts the
+// union; each concrete adapter is typed to its own member.
+export type IngestInput = GmailIngestInput;
 
 // Input to a single outbound send — one provider API call, no streaming.
 export interface SendInput {
@@ -128,15 +152,28 @@ export interface SendInput {
 
 // The provider's payload, with enough fidelity to re-render the message and
 // re-normalize it later without re-fetching. The omitted columns are the ones
-// the runner assigns when it persists the row.
-export type RawMessage = Omit<MessageRaw, 'id' | 'createdAt' | 'syncTaskId'>;
+// the runner assigns when it persists the row. Insertable<> unwraps the
+// generated ColumnType brands to the values an adapter actually writes.
+export type RawMessage = Omit<
+  Insertable<MessageRaw>,
+  'id' | 'createdAt' | 'syncTaskId'
+>;
 
 // A participant on a normalized message. `contactId` is omitted because
 // resolving it is a DB lookup, and normalize() is pure — a downstream reconciler
 // fills it in.
 export type NormalizedParticipant = Omit<
-  MessageParticipant,
+  Insertable<MessageParticipant>,
   'id' | 'createdAt' | 'messageId' | 'orgId' | 'userId' | 'contactId'
+>;
+
+// Attachment metadata normalize() derives from the raw payload. `bytes` is
+// omitted: normalize() is pure and the payload carries only an attachmentId, not
+// the bytes (those need a separate fetch). The bytes ride the message event as
+// AttachmentContent; the runner pairs them by externalAttachmentId.
+export type NormalizedAttachment = Omit<
+  Insertable<Attachment>,
+  'id' | 'createdAt' | 'messageId' | 'orgId' | 'userId' | 'bytes'
 >;
 
 // The shape normalize() produces. The omitted columns are everything the runner
@@ -144,7 +181,7 @@ export type NormalizedParticipant = Omit<
 // read/state flags. externalThreadId comes from the provider (the runner
 // resolves it to a thread row), and participants become message_participant rows.
 export type NormalizedMessage = Omit<
-  Message,
+  Insertable<Message>,
   | 'id'
   | 'createdAt'
   | 'updatedAt'
@@ -159,9 +196,18 @@ export type NormalizedMessage = Omit<
   | 'isStarred'
   | 'isDeleted'
 > &
-  Pick<Thread, 'externalThreadId'> & {
+  Pick<Insertable<Thread>, 'externalThreadId'> & {
     readonly participants: readonly NormalizedParticipant[];
+    readonly attachments: readonly NormalizedAttachment[];
   };
+
+// The bytes for one attachment, fetched during ingest (normalize() can't — it's
+// pure). Keyed back to its NormalizedAttachment by externalAttachmentId so the
+// runner can persist the attachment row with both metadata and bytes.
+export interface AttachmentContent {
+  readonly externalAttachmentId: string;
+  readonly bytes: Buffer;
+}
 
 // ingest() yields events instead of returning a batch because a sync is
 // long-running and unbounded — a backfill can be tens of thousands of messages.
@@ -174,11 +220,14 @@ export interface AdapterStartedEvent {
   readonly estimatedTotal?: number;
 }
 
-// Marks that the adapter refreshed credentials on use, so the runner can persist
-// the rotated token without the credential itself being exposed.
+// Marks whether the adapter refreshed credentials on use. When it did
+// (`refreshed: true`), `credentials` carries the rotated set so the runner can
+// persist it; when the stored token was still valid (`refreshed: false`),
+// `credentials` is absent (nothing changed).
 export interface AdapterAuthEvent {
   readonly type: 'auth';
   readonly refreshed: boolean;
+  readonly credentials?: ProviderCredentials;
 }
 
 export interface AdapterProgressEvent {
@@ -187,13 +236,17 @@ export interface AdapterProgressEvent {
   readonly estimatedTotal?: number;
 }
 
-// One observed message, carrying both the raw payload and the normalized result.
-// `normalized` is null when normalization failed but the raw payload is still
-// worth persisting for a later re-normalization attempt.
+// One observed message, carrying the raw payload, the normalized result, and the
+// fetched bytes for its attachments. `normalized` may be null when normalization
+// failed but the raw is still worth persisting — though v0 fails the sync on a
+// normalize error rather than emitting null (production hardening will use the
+// tolerant path). `attachments` pairs to normalized.attachments by
+// externalAttachmentId.
 export interface AdapterMessageEvent {
   readonly type: 'message';
   readonly raw: RawMessage;
   readonly normalized: NormalizedMessage | null;
+  readonly attachments: readonly AttachmentContent[];
 }
 
 // Terminal success. `cursor` is the resumption token to persist for the next

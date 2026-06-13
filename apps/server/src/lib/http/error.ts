@@ -24,12 +24,10 @@ export class HttpResponseError extends HttpError {
 }
 
 // fetch itself threw (DNS failure, connection refused, …). Wraps the original
-// TypeError as the cause.
+// TypeError as the cause, forwarded through the base so `.cause` is the standard
+// Error.cause rather than a bespoke field.
 export class HttpNetworkError extends HttpError {
-  readonly cause: unknown;
-
   constructor(message: string, info: { cause: unknown }) {
-    super(message);
-    this.cause = info.cause;
+    super(message, { cause: info.cause });
   }
 }

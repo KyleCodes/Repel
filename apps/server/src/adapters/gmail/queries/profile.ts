@@ -1,5 +1,5 @@
-import { type HttpDeps, httpRequest } from '../../lib/http/client.ts';
-import { type GmailProfile, GmailProfileSchema } from './types.ts';
+import { type HttpDeps, httpRequest } from '../../../lib/http/client.ts';
+import { type GmailProfile, GmailProfileSchema } from '../types.ts';
 
 const GMAIL_PROFILE_ENDPOINT =
   'https://gmail.googleapis.com/gmail/v1/users/me/profile';
