@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "repel",
-      "dependencies": {
-        "zod": "^4.0.0",
-      },
       "devDependencies": {
         "@trivago/prettier-plugin-sort-imports": "^6.0.2",
         "@typescript-eslint/parser": "^8.60.1",
@@ -20,28 +17,10 @@
         "typescript": "^5.5",
       },
     },
-    "apps/server": {
-      "name": "@repel/server",
-      "version": "0.0.1",
-      "dependencies": {
-        "@repel/shared": "workspace:*",
-        "express": "^4.19.2",
-        "kysely": "^0.27.3",
-        "pg": "^8.12.0",
-      },
-      "devDependencies": {
-        "@types/express": "^4.17.21",
-        "@types/pg": "^8.11.6",
-        "commander": "^12.1.0",
-        "kysely-codegen": "^0.20.0",
-        "node-pg-migrate": "^7.7.0",
-      },
-    },
     "apps/web": {
       "name": "@repel/web",
       "version": "0.0.1",
       "dependencies": {
-        "@repel/shared": "workspace:*",
         "@tanstack/react-query": "^5.51.1",
         "@tanstack/react-router": "^1.45.3",
         "react": "^18.3.1",
@@ -55,10 +34,131 @@
         "vite": "^5.3.4",
       },
     },
-    "packages/shared": {
-      "name": "@repel/shared",
+    "packages/backend/apps/api": {
+      "name": "@repel/backend-api",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-env": "workspace:*",
+        "express": "^4.19.2",
+      },
+      "devDependencies": {
+        "@types/express": "^4.17.21",
+      },
+    },
+    "packages/backend/apps/cli": {
+      "name": "@repel/backend-cli",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-adapters": "workspace:*",
+        "@repel/backend-crypto": "workspace:*",
+        "@repel/backend-db": "workspace:*",
+        "@repel/backend-env": "workspace:*",
+        "@repel/backend-features": "workspace:*",
+        "@repel/enums": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "@repel/slug": "workspace:*",
+        "commander": "^12.1.0",
+        "node-pg-migrate": "^7.7.0",
+        "pg": "^8.12.0",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.11.6",
+        "kysely-codegen": "^0.20.0",
+      },
+    },
+    "packages/backend/apps/worker": {
+      "name": "@repel/backend-worker",
       "version": "0.0.1",
     },
+    "packages/backend/libs/adapters": {
+      "name": "@repel/backend-adapters",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-db": "workspace:*",
+        "@repel/backend-env": "workspace:*",
+        "@repel/enums": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "@repel/http": "workspace:*",
+        "kysely": "^0.27.3",
+        "zod": "4.4.3",
+      },
+    },
+    "packages/backend/libs/crypto": {
+      "name": "@repel/backend-crypto",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-env": "workspace:*",
+        "@repel/errors": "workspace:*",
+      },
+    },
+    "packages/backend/libs/db": {
+      "name": "@repel/backend-db",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-env": "workspace:*",
+        "@repel/enums": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "@repel/slug": "workspace:*",
+        "kysely": "^0.27.3",
+        "node-pg-migrate": "^7.7.0",
+        "pg": "^8.12.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.11.6",
+      },
+    },
+    "packages/backend/libs/env": {
+      "name": "@repel/backend-env",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/errors": "workspace:*",
+      },
+    },
+    "packages/backend/libs/features": {
+      "name": "@repel/backend-features",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-db": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "kysely": "^0.27.3",
+        "pg": "^8.12.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.11.6",
+      },
+    },
+    "packages/backend/libs/processing-pipeline": {
+      "name": "@repel/backend-processing-pipeline",
+      "version": "0.0.1",
+    },
+    "packages/backend/libs/transport": {
+      "name": "@repel/backend-transport",
+      "version": "0.0.1",
+    },
+    "packages/shared/enums": {
+      "name": "@repel/enums",
+      "version": "0.0.1",
+    },
+    "packages/shared/errors": {
+      "name": "@repel/errors",
+      "version": "0.0.1",
+    },
+    "packages/shared/http": {
+      "name": "@repel/http",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/errors": "workspace:*",
+        "zod": "4.4.3",
+      },
+    },
+    "packages/shared/slug": {
+      "name": "@repel/slug",
+      "version": "0.0.1",
+    },
+  },
+  "overrides": {
+    "zod": "4.4.3",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
@@ -181,9 +281,33 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@repel/server": ["@repel/server@workspace:apps/server"],
+    "@repel/backend-adapters": ["@repel/backend-adapters@workspace:packages/backend/libs/adapters"],
 
-    "@repel/shared": ["@repel/shared@workspace:packages/shared"],
+    "@repel/backend-api": ["@repel/backend-api@workspace:packages/backend/apps/api"],
+
+    "@repel/backend-cli": ["@repel/backend-cli@workspace:packages/backend/apps/cli"],
+
+    "@repel/backend-crypto": ["@repel/backend-crypto@workspace:packages/backend/libs/crypto"],
+
+    "@repel/backend-db": ["@repel/backend-db@workspace:packages/backend/libs/db"],
+
+    "@repel/backend-env": ["@repel/backend-env@workspace:packages/backend/libs/env"],
+
+    "@repel/backend-features": ["@repel/backend-features@workspace:packages/backend/libs/features"],
+
+    "@repel/backend-processing-pipeline": ["@repel/backend-processing-pipeline@workspace:packages/backend/libs/processing-pipeline"],
+
+    "@repel/backend-transport": ["@repel/backend-transport@workspace:packages/backend/libs/transport"],
+
+    "@repel/backend-worker": ["@repel/backend-worker@workspace:packages/backend/apps/worker"],
+
+    "@repel/enums": ["@repel/enums@workspace:packages/shared/enums"],
+
+    "@repel/errors": ["@repel/errors@workspace:packages/shared/errors"],
+
+    "@repel/http": ["@repel/http@workspace:packages/shared/http"],
+
+    "@repel/slug": ["@repel/slug@workspace:packages/shared/slug"],
 
     "@repel/web": ["@repel/web@workspace:apps/web"],
 

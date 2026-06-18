@@ -1,0 +1,14 @@
+{
+  "name": "@repel/http",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./src/client.ts",
+    "./error": "./src/error.ts"
+  },
+  "dependencies": {
+    "@repel/errors": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

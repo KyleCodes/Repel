@@ -1,0 +1,29 @@
+{
+  "name": "@repel/backend-db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./generated": "./src/generated.ts",
+    "./types": "./src/types.ts",
+    "./tx": "./src/tx.ts",
+    "./error": "./src/error.ts",
+    "./runtime": "./src/runtime.ts",
+    "./client": "./src/client.ts",
+    "./admin-ops": "./src/admin-ops.ts",
+    "./lib/admin-url": "./src/lib/admin-url.ts",
+    "./migrations-tracking/service": "./src/migrations-tracking/service.ts"
+  },
+  "dependencies": {
+    "@repel/backend-env": "workspace:*",
+    "@repel/enums": "workspace:*",
+    "@repel/errors": "workspace:*",
+    "@repel/slug": "workspace:*",
+    "kysely": "^0.27.3",
+    "node-pg-migrate": "^7.7.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.6"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@repel/backend-crypto",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./encryption": "./src/encryption.ts",
+    "./error": "./src/error.ts"
+  },
+  "dependencies": {
+    "@repel/backend-env": "workspace:*",
+    "@repel/errors": "workspace:*"
+  }
+}

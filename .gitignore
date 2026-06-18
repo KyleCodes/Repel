@@ -6,10 +6,11 @@ dist/
 tsconfig.tsbuildinfo
 
 # Compiled JS artifacts alongside TS source files
-# (tsc emits .js/.d.ts next to .ts when outDir is not set)
-apps/server/migrate.js
-apps/server/migrate.d.ts
-apps/server/migrate.d.ts.map
+# (tsc emits .js/.d.ts next to .ts when outDir is not set — e.g. the cli debug
+# wrapper in bin/, which is run directly and excluded from the composite build)
+packages/backend/apps/cli/bin/cli-debug.js
+packages/backend/apps/cli/bin/cli-debug.d.ts
+packages/backend/apps/cli/bin/cli-debug.d.ts.map
 apps/web/vite.config.js
 apps/web/vite.config.d.ts
 apps/web/vite.config.d.ts.map
@@ -19,7 +20,7 @@ apps/web/vite.config.d.ts.map
 .env
 .env.local
 # Shared dev secrets — symlinked per worktree, distributed privately, never
-# committed. The committed template is apps/server/.env.development.example.
+# committed. The committed template is packages/backend/.env.development.example.
 .env.development
 
 # Data

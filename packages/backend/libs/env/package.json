@@ -1,0 +1,13 @@
+{
+  "name": "@repel/backend-env",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./accessors": "./src/accessors.ts",
+    "./error": "./src/error.ts"
+  },
+  "dependencies": {
+    "@repel/errors": "workspace:*"
+  }
+}

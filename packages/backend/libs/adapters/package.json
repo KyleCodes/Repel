@@ -1,0 +1,23 @@
+{
+  "name": "@repel/backend-adapters",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./registry": "./src/registry.ts",
+    "./gmail": "./src/gmail/index.ts",
+    "./error": "./src/error.ts",
+    "./types": "./src/types.ts",
+    "./lib/oauth2/loopback": "./src/lib/oauth2/loopback.ts",
+    "./lib/oauth2/error": "./src/lib/oauth2/error.ts"
+  },
+  "dependencies": {
+    "@repel/backend-db": "workspace:*",
+    "@repel/backend-env": "workspace:*",
+    "@repel/enums": "workspace:*",
+    "@repel/errors": "workspace:*",
+    "@repel/http": "workspace:*",
+    "kysely": "^0.27.3",
+    "zod": "4.4.3"
+  }
+}
