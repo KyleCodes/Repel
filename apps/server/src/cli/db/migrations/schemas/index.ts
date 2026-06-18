@@ -10,7 +10,12 @@ export const MigrateUpInputSchema = z.object({
 });
 export type MigrateUpInput = z.infer<typeof MigrateUpInputSchema>;
 
-export const MigrateDownInputSchema = z.object({
-  match: z.string().min(1).optional(),
-});
+export const MigrateDownInputSchema = z
+  .object({
+    match: z.string().min(1).optional(),
+    base: z.boolean().optional(),
+  })
+  .refine((v) => !(v.match && v.base), {
+    message: 'Pass either [match] or --base, not both.',
+  });
 export type MigrateDownInput = z.infer<typeof MigrateDownInputSchema>;

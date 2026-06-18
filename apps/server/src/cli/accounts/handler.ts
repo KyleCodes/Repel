@@ -14,12 +14,17 @@ import { parseOrExit } from '../lib/parse-or-exit.ts';
 import { resolveAccount } from '../lib/resolve-account.ts';
 import { resolveOrgId } from '../lib/resolve-org.ts';
 import { resolveUserId } from '../lib/resolve-user.ts';
-import { UnsupportedAuthMethodError } from './error.ts';
 import {
-  type AccountAddInput,
-  AccountAddInputSchema,
+  AccountIdentityMismatchError,
+  UnsupportedAuthMethodError,
+} from './error.ts';
+import {
+  type AccountConnectInput,
+  AccountConnectInputSchema,
   type AccountListInput,
   AccountListInputSchema,
+  type AccountReconnectInput,
+  AccountReconnectInputSchema,
   type AccountRmInput,
   AccountRmInputSchema,
   type AccountShowInput,
@@ -30,8 +35,9 @@ import {
 // a user links to an org. Distinct from `orgs`, which owns org + user
 // lifecycle (the `bootstrap` verb lives there).
 //
-// Today `list`, `show`, `rm`, and `add` are registered; `add` runs the real
-// interactive OAuth flow.
+// Today `list`, `show`, `rm`, `connect`, and `reconnect` are registered.
+// `connect` runs the real interactive OAuth flow to link a new account;
+// `reconnect` re-runs it for an existing account to rotate its credentials.
 
 export function registerAccountsCommands(program: Command): void {
   const accounts = program
@@ -81,8 +87,8 @@ export function registerAccountsCommands(program: Command): void {
     });
 
   accounts
-    .command('add <provider>')
-    .description('Add a provider account via interactive OAuth')
+    .command('connect <provider>')
+    .description('Connect a new provider account via interactive OAuth')
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
     .option('--alias <name>', 'human label for the account')
@@ -90,13 +96,27 @@ export function registerAccountsCommands(program: Command): void {
       provider: string,
       opts: { org?: string; user?: string; alias?: string }
     ) {
-      const input = parseOrExit(AccountAddInputSchema, {
+      const input = parseOrExit(AccountConnectInputSchema, {
         org: opts.org,
         user: opts.user,
         provider,
         alias: opts.alias,
       });
-      await runAccountsAdd(input);
+      await runAccountsConnect(input);
+    });
+
+  accounts
+    .command('reconnect <account>')
+    .description(
+      'Re-run OAuth for an existing account (by id, alias, or provider:ext) and rotate its credentials'
+    )
+    .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
+    .action(async function (account: string, opts: { org?: string }) {
+      const input = parseOrExit(AccountReconnectInputSchema, {
+        org: opts.org,
+        account,
+      });
+      await runAccountsReconnect(input);
     });
 }
 
@@ -155,20 +175,21 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
 // the service are module-imported, so a fetch/spy seam can't reach them cleanly
 // (and mock.module mutates the registry process-globally); an optional deps
 // param is the contained, justified seam. Production calls pass nothing.
-export interface AccountsAddDeps {
+export interface AccountsConnectDeps {
   resolveProviderAdapter?: typeof defaultResolveProviderAdapter;
   runLoopbackFlow?: typeof defaultRunLoopbackFlow;
-  accountsService?: Pick<typeof defaultAccountsService, 'addProviderAccount'>;
+  accountsService?: Partial<typeof defaultAccountsService>;
 }
 
-export async function runAccountsAdd(
-  input: AccountAddInput,
-  deps: AccountsAddDeps = {}
+export async function runAccountsConnect(
+  input: AccountConnectInput,
+  deps: AccountsConnectDeps = {}
 ): Promise<void> {
   const resolveProviderAdapter =
     deps.resolveProviderAdapter ?? defaultResolveProviderAdapter;
   const runLoopbackFlow = deps.runLoopbackFlow ?? defaultRunLoopbackFlow;
-  const accountsService = deps.accountsService ?? defaultAccountsService;
+  const accountsService = (deps.accountsService ??
+    defaultAccountsService) as typeof defaultAccountsService;
 
   // Fail-fast on scope before any OAuth work: a missing org/user should never
   // open a browser. `input.provider` is already ProviderSlug (the schema's enum).
@@ -179,7 +200,7 @@ export async function runAccountsAdd(
   const adapter = resolveProviderAdapter(provider);
   if (adapter.auth.method !== 'oauth2') {
     throw new UnsupportedAuthMethodError(
-      `provider ${provider} uses ${adapter.auth.method} auth; only oauth2 is supported by accounts add`
+      `provider ${provider} uses ${adapter.auth.method} auth; only oauth2 is supported by accounts connect`
     );
   }
 
@@ -221,6 +242,79 @@ export async function runAccountsAdd(
       id: account.id,
       alias: account.alias,
       externalAccountId: account.externalAccountId,
+    }) + '\n'
+  );
+}
+
+// Same seam rationale as AccountsConnectDeps: the adapter functions, the
+// service, and resolveAccount are module-imported and can't be spied cleanly,
+// so reconnect takes an optional deps param. Production calls pass nothing.
+export interface AccountsReconnectDeps {
+  resolveProviderAdapter?: typeof defaultResolveProviderAdapter;
+  runLoopbackFlow?: typeof defaultRunLoopbackFlow;
+  resolveAccount?: typeof resolveAccount;
+  accountsService?: Partial<typeof defaultAccountsService>;
+}
+
+export async function runAccountsReconnect(
+  input: AccountReconnectInput,
+  deps: AccountsReconnectDeps = {}
+): Promise<void> {
+  const resolveProviderAdapter =
+    deps.resolveProviderAdapter ?? defaultResolveProviderAdapter;
+  const runLoopbackFlow = deps.runLoopbackFlow ?? defaultRunLoopbackFlow;
+  const resolveAccountFn = deps.resolveAccount ?? resolveAccount;
+  const accountsService = (deps.accountsService ??
+    defaultAccountsService) as typeof defaultAccountsService;
+
+  // Resolve the existing row FIRST — a bad token fails before any OAuth work.
+  const orgId = resolveOrgId(input.org);
+  const account = await resolveAccountFn(input.account, { orgId });
+
+  const adapter = resolveProviderAdapter(account.provider);
+  if (adapter.auth.method !== 'oauth2') {
+    throw new UnsupportedAuthMethodError(
+      `provider ${account.provider} uses ${adapter.auth.method} auth; only oauth2 is supported by accounts reconnect`
+    );
+  }
+
+  // Re-run interactive OAuth, scoped to the existing account's owner. Same
+  // ordering guarantee as connect: a timeout/denial rejects with no write.
+  const authorization = await runLoopbackFlow(adapter.auth, {
+    provider: account.provider,
+    orgId,
+    userId: account.userId,
+  });
+
+  // Identity guard: the fresh authorization MUST be for the same external
+  // account. Otherwise the operator authorized the wrong login and rotating
+  // would silently repoint the row at a different mailbox — reject, write
+  // nothing.
+  if (authorization.externalAccountId !== account.externalAccountId) {
+    throw new AccountIdentityMismatchError(
+      `reconnect authorized ${account.provider}:${authorization.externalAccountId}, but ${account.id} is ${account.provider}:${account.externalAccountId}`
+    );
+  }
+
+  // Encrypt the rotated credentials, then replace them in place on the existing
+  // row — the id, alias, and owner are preserved. Key errors throw here, after
+  // OAuth but before the update — nothing is written.
+  const credentialsEncrypted = encrypt(
+    loadEncryptionKey(),
+    Buffer.from(JSON.stringify(authorization.credentials), 'utf8')
+  );
+
+  const updated = await accountsService.updateProviderAccountCredentials({
+    orgId,
+    providerAccount: { id: account.id, credentialsEncrypted },
+  });
+
+  // Print only non-secret identifiers — never the credentials.
+  process.stdout.write(
+    JSON.stringify({
+      id: updated.id,
+      alias: updated.alias,
+      externalAccountId: updated.externalAccountId,
     }) + '\n'
   );
 }

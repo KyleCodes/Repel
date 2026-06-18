@@ -49,10 +49,17 @@ export function registerMigrationsCommands(db: Command): void {
   migrate
     .command('down [match]')
     .description(
-      'Roll back applied migrations. With [match], resolves a unique substring against the filesystem list.'
+      'Roll back applied migrations. With [match], resolves a unique substring against the filesystem list. With --base, rolls back to base (all).'
     )
-    .action(async function (match: string | undefined) {
-      const input = parseOrExit(MigrateDownInputSchema, { match });
+    .option('-b, --base', 'Roll back every applied migration (to base)')
+    .action(async function (
+      match: string | undefined,
+      options: { base?: boolean }
+    ) {
+      const input = parseOrExit(MigrateDownInputSchema, {
+        match,
+        base: options.base,
+      });
       await runMigrateDown(input);
     });
 }
@@ -110,7 +117,8 @@ export async function runMigrateDown(input: MigrateDownInput): Promise<void> {
   const resolved = resolveMigrationMatch(
     input.match,
     'down',
-    listFsMigrations()
+    listFsMigrations(),
+    input.base
   );
   await runner(
     buildRunnerOptions('down', resolved, {

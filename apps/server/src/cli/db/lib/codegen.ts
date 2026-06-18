@@ -22,6 +22,11 @@ export const GENERATED_TYPES_FILE = join(
 // generated types can never drift from the schema, and exposed directly as
 // `repel db codegen` for manual runs. Options are passed as explicit flags
 // (not relying on .kysely-codegenrc.json discovery) to stay cwd-independent.
+//
+// kysely-codegen's output formatting differs from the repo's prettier config,
+// so the file is formatted in place immediately after generation. Without this,
+// every codegen run produces spurious diffs (quote style, spacing) that churn
+// the committed file against what lint-staged would rewrite on commit.
 export async function runCodegen(): Promise<void> {
   const databaseUrl = readDatabaseUrlFromEnvLocal();
   execFileSync(
@@ -38,6 +43,11 @@ export async function runCodegen(): Promise<void> {
       '--out-file',
       GENERATED_TYPES_FILE,
     ],
+    { encoding: 'utf8', stdio: 'inherit' }
+  );
+  execFileSync(
+    'bun',
+    ['--bun', 'x', 'prettier', '--write', GENERATED_TYPES_FILE],
     { encoding: 'utf8', stdio: 'inherit' }
   );
   console.error(`db codegen: regenerated ${GENERATED_TYPES_FILE}`);

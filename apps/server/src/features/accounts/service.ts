@@ -21,6 +21,10 @@ import {
   deactivateProviderAccount,
 } from './mutations/deactivate-provider-account.ts';
 import {
+  type UpdateProviderAccountCredentialsInput,
+  updateProviderAccountCredentials,
+} from './mutations/update-provider-account-credentials.ts';
+import {
   type FindProviderAccountsByRefInput,
   findProviderAccountsByRef,
 } from './views/find-provider-accounts-by-ref.ts';
@@ -134,6 +138,19 @@ export const accountsService = {
     input: DeactivateProviderAccountInput
   ) {
     const providerAccount = await deactivateProviderAccount(trx, input);
+    if (!providerAccount) {
+      throw new ProviderAccountNotFoundError(
+        `provider account ${input.providerAccount.id} not found`
+      );
+    }
+    return providerAccount;
+  }),
+
+  updateProviderAccountCredentials: runInOrgTx(async function (
+    trx,
+    input: UpdateProviderAccountCredentialsInput
+  ) {
+    const providerAccount = await updateProviderAccountCredentials(trx, input);
     if (!providerAccount) {
       throw new ProviderAccountNotFoundError(
         `provider account ${input.providerAccount.id} not found`

@@ -186,8 +186,14 @@ export type ResolvedTarget = { file: string } | { count: number };
 export function resolveMigrationMatch(
   match: string | undefined,
   direction: 'up' | 'down',
-  fsMigrations: string[]
+  fsMigrations: string[],
+  base = false
 ): ResolvedTarget {
+  // `--base` on down rolls back every applied migration. The both-set case
+  // (base + match) is rejected upstream by MigrateDownInputSchema.
+  if (base && direction === 'down') {
+    return { count: Infinity };
+  }
   if (!match) {
     return { count: direction === 'up' ? Infinity : 1 };
   }

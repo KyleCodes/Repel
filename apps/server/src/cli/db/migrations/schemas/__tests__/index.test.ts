@@ -67,4 +67,23 @@ describe('MigrateDownInputSchema', function () {
   test('rejects non-string match', function () {
     expect(MigrateDownInputSchema.safeParse({ match: 42 }).success).toBe(false);
   });
+
+  test('accepts base alone', function () {
+    expect(MigrateDownInputSchema.parse({ base: true })).toEqual({
+      base: true,
+    });
+  });
+
+  test('rejects match and base together', function () {
+    const result = MigrateDownInputSchema.safeParse({
+      match: 'rep-39',
+      base: true,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe(
+        'Pass either [match] or --base, not both.'
+      );
+    }
+  });
 });
