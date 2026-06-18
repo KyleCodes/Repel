@@ -249,6 +249,12 @@ describe('resolveMigrationMatch', function () {
     expect(resolveMigrationMatch(undefined, 'down', fs)).toEqual({ count: 1 });
   });
 
+  test('base on down → count Infinity', function () {
+    expect(resolveMigrationMatch(undefined, 'down', fs, true)).toEqual({
+      count: Infinity,
+    });
+  });
+
   test('empty-string match treated as no match', function () {
     expect(resolveMigrationMatch('', 'up', fs)).toEqual({ count: Infinity });
   });

@@ -17,4 +17,19 @@ describe('registerMigrationsCommands', function () {
     expect(subs).toContain('up');
     expect(subs).toContain('down');
   });
+
+  test('down exposes a --base flag', function () {
+    const db = new Command('db');
+    registerMigrationsCommands(db);
+    const migrations = db.commands.find(function (c) {
+      return c.name() === 'migrations';
+    });
+    const down = migrations!.commands.find(function (c) {
+      return c.name() === 'down';
+    });
+    const flags = down!.options.map(function (o) {
+      return o.long;
+    });
+    expect(flags).toContain('--base');
+  });
 });

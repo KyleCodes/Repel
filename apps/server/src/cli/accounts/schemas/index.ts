@@ -39,13 +39,22 @@ export type AccountRmInput = z.infer<typeof AccountRmInputSchema>;
 // Provider slug values are sourced from @repel/shared — the single source of
 // truth for the enum. `--alias` is an optional human label for the account; an
 // empty string is rejected so `--alias ''` fails fast rather than storing blank.
-export const AccountAddInputSchema = z.object({
+export const AccountConnectInputSchema = z.object({
   org: z.string().optional(),
   user: z.string().optional(),
   provider: z.enum(PROVIDER_VALUES),
   alias: z.string().min(1).optional(),
 });
-export type AccountAddInput = z.infer<typeof AccountAddInputSchema>;
+export type AccountConnectInput = z.infer<typeof AccountConnectInputSchema>;
+
+// `reconnect` re-runs OAuth for an EXISTING account (resolved by the same
+// `<account>` token grammar as `show`) and rotates its stored credentials in
+// place. No provider/alias — the account already exists; we only re-authorize.
+export const AccountReconnectInputSchema = z.object({
+  org: z.string().optional(),
+  account: z.string().min(1, 'account is required'),
+});
+export type AccountReconnectInput = z.infer<typeof AccountReconnectInputSchema>;
 
 // The `<account>` positional resolves by one of three forms: the uuid we
 // assign (configuration id), the provider's external id, or an alias.

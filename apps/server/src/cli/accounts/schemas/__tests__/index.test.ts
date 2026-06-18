@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  AccountAddInputSchema,
+  AccountConnectInputSchema,
   AccountListInputSchema,
+  AccountReconnectInputSchema,
   AccountRmInputSchema,
   AccountShowInputSchema,
 } from '../index.ts';
@@ -77,28 +78,30 @@ describe('AccountRmInputSchema', function () {
   });
 });
 
-describe('AccountAddInputSchema', function () {
+describe('AccountConnectInputSchema', function () {
   test('accepts gmail', function () {
-    expect(AccountAddInputSchema.parse({ provider: 'gmail' })).toEqual({
+    expect(AccountConnectInputSchema.parse({ provider: 'gmail' })).toEqual({
       provider: 'gmail',
     });
   });
 
   test('accepts icloud', function () {
-    expect(AccountAddInputSchema.parse({ provider: 'icloud' })).toEqual({
+    expect(AccountConnectInputSchema.parse({ provider: 'icloud' })).toEqual({
       provider: 'icloud',
     });
   });
 
   test('accepts generic_imap', function () {
-    expect(AccountAddInputSchema.parse({ provider: 'generic_imap' })).toEqual({
+    expect(
+      AccountConnectInputSchema.parse({ provider: 'generic_imap' })
+    ).toEqual({
       provider: 'generic_imap',
     });
   });
 
   test('accepts optional org and user', function () {
     expect(
-      AccountAddInputSchema.parse({
+      AccountConnectInputSchema.parse({
         provider: 'gmail',
         org: 'o-1',
         user: 'u-1',
@@ -108,28 +111,53 @@ describe('AccountAddInputSchema', function () {
 
   test('rejects an unsupported provider', function () {
     expect(
-      AccountAddInputSchema.safeParse({ provider: 'outlook' }).success
+      AccountConnectInputSchema.safeParse({ provider: 'outlook' }).success
     ).toBe(false);
   });
 
   test('rejects a missing provider', function () {
-    expect(AccountAddInputSchema.safeParse({}).success).toBe(false);
+    expect(AccountConnectInputSchema.safeParse({}).success).toBe(false);
   });
 
   test('accepts an optional alias', function () {
     expect(
-      AccountAddInputSchema.parse({ provider: 'gmail', alias: 'work' })
+      AccountConnectInputSchema.parse({ provider: 'gmail', alias: 'work' })
     ).toEqual({ provider: 'gmail', alias: 'work' });
   });
 
   test('parses alias as undefined when omitted', function () {
-    const parsed = AccountAddInputSchema.parse({ provider: 'gmail' });
+    const parsed = AccountConnectInputSchema.parse({ provider: 'gmail' });
     expect(parsed.alias).toBeUndefined();
   });
 
   test('rejects an empty alias (min 1)', function () {
     expect(
-      AccountAddInputSchema.safeParse({ provider: 'gmail', alias: '' }).success
+      AccountConnectInputSchema.safeParse({ provider: 'gmail', alias: '' })
+        .success
     ).toBe(false);
+  });
+});
+
+describe('AccountReconnectInputSchema', function () {
+  test('accepts an account token', function () {
+    expect(AccountReconnectInputSchema.parse({ account: 'work' })).toEqual({
+      account: 'work',
+    });
+  });
+
+  test('accepts an optional org', function () {
+    expect(
+      AccountReconnectInputSchema.parse({ account: 'work', org: 'o-1' })
+    ).toEqual({ account: 'work', org: 'o-1' });
+  });
+
+  test('rejects a missing account', function () {
+    expect(AccountReconnectInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  test('rejects an empty account', function () {
+    expect(AccountReconnectInputSchema.safeParse({ account: '' }).success).toBe(
+      false
+    );
   });
 });

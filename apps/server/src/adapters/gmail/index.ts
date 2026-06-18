@@ -15,8 +15,6 @@ export const gmailCapabilities: Capabilities = {
 export const gmailAdapter: IProviderAdapter = {
   capabilities: gmailCapabilities,
   auth: gmailAuth,
-  // ingest is wrapped so the contract's 1-arg signature is preserved while the
-  // implementation keeps an injectable fetch seam for tests.
   ingest: (input) => ingest(input),
   send,
   normalize: normalizeGmailMessage,
