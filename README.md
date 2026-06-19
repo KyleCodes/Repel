@@ -25,11 +25,13 @@ Self-hosted AI inbox — aggregates email and messaging channels, classifies and
 ## Repo structure
 
 ```
-apps/
-  server/       — API, worker, sync engine, CLI
-  web/          — React SPA
 packages/
-  shared/       — Shared enums and types
+  backend/
+    apps/       — deployables: api, cli, worker
+    libs/       — importable: features, adapters, db, transport, crypto, env
+  shared/       — isomorphic libs: enums, http, errors, slug
+apps/
+  web/          — React SPA (moves under packages/frontend in a later ticket)
 docs/
   context/      — Domain knowledge, ADRs, git conventions
   summaries/    — Session handoffs and decision records
@@ -41,15 +43,14 @@ docs/
 # Start Postgres
 docker compose up -d
 
-# Run migrations (Bun runtime — required for .ts migrations to resolve workspace imports)
-cd apps/server
-bun --bun x node-pg-migrate up --migrations-dir src/db/migrations
+# Run migrations
+bun run cli db migrations up
 
 # Bootstrap the first org and user
 bun run cli bootstrap --org-name "My Org" --email you@example.com
 
-# Start the server
-bun run dev
+# Start the API (each backend app is launched directly via its main.ts)
+bun run packages/backend/apps/api/src/main.ts
 ```
 
 ## Architecture decisions

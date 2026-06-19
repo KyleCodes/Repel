@@ -2,31 +2,32 @@
   "name": "repel",
   "private": true,
   "workspaces": [
-    "packages/*",
+    "packages/shared/*",
+    "packages/backend/apps/*",
+    "packages/backend/libs/*",
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc --build && bun --filter='@repel/web' run build",
+    "build": "tsc --build && cd apps/web && bun run build",
     "clean": "tsc --build --clean && find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete && find . -type d -name dist -not -path '*/node_modules/*' -prune -exec rm -rf {} +",
-    "cli": "bun run --cwd apps/server src/cli/index.ts",
-    "cli:debug": "bun run --cwd apps/server bin/cli-debug.ts",
+    "cli": "cd packages/backend/apps/cli && bun run cli",
+    "cli:debug": "cd packages/backend/apps/cli && bun run cli:debug",
     "dev:docker": "docker compose --profile dev up -d",
     "dev:docker:down": "docker compose --profile dev down",
-    "dev:server": "cd apps/server && bun run dev",
     "dev:web": "cd apps/web && bun run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "prepare": "husky",
-    "test": "bun test apps/*/src packages/*/src",
+    "test": "bun test packages --path-ignore-patterns='**/dist/**'",
     "typecheck": "bun run clean && tsc --build"
   },
   "lint-staged": {
     "*.{ts,tsx,md,json,yml,yaml}": "prettier --write",
-    "apps/server/src/**/*.ts": "eslint --max-warnings=0"
+    "packages/backend/**/*.ts": "eslint --max-warnings=0 --no-warn-ignored"
   },
-  "dependencies": {
-    "zod": "^4.0.0"
+  "overrides": {
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",

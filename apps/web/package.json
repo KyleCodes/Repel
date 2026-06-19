@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@repel/shared": "workspace:*",
     "@tanstack/react-query": "^5.51.1",
     "@tanstack/react-router": "^1.45.3",
     "react": "^18.3.1",

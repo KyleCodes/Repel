@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "references": [
+    { "path": "../../../shared/enums" },
+    { "path": "../../../shared/errors" },
+    { "path": "../../../shared/http" },
+    { "path": "../db" },
+    { "path": "../env" }
+  ],
+  "include": ["src"]
+}

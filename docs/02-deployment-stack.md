@@ -72,9 +72,15 @@ Developer workflow:
 
 ```
 docker compose --profile dev up -d
-bun run dev:server    # terminal 1
-bun run dev:web       # terminal 2
+bun run packages/backend/apps/api/src/main.ts    # terminal 1
+bun run dev:web                                   # terminal 2
 ```
+
+Each backend app (`api`, `worker`, …) is launched directly via its own
+`main.ts` entrypoint; there is no `MODE` switch and no per-app `package.json`
+run script. A `repel services run <name>` CLI verb that spawns these as
+subprocesses (one per tmux pane, debugger per pane) is planned but not yet
+implemented.
 
 ### `full` Profile
 

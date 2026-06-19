@@ -18,8 +18,8 @@ services:
 
   app:
     build: .
+    command: ['bun', 'run', 'packages/backend/apps/api/src/main.ts']
     environment:
-      MODE: all
       DATABASE_URL: postgres://repel:dev@postgres:5432/repel
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     depends_on:

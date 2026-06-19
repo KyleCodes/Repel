@@ -1,0 +1,19 @@
+{
+  "name": "@repel/backend-features",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./accounts/service": "./src/accounts/service.ts",
+    "./accounts/error": "./src/accounts/error.ts"
+  },
+  "dependencies": {
+    "@repel/backend-db": "workspace:*",
+    "@repel/errors": "workspace:*",
+    "kysely": "^0.27.3",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.6"
+  }
+}

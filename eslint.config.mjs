@@ -13,25 +13,26 @@
 // mutations/service is not). It stays a documented convention until a type-aware
 // boundary plugin is justified. See DR-REP-13-1.
 //
-// Matching is on relative import specifiers. Source imports in this repo carry
-// explicit .ts extensions and relative paths (e.g. '../../adapters/types.ts'),
-// so the globs match any depth of `../` prefix followed by the target segment.
+// Backend libs/apps are now separate workspace packages, so cross-boundary
+// imports are bare specifiers (e.g. '@repel/backend-adapters'). The globs match
+// the package name and any subpath export of it. (Tag-based enforcement via
+// @nx/enforce-module-boundaries replaces this in REP-63.)
 import tsParser from '@typescript-eslint/parser';
 
 const adaptersFromFeatures = {
-  group: ['**/adapters/**', '**/adapters'],
+  group: ['@repel/backend-adapters', '@repel/backend-adapters/**'],
   message:
     'Manifesto Rule 6: features/ must not import from adapters/. Communicate via transport envelopes.',
 };
 
 const featuresFromAdapters = {
-  group: ['**/features/**', '**/features'],
+  group: ['@repel/backend-features', '@repel/backend-features/**'],
   message:
     'Manifesto Rule 6: adapters/ must not import from features/. Communicate via transport envelopes.',
 };
 
 const facadeFromFeatures = {
-  group: ['**/api/**', '**/api', '**/cli/**', '**/cli'],
+  group: ['@repel/backend-api', '@repel/backend-cli'],
   message:
     'Manifesto Rule 1a: features/ must not import from api/ or cli/. Facades consume features, not the reverse.',
 };
@@ -46,11 +47,11 @@ export default [
       '.devctl-worktrees/**',
     ],
   },
-  // Parse all server TypeScript with the typescript-eslint parser. No
+  // Parse all workspace TypeScript with the typescript-eslint parser. No
   // type-aware rules are enabled (minimal footprint, DR-REP-13-1); the parser
   // is needed only so ESLint can read .ts syntax for no-restricted-imports.
   {
-    files: ['apps/server/src/**/*.ts'],
+    files: ['packages/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 'latest',
@@ -59,7 +60,7 @@ export default [
   },
   // Rule 6 + Rule 1a: features/ may not reach into adapters/, api/, or cli/.
   {
-    files: ['apps/server/src/features/**/*.ts'],
+    files: ['packages/backend/libs/features/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -69,7 +70,7 @@ export default [
   },
   // Rule 6: adapters/ may not reach into features/.
   {
-    files: ['apps/server/src/adapters/**/*.ts'],
+    files: ['packages/backend/libs/adapters/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [featuresFromAdapters] }],
     },
