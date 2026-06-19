@@ -5,7 +5,7 @@ import {
   AccountReconnectInputSchema,
   AccountRmInputSchema,
   AccountShowInputSchema,
-} from '../index.ts';
+} from '../index';
 
 describe('AccountListInputSchema', function () {
   test('accepts an empty object — org and user are both optional', function () {

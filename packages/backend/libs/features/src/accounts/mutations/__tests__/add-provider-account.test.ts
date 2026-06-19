@@ -6,7 +6,7 @@ import type { Tx } from '@repel/backend-db/types';
 import {
   type AddProviderAccountInput,
   buildAddProviderAccount,
-} from '../add-provider-account.ts';
+} from '../add-provider-account';
 
 // Compile-only: build a Kysely over a never-connected Pool (mirrors
 // infra/db/client.ts config) so .compile() produces SQL + parameters without

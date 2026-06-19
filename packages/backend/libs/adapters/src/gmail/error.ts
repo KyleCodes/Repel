@@ -1,4 +1,4 @@
-import { AdapterError } from '../error.ts';
+import { AdapterError } from '../error';
 
 // Base for errors the Gmail adapter raises.
 export abstract class GmailAdapterError extends AdapterError {}

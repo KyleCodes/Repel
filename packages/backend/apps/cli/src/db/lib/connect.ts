@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readDatabaseUrlFromEnvLocal } from './env-local.ts';
+import { readDatabaseUrlFromEnvLocal } from './env-local';
 
 // Launches an interactive `pgcli` session against the worktree database.
 //

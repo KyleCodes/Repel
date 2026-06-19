@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { accountsService } from '@repel/backend-features/accounts/service';
-import { parseOrExit } from '../lib/parse-or-exit.ts';
-import { type BootstrapInput, BootstrapInputSchema } from './schemas/index.ts';
+import { parseOrExit } from '../lib/parse-or-exit';
+import { type BootstrapInput, BootstrapInputSchema } from './schemas/index';
 
 // `orgs` namespace. Line-of-business lifecycle: creating and managing the org
 // (and the users inside it). Distinct from `accounts`, which manages the

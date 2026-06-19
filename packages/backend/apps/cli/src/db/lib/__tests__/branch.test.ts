@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { extractTicketSlug } from '../branch.ts';
+import { extractTicketSlug } from '../branch';
 
 describe('extractTicketSlug', function () {
   test('extracts upper-case slug from a typical user-prefixed branch', function () {

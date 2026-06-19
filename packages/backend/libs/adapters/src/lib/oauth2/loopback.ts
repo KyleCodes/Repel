@@ -10,13 +10,13 @@ import type {
   ProviderAuth,
   ProviderAuthContext,
   ProviderAuthorization,
-} from '../../types.ts';
+} from '../../types';
 import {
   OAuth2DeniedError,
   OAuth2Error,
   OAuth2StateMismatchError,
   OAuth2TimeoutError,
-} from './error.ts';
+} from './error';
 
 export const LOOPBACK_TIMEOUT_MS = 120_000;
 

@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { getRequiredEnvVar } from '@repel/backend-env/accessors';
-import { DecryptionError, EncryptionKeyError } from './error.ts';
+import { DecryptionError, EncryptionKeyError } from './error';
 
 // Authenticated symmetric encryption for credentials at rest (AES-256-GCM).
 //

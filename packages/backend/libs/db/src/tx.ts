@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'kysely';
-import { normalizeDbError } from './error.ts';
-import { getDb } from './runtime.ts';
-import type { Tx } from './types.ts';
+import { normalizeDbError } from './error';
+import { getDb } from './runtime';
+import type { Tx } from './types';
 
 // Run a decorated operation, classifying any raw pg/Kysely error crossing the
 // tx boundary into the AppError hierarchy (DBError family for genuine DB faults,

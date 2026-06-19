@@ -7,15 +7,15 @@ import {
   loadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
 import { accountsService as defaultAccountsService } from '@repel/backend-features/accounts/service';
-import { confirm } from '../lib/confirm.ts';
-import { parseOrExit } from '../lib/parse-or-exit.ts';
-import { resolveAccount } from '../lib/resolve-account.ts';
-import { resolveOrgId } from '../lib/resolve-org.ts';
-import { resolveUserId } from '../lib/resolve-user.ts';
+import { confirm } from '../lib/confirm';
+import { parseOrExit } from '../lib/parse-or-exit';
+import { resolveAccount } from '../lib/resolve-account';
+import { resolveOrgId } from '../lib/resolve-org';
+import { resolveUserId } from '../lib/resolve-user';
 import {
   AccountIdentityMismatchError,
   UnsupportedAuthMethodError,
-} from './error.ts';
+} from './error';
 import {
   type AccountConnectInput,
   AccountConnectInputSchema,
@@ -27,7 +27,7 @@ import {
   AccountRmInputSchema,
   type AccountShowInput,
   AccountShowInputSchema,
-} from './schemas/index.ts';
+} from './schemas/index';
 
 // `accounts` namespace. Provider-account connections: the Gmail/iCloud logins
 // a user links to an org. Distinct from `orgs`, which owns org + user

@@ -1,5 +1,5 @@
 import type { Kysely, Transaction } from 'kysely';
-import type { DB } from './generated.ts';
+import type { DB } from './generated';
 
 // Hand-written database type surface. This file holds only the aliases that
 // cannot be derived from the schema.

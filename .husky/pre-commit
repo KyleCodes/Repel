@@ -1,2 +1,18 @@
 #!/usr/bin/env bash
+set -e
+
+# 1. Format staged files (prettier via lint-staged).
 bunx lint-staged
+
+# 2. Architecture + dependency gates, graph-aware. MUST run via `nx lint` (not
+#    raw eslint): @nx/enforce-module-boundaries is silently skipped without the
+#    Nx project graph, and @nx/dependency-checks needs the graph to know each
+#    project's real imports. `--uncommitted` scopes to projects with working-tree
+#    changes (this commit).
+bunx nx affected -t lint --uncommitted
+
+# 3. Typecheck gate (the `build` target is `tsc --build --emitDeclarationOnly`).
+#    Fast (cached per project) and catches type errors before they land. Tests
+#    are NOT run here — they hit the per-worktree Postgres DB and belong in
+#    pre-push. Bypass everything with `git commit --no-verify` when needed.
+bunx nx affected -t build --uncommitted

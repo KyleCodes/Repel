@@ -1,6 +1,6 @@
 import { accountsService } from '@repel/backend-features/accounts/service';
 import { Provider, type ProviderSlug } from '@repel/enums';
-import { AccountTokenSchema } from '../accounts/schemas/index.ts';
+import { AccountTokenSchema } from '../accounts/schemas/index';
 
 // The resolved provider-account shape, derived from the service's own return
 // type — the feature exposes its surface through service.ts, not its views.

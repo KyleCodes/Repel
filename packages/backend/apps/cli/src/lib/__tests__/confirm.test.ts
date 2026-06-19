@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { describe, expect, test } from 'bun:test';
-import { confirm } from '../confirm.ts';
+import { confirm } from '../confirm';
 
 // Builds a readable stream that yields `text` as a single chunk, mimicking
 // a line of stdin input. An empty array yields nothing, mimicking EOF.

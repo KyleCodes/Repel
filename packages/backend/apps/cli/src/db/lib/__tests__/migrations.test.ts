@@ -19,7 +19,7 @@ import {
   renderStatusTable,
   resolveMigrationMatch,
   resolveMigrationName,
-} from '../migrations.ts';
+} from '../migrations';
 
 describe('MIGRATIONS_DIR', function () {
   test('points at packages/backend/libs/db/src/migrations', function () {

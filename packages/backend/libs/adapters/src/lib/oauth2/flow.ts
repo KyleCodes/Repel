@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { type HttpDeps, httpRequest } from '@repel/http/client';
-import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from './error.ts';
-import type { OAuth2Config, TokenSet } from './types.ts';
+import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from './error';
+import type { OAuth2Config, TokenSet } from './types';
 
 // Refresh the access token once it expires within this window, not only after it
 // has already expired — avoids a token dying mid-operation moments after a check.

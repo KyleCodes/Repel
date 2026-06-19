@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -e
 cd "$(git rev-parse --show-toplevel)"
+# Deps may have changed (e.g. after `git pull`); reconcile, then reset stale TS
+# build state. These must succeed.
 bun install
 bun run clean
+# Re-warm the Nx graph + build cache so the next command is fast and the project
+# graph reflects the merged tree. Non-blocking: a build failure must not abort the
+# merge/pull — surface it on the next explicit build instead.
+bunx nx run-many -t build || true

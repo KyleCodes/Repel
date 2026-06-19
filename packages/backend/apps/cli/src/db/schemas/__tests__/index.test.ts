@@ -6,7 +6,7 @@ import {
   NukeInputSchema,
   RefreshTemplateInputSchema,
   StatusInputSchema,
-} from '../index.ts';
+} from '../index';
 
 describe('CloneInputSchema', function () {
   test('applies defaults when only branch is provided', function () {

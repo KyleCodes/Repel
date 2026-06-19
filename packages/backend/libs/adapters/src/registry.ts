@@ -1,7 +1,7 @@
 import { Provider, type ProviderSlug } from '@repel/enums';
-import { ProviderNotFoundError } from './error.ts';
-import { gmailAdapter } from './gmail/index.ts';
-import type { IProviderAdapter } from './types.ts';
+import { ProviderNotFoundError } from './error';
+import { gmailAdapter } from './gmail/index';
+import type { IProviderAdapter } from './types';
 
 const adapters: Partial<Record<ProviderSlug, IProviderAdapter>> = {
   [Provider.gmail]: gmailAdapter,

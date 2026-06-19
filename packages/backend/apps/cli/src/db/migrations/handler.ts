@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 import runner from 'node-pg-migrate';
-import { parseOrExit } from '../../lib/parse-or-exit.ts';
-import { extractTicketSlug, getCurrentBranch } from '../lib/branch.ts';
-import { runCodegen } from '../lib/codegen.ts';
-import { readDatabaseUrlFromEnvLocal } from '../lib/env-local.ts';
+import { parseOrExit } from '../../lib/parse-or-exit';
+import { extractTicketSlug, getCurrentBranch } from '../lib/branch';
+import { runCodegen } from '../lib/codegen';
+import { readDatabaseUrlFromEnvLocal } from '../lib/env-local';
 import {
   MIGRATIONS_DIR,
   applyHeaderToFile,
@@ -15,7 +15,7 @@ import {
   parseGeneratedPath,
   resolveMigrationMatch,
   resolveMigrationName,
-} from '../lib/migrations.ts';
+} from '../lib/migrations';
 import {
   type MigrateCreateInput,
   MigrateCreateInputSchema,
@@ -23,7 +23,7 @@ import {
   MigrateDownInputSchema,
   type MigrateUpInput,
   MigrateUpInputSchema,
-} from './schemas/index.ts';
+} from './schemas/index';
 
 export function registerMigrationsCommands(db: Command): void {
   const migrate = db.command('migrations').description('Migration lifecycle');

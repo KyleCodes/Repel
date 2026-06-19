@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import { sanitizeSlug } from '@repel/slug';
-import { buildDatabaseUrl } from './lib/admin-url.ts';
+import { buildDatabaseUrl } from './lib/admin-url';
 
 // Sanitizes a branch name into a valid Postgres database name. Returns
 // "repel_<slug>" where <slug> is produced by the shared sanitizer

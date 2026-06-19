@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { readDatabaseUrlFromEnvLocal } from '../env-local.ts';
+import { readDatabaseUrlFromEnvLocal } from '../env-local';
 
 let original: string | undefined;
 

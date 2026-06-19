@@ -1,5 +1,5 @@
 import type { InferResult } from 'kysely';
-import type { Tx } from '../../types.ts';
+import type { Tx } from '../../types';
 
 // SQLSTATE 42P01 = undefined_table. node-pg-migrate creates `pgmigrations`
 // lazily on its first `up`, so a fresh per-branch DB will throw here. We

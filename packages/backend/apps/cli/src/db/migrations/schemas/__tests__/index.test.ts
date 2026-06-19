@@ -3,7 +3,7 @@ import {
   MigrateCreateInputSchema,
   MigrateDownInputSchema,
   MigrateUpInputSchema,
-} from '../index.ts';
+} from '../index';
 
 describe('MigrateCreateInputSchema', function () {
   test('accepts empty object (name optional)', function () {

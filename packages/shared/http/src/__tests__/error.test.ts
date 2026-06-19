@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
-import { HttpError, HttpNetworkError, HttpResponseError } from '../error.ts';
+import { HttpError, HttpNetworkError, HttpResponseError } from '../error';
 
 describe('HttpResponseError', function () {
   test('extends HttpError and AppError', function () {

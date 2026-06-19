@@ -7,7 +7,16 @@
     "./accessors": "./src/accessors.ts",
     "./error": "./src/error.ts"
   },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
     "@repel/errors": "workspace:*"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:backend"
+    ]
   }
 }

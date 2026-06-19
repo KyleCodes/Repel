@@ -14,6 +14,9 @@
     "./lib/admin-url": "./src/lib/admin-url.ts",
     "./migrations-tracking/service": "./src/migrations-tracking/service.ts"
   },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
     "@repel/backend-env": "workspace:*",
     "@repel/enums": "workspace:*",
@@ -25,5 +28,11 @@
   },
   "devDependencies": {
     "@types/pg": "^8.11.6"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:backend"
+    ]
   }
 }

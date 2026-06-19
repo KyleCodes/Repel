@@ -1,6 +1,6 @@
 import { Client } from 'pg';
-import type { QueryInput } from '../schemas/index.ts';
-import { readDatabaseUrlFromEnvLocal } from './env-local.ts';
+import type { QueryInput } from '../schemas/index';
+import { readDatabaseUrlFromEnvLocal } from './env-local';
 
 // The literal `-` positional means "read the SQL from stdin" (DR-REP-40-2) —
 // the standard UNIX stdin sentinel, so heredocs can be piped without quoting.

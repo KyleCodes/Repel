@@ -1,11 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { Command } from 'commander';
-import { confirm } from '../../lib/confirm.ts';
-import { parseOrExit } from '../../lib/parse-or-exit.ts';
-import {
-  type GenerateKeyInput,
-  GenerateKeyInputSchema,
-} from './schemas/index.ts';
+import { confirm } from '../../lib/confirm';
+import { parseOrExit } from '../../lib/parse-or-exit';
+import { type GenerateKeyInput, GenerateKeyInputSchema } from './schemas/index';
 
 // `db encryption` namespace. Houses the encryption-key lifecycle for credentials
 // at rest. Today only `generate-key`; a future `rotate-key` (re-encrypt every

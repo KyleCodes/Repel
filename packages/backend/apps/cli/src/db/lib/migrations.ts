@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { RunnerOption } from 'node-pg-migrate';
 import { sanitizeSlug } from '@repel/slug';
-import { extractTicketSlug } from './branch.ts';
+import { extractTicketSlug } from './branch';
 
 // Walks up from process.cwd() looking for the repo root marker. The marker
 // is `bun.lock` which uniquely identifies our workspace root (apps/ and

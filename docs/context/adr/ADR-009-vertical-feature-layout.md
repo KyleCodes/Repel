@@ -1,8 +1,10 @@
 # ADR-009: Vertical Feature Layout
 
-**Date:** 2026-04-13 (amended 2026-04-14, 2026-04-18, 2026-05-13, 2026-05-16 — see Amendments)
+**Date:** 2026-04-13 (amended 2026-04-14, 2026-04-18, 2026-05-13, 2026-05-16, 2026-06-19 — see Amendments)
 **Status:** ACCEPTED
 **Domain:** architecture, data-access
+
+> **Path note (REP-63):** the REP-60 restructure moved this tree out of `apps/server/src/`. Features now live inside the `@repel/backend-features` package at `packages/backend/libs/features/src/accounts/…`. The vertical-slice decision below is unchanged; only the base path moved. Read `features/<feature>/` as `packages/backend/libs/features/src/<feature>/`.
 
 ## Context
 

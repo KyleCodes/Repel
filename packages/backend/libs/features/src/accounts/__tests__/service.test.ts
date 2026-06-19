@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { DBError, DBUniqueViolationError } from '@repel/backend-db/error';
 import { withTxContext } from '@repel/backend-db/tx';
 import type { Tx } from '@repel/backend-db/types';
-import { DuplicateProviderAccountError } from '../error.ts';
-import { accountsService } from '../service.ts';
+import { DuplicateProviderAccountError } from '../error';
+import { accountsService } from '../service';
 
 // The service's addProviderAccount wraps the mutation and maps a
 // DBUniqueViolationError to DuplicateProviderAccountError. Raw pg errors are

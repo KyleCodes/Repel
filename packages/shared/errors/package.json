@@ -5,5 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./src/errors.ts"
+  },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:shared"
+    ]
   }
 }

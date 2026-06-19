@@ -1,41 +1,28 @@
 // ESLint flat config. The repo is otherwise lint-free (Prettier + tsc do the
-// rest); ESLint exists here for ONE job: enforcing the architecture manifesto's
-// import barriers as a machine-checkable gate rather than a review convention.
+// rest); ESLint exists here for TWO jobs, both via @nx/eslint-plugin:
 //
-// Enforced (manifesto §5):
-//   Rule 1a — features/* may NOT import from api/ or cli/.
-//   Rule 6  — features/* may NOT import from adapters/, and
-//             adapters/* may NOT import from features/.
+//   1. @nx/enforce-module-boundaries — tag-based import barriers. Replaces the
+//      hand-maintained no-restricted-imports globs (REP-63). Every project is
+//      tagged type:app|lib + scope:backend|frontend|shared (package.json#nx.tags);
+//      the two Rule-6 libs additionally carry area:adapter / area:feature.
 //
-// Rule 1b (cross-feature reads go through views/) is NOT encoded here: it needs
-// a same-layer allow/deny that no-restricted-imports' path globs express poorly
-// (a feature importing its OWN siblings' views is legal; importing their
-// mutations/service is not). It stays a documented convention until a type-aware
-// boundary plugin is justified. See DR-REP-13-1.
+//   2. @nx/dependency-checks — every package must DECLARE every package it
+//      imports. Catches phantom deps: importing a package that only resolves
+//      because it's hoisted / globally installed but isn't in this project's
+//      package.json. Severity error from day one.
 //
-// Backend libs/apps are now separate workspace packages, so cross-boundary
-// imports are bare specifiers (e.g. '@repel/backend-adapters'). The globs match
-// the package name and any subpath export of it. (Tag-based enforcement via
-// @nx/enforce-module-boundaries replaces this in REP-63.)
+// Manifesto §5 boundaries, now expressed as tag constraints below:
+//   - app ↛ app, lib ↛ app (Rule 1a: features↛api/cli)
+//   - backend ↮ frontend; shared imports only shared
+//   - adapters ↮ features (Rule 6, via the area: tags)
+//
+// Rule 1b (a feature reaching a SIBLING feature's views/ directly) is not
+// expressible at project granularity — it stays a documented manifesto
+// convention. Cross-package access is already blocked by each feature package's
+// exports map (only ./accounts/service + ./accounts/error are public).
+import nx from '@nx/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
-
-const adaptersFromFeatures = {
-  group: ['@repel/backend-adapters', '@repel/backend-adapters/**'],
-  message:
-    'Manifesto Rule 6: features/ must not import from adapters/. Communicate via transport envelopes.',
-};
-
-const featuresFromAdapters = {
-  group: ['@repel/backend-features', '@repel/backend-features/**'],
-  message:
-    'Manifesto Rule 6: adapters/ must not import from features/. Communicate via transport envelopes.',
-};
-
-const facadeFromFeatures = {
-  group: ['@repel/backend-api', '@repel/backend-cli'],
-  message:
-    'Manifesto Rule 1a: features/ must not import from api/ or cli/. Facades consume features, not the reverse.',
-};
+import * as jsoncParser from 'jsonc-eslint-parser';
 
 export default [
   {
@@ -45,34 +32,70 @@ export default [
       '**/generated.ts',
       '.devctl_generated/**',
       '.devctl-worktrees/**',
+      '.nx/**',
     ],
   },
-  // Parse all workspace TypeScript with the typescript-eslint parser. No
-  // type-aware rules are enabled (minimal footprint, DR-REP-13-1); the parser
-  // is needed only so ESLint can read .ts syntax for no-restricted-imports.
+  // Module boundaries — runs on all workspace TS. The parser is needed only so
+  // ESLint can read .ts syntax; no type-aware rules are enabled.
   {
-    files: ['packages/**/*.ts'],
+    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 'latest',
       sourceType: 'module',
     },
-  },
-  // Rule 6 + Rule 1a: features/ may not reach into adapters/, api/, or cli/.
-  {
-    files: ['packages/backend/libs/features/**/*.ts'],
+    plugins: { '@nx': nx },
     rules: {
-      'no-restricted-imports': [
+      '@nx/enforce-module-boundaries': [
         'error',
-        { patterns: [adaptersFromFeatures, facadeFromFeatures] },
+        {
+          enforceBuildableLibDependency: true,
+          allow: [],
+          depConstraints: [
+            { sourceTag: 'type:app', onlyDependOnLibsWithTags: ['type:lib'] },
+            { sourceTag: 'type:lib', notDependOnLibsWithTags: ['type:app'] },
+            {
+              sourceTag: 'scope:shared',
+              onlyDependOnLibsWithTags: ['scope:shared'],
+            },
+            {
+              sourceTag: 'scope:backend',
+              onlyDependOnLibsWithTags: ['scope:backend', 'scope:shared'],
+            },
+            {
+              sourceTag: 'scope:frontend',
+              onlyDependOnLibsWithTags: ['scope:frontend', 'scope:shared'],
+            },
+            {
+              sourceTag: 'area:feature',
+              notDependOnLibsWithTags: ['area:adapter'],
+            },
+            {
+              sourceTag: 'area:adapter',
+              notDependOnLibsWithTags: ['area:feature'],
+            },
+          ],
+        },
       ],
     },
   },
-  // Rule 6: adapters/ may not reach into features/.
+  // Dependency declaration — every imported package must be declared in the
+  // project's own package.json. Lints the package.json files themselves.
   {
-    files: ['packages/backend/libs/adapters/**/*.ts'],
+    files: ['packages/**/package.json'],
+    languageOptions: { parser: jsoncParser },
+    plugins: { '@nx': nx },
     rules: {
-      'no-restricted-imports': ['error', { patterns: [featuresFromAdapters] }],
+      // Test imports count: a package that imports `pg` (etc.) in its tests must
+      // declare it. No test-file exclusion — undeclared imports fail everywhere.
+      // `vite` + its plugin are build tooling consumed by vite.config.ts / the
+      // build script; they legitimately live in devDependencies.
+      '@nx/dependency-checks': [
+        'error',
+        {
+          ignoredDependencies: ['vite', '@vitejs/plugin-react'],
+        },
+      ],
     },
   },
 ];

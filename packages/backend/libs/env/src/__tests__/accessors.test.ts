@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
-import { getOptionalEnvVar, getRequiredEnvVar } from '../accessors.ts';
-import { MissingEnvVarError } from '../error.ts';
+import { getOptionalEnvVar, getRequiredEnvVar } from '../accessors';
+import { MissingEnvVarError } from '../error';
 
 const NAME = 'REPEL_TEST_ENV_VAR';
 let original: string | undefined;

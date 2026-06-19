@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "cli": "bun --env-file=../../.env.development --env-file=../../.env.local run src/index.ts",
-    "cli:debug": "bun run bin/cli-debug.ts"
+    "cli:debug": "bun run bin/cli-debug.ts",
+    "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
     "@repel/backend-adapters": "workspace:*",
@@ -24,5 +25,11 @@
   "devDependencies": {
     "@types/pg": "^8.11.6",
     "kysely-codegen": "^0.20.0"
+  },
+  "nx": {
+    "tags": [
+      "type:app",
+      "scope:backend"
+    ]
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { withTxContext } from '../../tx.ts';
-import type { Tx } from '../../types.ts';
-import { migrationsService } from '../service.ts';
+import { withTxContext } from '../../tx';
+import type { Tx } from '../../types';
+import { migrationsService } from '../service';
 
 // Fakes a Kysely transaction chain — selectFrom().select().orderBy().execute()
 function makeFakeTx(behavior: {

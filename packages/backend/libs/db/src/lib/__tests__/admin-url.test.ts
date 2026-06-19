@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildDatabaseUrl, resolveAdminUrl } from '../admin-url.ts';
+import { buildDatabaseUrl, resolveAdminUrl } from '../admin-url';
 
 describe('resolveAdminUrl', function () {
   test('returns pgAdminUrl verbatim when set', function () {

@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerDbCommands, runNuke } from '../handler.ts';
+import { registerDbCommands, runNuke } from '../handler';
 
 describe('registerDbCommands', function () {
   test('registers db clone|drop|refresh-template|status|nuke|codegen and the migrate subgroup', function () {

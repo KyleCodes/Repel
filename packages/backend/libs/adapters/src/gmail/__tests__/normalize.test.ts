@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { Channel } from '@repel/enums';
-import type { RawMessage } from '../../types.ts';
+import type { RawMessage } from '../../types';
 import {
   GMAIL_PAYLOAD_SCHEMA,
   buildGmailRawMessage,
   normalizeGmailMessage,
-} from '../normalize.ts';
-import type { GmailMessage } from '../queries/messages.ts';
+} from '../normalize';
+import type { GmailMessage } from '../queries/messages';
 
 const CTX = {
   orgId: 'org-1',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { getGmailMessage, listGmailMessages } from '../messages.ts';
+import { getGmailMessage, listGmailMessages } from '../messages';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {

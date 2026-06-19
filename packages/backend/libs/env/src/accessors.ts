@@ -1,4 +1,4 @@
-import { MissingEnvVarError } from './error.ts';
+import { MissingEnvVarError } from './error';
 
 // Read a required environment variable. An unset or empty value throws
 // MissingEnvVarError — the single choke point for "this must be configured".

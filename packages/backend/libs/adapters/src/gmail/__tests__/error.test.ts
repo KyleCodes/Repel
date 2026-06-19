@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
-import { AdapterError } from '../../error.ts';
-import { GmailNotImplementedError } from '../error.ts';
+import { AdapterError } from '../../error';
+import { GmailNotImplementedError } from '../error';
 
 describe('GmailNotImplementedError', function () {
   test('extends AdapterError and AppError', function () {

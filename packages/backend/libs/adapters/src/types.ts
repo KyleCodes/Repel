@@ -12,8 +12,8 @@ import type {
 } from '@repel/backend-db/generated';
 import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/enums';
 import type { HttpDeps } from '@repel/http/client';
-import type { AdapterError } from './error.ts';
-import type { GmailCredentials } from './gmail/types.ts';
+import type { AdapterError } from './error';
+import type { GmailCredentials } from './gmail/types';
 
 // What a provider can do, declared once per adapter as a const. Per-account
 // variance (e.g. scope-driven send/receive toggles) isn't modeled yet. The auth

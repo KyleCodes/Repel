@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
-import { DBError, DBUniqueViolationError, normalizeDbError } from '../error.ts';
+import { DBError, DBUniqueViolationError, normalizeDbError } from '../error';
 
 // A concrete AppError standing in for any domain error a view/mutation might
 // throw inside a tx (e.g. ProviderAccountNotFoundError).

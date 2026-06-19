@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { Channel } from '@repel/enums';
-import { AdapterError } from '../../error.ts';
-import type { IProviderAdapter, SendInput } from '../../types.ts';
-import { GmailNotImplementedError } from '../error.ts';
-import { gmailAdapter, gmailCapabilities } from '../index.ts';
-import { normalizeGmailMessage } from '../normalize.ts';
+import { AdapterError } from '../../error';
+import type { IProviderAdapter, SendInput } from '../../types';
+import { GmailNotImplementedError } from '../error';
+import { gmailAdapter, gmailCapabilities } from '../index';
+import { normalizeGmailMessage } from '../normalize';
 
 // Compile-time assignability: gmailAdapter must satisfy the contract.
 const _contract: IProviderAdapter = gmailAdapter;

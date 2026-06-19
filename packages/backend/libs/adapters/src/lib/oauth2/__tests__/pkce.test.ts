@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
-import { generatePkce, generateState } from '../pkce.ts';
+import { generatePkce, generateState } from '../pkce';
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 

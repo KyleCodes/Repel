@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { HttpResponseError } from '@repel/http/error';
-import { OAuth2StateMismatchError } from '../../lib/oauth2/error.ts';
-import { gmailAuth } from '../auth.ts';
-import { GMAIL_TOKEN_ENDPOINT } from '../oauth.ts';
+import { OAuth2StateMismatchError } from '../../lib/oauth2/error';
+import { gmailAuth } from '../auth';
+import { GMAIL_TOKEN_ENDPOINT } from '../oauth';
 
 let originalId: string | undefined;
 let originalSecret: string | undefined;

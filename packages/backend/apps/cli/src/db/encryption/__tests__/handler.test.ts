@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerEncryptionCommands, runGenerateKey } from '../handler.ts';
+import { registerEncryptionCommands, runGenerateKey } from '../handler';
 
 describe('registerEncryptionCommands', function () {
   test('registers `encryption generate-key` with a --yes option', function () {

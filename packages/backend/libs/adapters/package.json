@@ -11,6 +11,9 @@
     "./lib/oauth2/loopback": "./src/lib/oauth2/loopback.ts",
     "./lib/oauth2/error": "./src/lib/oauth2/error.ts"
   },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
@@ -19,5 +22,12 @@
     "@repel/http": "workspace:*",
     "kysely": "^0.27.3",
     "zod": "4.4.3"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:backend",
+      "area:adapter"
+    ]
   }
 }
