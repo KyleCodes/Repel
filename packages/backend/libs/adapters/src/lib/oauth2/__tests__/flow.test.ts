@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { HttpResponseError } from '@repel/http/error';
-import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from '../error.ts';
+import { OAuth2NoRefreshTokenError, OAuth2RefreshError } from '../error';
 import {
   buildAuthUrl,
   exchangeCode,
   refreshIfExpired,
   refreshTokens,
-} from '../flow.ts';
-import type { OAuth2Config, TokenSet } from '../types.ts';
+} from '../flow';
+import type { OAuth2Config, TokenSet } from '../types';
 
 const config: OAuth2Config = {
   clientId: 'client-123',

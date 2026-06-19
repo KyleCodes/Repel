@@ -6,7 +6,7 @@ import type { Tx } from '@repel/backend-db/types';
 import {
   type UpdateProviderAccountCredentialsInput,
   buildUpdateProviderAccountCredentials,
-} from '../update-provider-account-credentials.ts';
+} from '../update-provider-account-credentials';
 
 // Compile-only: build a Kysely over a never-connected Pool so .compile()
 // produces SQL + parameters without any I/O. No query executes.

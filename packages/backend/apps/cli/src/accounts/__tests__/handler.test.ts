@@ -14,17 +14,17 @@ import {
   loadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
 import { DuplicateProviderAccountError } from '@repel/backend-features/accounts/error';
-import * as resolveAccountModule from '../../lib/resolve-account.ts';
+import * as resolveAccountModule from '../../lib/resolve-account';
 import {
   AccountIdentityMismatchError,
   UnsupportedAuthMethodError,
-} from '../error.ts';
+} from '../error';
 import {
   registerAccountsCommands,
   runAccountsConnect,
   runAccountsReconnect,
   runAccountsShow,
-} from '../handler.ts';
+} from '../handler';
 
 const ENCRYPTION_KEY_HEX = randomBytes(32).toString('hex');
 

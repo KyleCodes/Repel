@@ -1,8 +1,10 @@
 # ADR-012: CLI Structure — handler + sibling `schemas/`
 
-**Date:** 2026-05-06 (amended 2026-05-13: full Decision + Compliance rewrite — see History)
+**Date:** 2026-05-06 (amended 2026-05-13: full Decision + Compliance rewrite; 2026-06-19: path note — see History)
 **Status:** ACCEPTED
 **Domain:** conventions, architecture
+
+> **Path note (REP-63):** the CLI moved out of `apps/server/src/cli/` into its own app package `@repel/backend-cli` at `packages/backend/apps/cli/`. Read `cli/<ns>/` as `packages/backend/apps/cli/src/<ns>/`; cross-tree helpers that this ADR placed at `apps/server/src/lib/` now live in `@repel/backend-cli/src/lib/` or, when shared with other packages, in the relevant `libs/` package. The namespace/schema layout decision below is unchanged.
 
 ## Context
 

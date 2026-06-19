@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { ProviderNotFoundError } from '../error.ts';
-import { gmailAdapter } from '../gmail/index.ts';
-import { resolveProviderAdapter } from '../registry.ts';
+import { ProviderNotFoundError } from '../error';
+import { gmailAdapter } from '../gmail/index';
+import { resolveProviderAdapter } from '../registry';
 
 describe('resolveProviderAdapter', function () {
   test('returns the gmail adapter for the gmail slug', function () {

@@ -57,3 +57,9 @@ docs/summaries/handoff-2026-03-30-C-17413-execute.md
 # .gitignore inside this dir, but the devctl symlink chain breaks it in
 # worktrees, so ignore it explicitly here.
 .husky/_/
+
+
+
+.nx/cache
+.nx/workspace-data
+.nx/migrate-runs

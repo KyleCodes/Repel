@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { readDatabaseUrlFromEnvLocal } from './env-local.ts';
-import { MIGRATIONS_DIR } from './migrations.ts';
+import { readDatabaseUrlFromEnvLocal } from './env-local';
+import { MIGRATIONS_DIR } from './migrations';
 
 // Absolute path to the kysely-codegen output file. Resolved as a sibling of
 // the migrations directory (both live in infra/db/), so it stays correct

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerMigrationsCommands } from '../handler.ts';
+import { registerMigrationsCommands } from '../handler';
 
 describe('registerMigrationsCommands', function () {
   test('attaches migrations create|up|down to a db Command', function () {

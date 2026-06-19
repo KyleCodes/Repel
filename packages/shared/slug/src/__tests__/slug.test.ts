@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sanitizeSlug } from '../slug.ts';
+import { sanitizeSlug } from '../slug';
 
 describe('sanitizeSlug', function () {
   test('lowercases and replaces non-[a-z0-9_-] runs with single underscore', function () {

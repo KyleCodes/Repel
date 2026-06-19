@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { TokenSet } from '../lib/oauth2/types.ts';
+import type { TokenSet } from '../lib/oauth2/types';
 
 // Gmail's credentials as handed to the adapter at ingest time: the OAuth2 token
 // set, tagged with the provider so ProviderCredentials narrows without a cast.

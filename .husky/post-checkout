@@ -5,3 +5,6 @@ set -e
 cd "$(git rev-parse --show-toplevel)"
 bun install
 bun run clean
+# Re-warm the Nx graph + build cache for the newly checked-out branch.
+# Non-blocking: a build failure must not abort the checkout.
+bunx nx run-many -t build || true

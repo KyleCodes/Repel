@@ -1,23 +1,23 @@
 import { type HttpDeps } from '@repel/http/client';
-import { refreshIfExpired } from '../../lib/oauth2/flow.ts';
+import { refreshIfExpired } from '../../lib/oauth2/flow';
 import type {
   AdapterEvent,
   AttachmentContent,
   GmailIngestInput,
   NormalizedAttachment,
-} from '../../types.ts';
+} from '../../types';
 import {
   GmailAttachmentFetchError,
   GmailIngestError,
   GmailMessageFetchError,
   GmailNormalizeError,
   GmailNotImplementedError,
-} from '../error.ts';
-import { buildGmailRawMessage, normalizeGmailMessage } from '../normalize.ts';
-import { loadGmailOAuthConfig, withRedirectUri } from '../oauth.ts';
-import { getGmailAttachment } from '../queries/attachments.ts';
-import { getGmailMessage, listGmailMessages } from '../queries/messages.ts';
-import { getGmailProfile } from '../queries/profile.ts';
+} from '../error';
+import { buildGmailRawMessage, normalizeGmailMessage } from '../normalize';
+import { loadGmailOAuthConfig, withRedirectUri } from '../oauth';
+import { getGmailAttachment } from '../queries/attachments';
+import { getGmailMessage, listGmailMessages } from '../queries/messages';
+import { getGmailProfile } from '../queries/profile';
 
 // The resumption cursor emitted on `completed`: Gmail's historyId, the seed for
 // the next incremental sync (REP-53). The runner persists it to

@@ -4,18 +4,18 @@ import type {
   OAuthExchangeInput,
   ProviderAuthContext,
   ProviderAuthorization,
-} from '../../../types.ts';
+} from '../../../types';
 import {
   OAuth2DeniedError,
   OAuth2Error,
   OAuth2StateMismatchError,
   OAuth2TimeoutError,
-} from '../error.ts';
+} from '../error';
 import {
   LOOPBACK_TIMEOUT_MS,
   handleRedirect,
   runLoopbackFlow,
-} from '../loopback.ts';
+} from '../loopback';
 
 const ctx: ProviderAuthContext = {
   provider: 'gmail',

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Command } from 'commander';
-import { registerOrgsCommands } from '../handler.ts';
+import { registerOrgsCommands } from '../handler';
 
 describe('registerOrgsCommands', function () {
   test('registers the orgs namespace with the bootstrap verb', function () {

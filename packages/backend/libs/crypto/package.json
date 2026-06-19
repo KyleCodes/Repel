@@ -7,8 +7,17 @@
     "./encryption": "./src/encryption.ts",
     "./error": "./src/error.ts"
   },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
     "@repel/backend-env": "workspace:*",
     "@repel/errors": "workspace:*"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:backend"
+    ]
   }
 }

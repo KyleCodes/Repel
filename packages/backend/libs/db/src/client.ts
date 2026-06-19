@@ -1,7 +1,7 @@
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { getRequiredEnvVar } from '@repel/backend-env/accessors';
-import type { DB } from './generated.ts';
+import type { DB } from './generated';
 
 // Builds a fresh Kysely instance over a new pg Pool. Normal app code should
 // not call this directly — use getDb() from runtime.ts to get the lazily

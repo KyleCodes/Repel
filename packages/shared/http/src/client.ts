@@ -1,5 +1,5 @@
 import type { ZodType, z } from 'zod';
-import { HttpNetworkError, HttpResponseError } from './error.ts';
+import { HttpNetworkError, HttpResponseError } from './error';
 
 // A single typed fetch wrapper, the codebase's canonical HTTP entrypoint.
 // Structured inputs go in (params, body, headers); a validated value comes out.

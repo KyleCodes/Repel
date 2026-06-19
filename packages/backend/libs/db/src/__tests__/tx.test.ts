@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
-import { DBError, DBUniqueViolationError } from '../error.ts';
-import { runInOrgTx, runInTx, withTxContext } from '../tx.ts';
-import type { Tx } from '../types.ts';
+import { DBError, DBUniqueViolationError } from '../error';
+import { runInOrgTx, runInTx, withTxContext } from '../tx';
+import type { Tx } from '../types';
 
 // These tests exercise the three ambient-tx guard cases in the decorators
 // plus the ambient-handle-reuse property. withTxContext sets an

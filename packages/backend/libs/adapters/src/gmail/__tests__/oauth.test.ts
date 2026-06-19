@@ -5,7 +5,7 @@ import {
   GMAIL_TOKEN_ENDPOINT,
   loadGmailOAuthConfig,
   withRedirectUri,
-} from '../oauth.ts';
+} from '../oauth';
 
 let originalId: string | undefined;
 let originalSecret: string | undefined;

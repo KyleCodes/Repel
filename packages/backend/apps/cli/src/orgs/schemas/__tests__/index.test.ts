@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { BootstrapInputSchema } from '../index.ts';
+import { BootstrapInputSchema } from '../index';
 
 describe('BootstrapInputSchema', function () {
   test('applies its defaults', function () {

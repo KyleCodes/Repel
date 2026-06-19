@@ -1,15 +1,11 @@
 import { AuthMethod } from '@repel/enums';
 import type { HttpDeps } from '@repel/http/client';
-import { OAuth2StateMismatchError } from '../lib/oauth2/error.ts';
-import { buildAuthUrl, exchangeCode } from '../lib/oauth2/flow.ts';
-import { generatePkce, generateState } from '../lib/oauth2/pkce.ts';
-import type {
-  OAuth2Auth,
-  OAuthAuthorize,
-  OAuthExchangeInput,
-} from '../types.ts';
-import { loadGmailOAuthConfig, withRedirectUri } from './oauth.ts';
-import { getGmailProfile } from './queries/profile.ts';
+import { OAuth2StateMismatchError } from '../lib/oauth2/error';
+import { buildAuthUrl, exchangeCode } from '../lib/oauth2/flow';
+import { generatePkce, generateState } from '../lib/oauth2/pkce';
+import type { OAuth2Auth, OAuthAuthorize, OAuthExchangeInput } from '../types';
+import { loadGmailOAuthConfig, withRedirectUri } from './oauth';
+import { getGmailProfile } from './queries/profile';
 
 export const gmailAuth: OAuth2Auth = {
   method: 'oauth2',

@@ -5,12 +5,12 @@ import type {
   NormalizedMessage,
   NormalizedParticipant,
   RawMessage,
-} from '../types.ts';
+} from '../types';
 import {
   type GmailMessage,
   GmailMessageSchema,
   type GmailPart,
-} from './queries/messages.ts';
+} from './queries/messages';
 
 // The payload-schema tag stamped on every raw row. Bump the version when the
 // stored payload contract changes so a re-normalization can tell vintages apart.

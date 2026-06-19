@@ -1,4 +1,4 @@
-import { startApi } from './router.ts';
+import { startApi } from './router';
 
 startApi().catch((err) => {
   console.error(err);

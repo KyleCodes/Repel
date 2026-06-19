@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { resolveOrgId } from '../resolve-org.ts';
+import { resolveOrgId } from '../resolve-org';
 
 let original: string | undefined;
 

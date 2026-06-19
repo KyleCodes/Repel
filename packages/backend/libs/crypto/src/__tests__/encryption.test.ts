@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { MissingEnvVarError } from '@repel/backend-env/error';
-import { decrypt, encrypt, loadEncryptionKey } from '../encryption.ts';
-import { DecryptionError, EncryptionKeyError } from '../error.ts';
+import { decrypt, encrypt, loadEncryptionKey } from '../encryption';
+import { DecryptionError, EncryptionKeyError } from '../error';
 
 // A valid 32-byte key, hex-encoded (64 chars) — the shape `openssl rand -hex 32`
 // and `repel db encryption generate-key` produce.

@@ -1,5 +1,5 @@
 import { getRequiredEnvVar } from '@repel/backend-env/accessors';
-import type { OAuth2Config } from '../lib/oauth2/types.ts';
+import type { OAuth2Config } from '../lib/oauth2/types';
 
 export const GMAIL_AUTH_ENDPOINT =
   'https://accounts.google.com/o/oauth2/v2/auth';

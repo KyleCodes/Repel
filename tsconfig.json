@@ -9,9 +9,7 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true,
+    "emitDeclarationOnly": true,
     "types": ["bun-types"]
   },
   "references": [

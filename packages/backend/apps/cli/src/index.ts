@@ -1,9 +1,9 @@
 import { Command, CommanderError } from 'commander';
 import { closeDb } from '@repel/backend-db/runtime';
-import { registerAccountsCommands } from './accounts/handler.ts';
-import { registerDbCommands } from './db/handler.ts';
-import { handleCliError } from './lib/handle-cli-error.ts';
-import { registerOrgsCommands } from './orgs/handler.ts';
+import { registerAccountsCommands } from './accounts/handler';
+import { registerDbCommands } from './db/handler';
+import { handleCliError } from './lib/handle-cli-error';
+import { registerOrgsCommands } from './orgs/handler';
 
 const program = new Command();
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { resolveUserId } from '../resolve-user.ts';
+import { resolveUserId } from '../resolve-user';
 
 let original: string | undefined;
 

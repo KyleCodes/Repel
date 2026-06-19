@@ -1,5 +1,5 @@
-import type { SendInput } from '../../types.ts';
-import { GmailNotImplementedError } from '../error.ts';
+import type { SendInput } from '../../types';
+import { GmailNotImplementedError } from '../error';
 
 // Gmail send is not enabled at this stage — capabilities.canSend is false. The
 // signature matches the contract so the adapter typechecks; the throw is

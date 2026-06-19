@@ -5,7 +5,7 @@ import {
   OAuth2Error,
   OAuth2StateMismatchError,
   OAuth2TimeoutError,
-} from '../error.ts';
+} from '../error';
 
 describe('OAuth2 errors', function () {
   test('OAuth2Error extends AppError', function () {

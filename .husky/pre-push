@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+# Heavier gate at the "about to share" boundary: build (typecheck) AND test for
+# every project affected since main. Tests hit the per-worktree Postgres DB, so
+# they live here rather than in pre-commit. `affected --base=main` skips projects
+# main already has unchanged. Bypass with `git push --no-verify`.
+#
+# On a branch stacked on another feature branch (not main), override the base:
+#   nx affected -t build,test --base=<parent-branch>
+bunx nx affected -t build,test --base=main

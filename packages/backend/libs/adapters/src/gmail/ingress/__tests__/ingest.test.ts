@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   OAuth2NoRefreshTokenError,
   OAuth2RefreshError,
-} from '../../../lib/oauth2/error.ts';
-import type { AdapterEvent, IngestInput } from '../../../types.ts';
+} from '../../../lib/oauth2/error';
+import type { AdapterEvent, IngestInput } from '../../../types';
 import {
   GmailAttachmentFetchError,
   GmailMessageFetchError,
   GmailNotImplementedError,
-} from '../../error.ts';
-import { ingest } from '../ingest.ts';
+} from '../../error';
+import { ingest } from '../ingest';
 
 let originalId: string | undefined;
 let originalSecret: string | undefined;

@@ -10,19 +10,19 @@ import {
 import { resolveAdminUrl } from '@repel/backend-db/lib/admin-url';
 import { migrationsService } from '@repel/backend-db/migrations-tracking/service';
 import { getOptionalEnvVar } from '@repel/backend-env/accessors';
-import { confirm } from '../lib/confirm.ts';
-import { parseOrExit } from '../lib/parse-or-exit.ts';
-import { registerEncryptionCommands } from './encryption/handler.ts';
-import { runCodegen } from './lib/codegen.ts';
-import { runConnect } from './lib/connect.ts';
-import { readDatabaseUrlFromEnvLocal } from './lib/env-local.ts';
+import { confirm } from '../lib/confirm';
+import { parseOrExit } from '../lib/parse-or-exit';
+import { registerEncryptionCommands } from './encryption/handler';
+import { runCodegen } from './lib/codegen';
+import { runConnect } from './lib/connect';
+import { readDatabaseUrlFromEnvLocal } from './lib/env-local';
 import {
   listFsMigrations,
   partitionStatus,
   renderStatusTable,
-} from './lib/migrations.ts';
-import { runQuery } from './lib/query.ts';
-import { registerMigrationsCommands } from './migrations/handler.ts';
+} from './lib/migrations';
+import { runQuery } from './lib/query';
+import { registerMigrationsCommands } from './migrations/handler';
 import {
   type CloneInput,
   CloneInputSchema,
@@ -39,7 +39,7 @@ import {
   RefreshTemplateInputSchema,
   type StatusInput,
   StatusInputSchema,
-} from './schemas/index.ts';
+} from './schemas/index';
 
 function readAdminUrlFromEnv(): string {
   return resolveAdminUrl({

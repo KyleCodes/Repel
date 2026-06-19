@@ -2,5 +2,14 @@
   "name": "@repel/backend-worker",
   "version": "0.0.1",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
+  "nx": {
+    "tags": [
+      "type:app",
+      "scope:backend"
+    ]
+  }
 }

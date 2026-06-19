@@ -6,43 +6,43 @@ import {
   ProviderAccountNotFoundError,
   UserAlreadyExistsError,
   UserNotFoundError,
-} from './error.ts';
+} from './error';
 import {
   type AddProviderAccountInput,
   addProviderAccount,
-} from './mutations/add-provider-account.ts';
+} from './mutations/add-provider-account';
 import {
   type BootstrapInput,
   type BootstrapResult,
   bootstrap,
-} from './mutations/bootstrap.ts';
+} from './mutations/bootstrap';
 import {
   type DeactivateProviderAccountInput,
   deactivateProviderAccount,
-} from './mutations/deactivate-provider-account.ts';
+} from './mutations/deactivate-provider-account';
 import {
   type UpdateProviderAccountCredentialsInput,
   updateProviderAccountCredentials,
-} from './mutations/update-provider-account-credentials.ts';
+} from './mutations/update-provider-account-credentials';
 import {
   type FindProviderAccountsByRefInput,
   findProviderAccountsByRef,
-} from './views/find-provider-accounts-by-ref.ts';
+} from './views/find-provider-accounts-by-ref';
 import {
   type FindUserByEmailInput,
   findUserByEmail,
-} from './views/find-user-by-email.ts';
-import { type GetOrgByIdInput, getOrgById } from './views/get-org-by-id.ts';
+} from './views/find-user-by-email';
+import { type GetOrgByIdInput, getOrgById } from './views/get-org-by-id';
 import {
   type GetProviderAccountInput,
   getProviderAccount,
-} from './views/get-provider-account.ts';
-import { type GetUserByIdInput, getUserById } from './views/get-user-by-id.ts';
+} from './views/get-provider-account';
+import { type GetUserByIdInput, getUserById } from './views/get-user-by-id';
 import {
   type ListProviderAccountsInput,
   listProviderAccounts,
-} from './views/list-provider-accounts.ts';
-import { listUsersInOrg } from './views/list-users-in-org.ts';
+} from './views/list-provider-accounts';
+import { listUsersInOrg } from './views/list-users-in-org';
 
 // Public surface of the accounts feature. The service owns transactions
 // (every method is decorated with runInTx or runInOrgTx) and applies

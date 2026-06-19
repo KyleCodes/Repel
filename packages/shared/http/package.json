@@ -7,8 +7,17 @@
     "./client": "./src/client.ts",
     "./error": "./src/error.ts"
   },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
     "@repel/errors": "workspace:*",
     "zod": "4.4.3"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:shared"
+    ]
   }
 }

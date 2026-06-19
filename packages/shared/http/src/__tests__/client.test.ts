@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { httpRequest } from '../client.ts';
-import { HttpNetworkError, HttpResponseError } from '../error.ts';
+import { httpRequest } from '../client';
+import { HttpNetworkError, HttpResponseError } from '../error';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {

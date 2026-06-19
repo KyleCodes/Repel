@@ -5,13 +5,30 @@
     "rootDir": "./src"
   },
   "references": [
-    { "path": "../../../shared/enums" },
-    { "path": "../../../shared/errors" },
-    { "path": "../../../shared/slug" },
-    { "path": "../../libs/db" },
-    { "path": "../../libs/env" },
-    { "path": "../../libs/features" },
-    { "path": "../../libs/adapters" }
+    {
+      "path": "../../../shared/slug"
+    },
+    {
+      "path": "../../../shared/errors"
+    },
+    {
+      "path": "../../../shared/enums"
+    },
+    {
+      "path": "../../libs/features"
+    },
+    {
+      "path": "../../libs/env"
+    },
+    {
+      "path": "../../libs/db"
+    },
+    {
+      "path": "../../libs/crypto"
+    },
+    {
+      "path": "../../libs/adapters"
+    }
   ],
   "include": ["src"]
 }

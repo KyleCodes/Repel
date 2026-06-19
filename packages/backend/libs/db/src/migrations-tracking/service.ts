@@ -1,5 +1,5 @@
-import { runInTx } from '../tx.ts';
-import { listApplied } from './views/list-applied.ts';
+import { runInTx } from '../tx';
+import { listApplied } from './views/list-applied';
 
 // `pgmigrations` is unscoped infrastructure metadata — no orgId, no RLS.
 // Uses runInTx (not runInOrgTx) per ADR-010. Service owns the transaction
