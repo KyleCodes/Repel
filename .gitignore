@@ -11,9 +11,9 @@ tsconfig.tsbuildinfo
 packages/backend/apps/cli/bin/cli-debug.js
 packages/backend/apps/cli/bin/cli-debug.d.ts
 packages/backend/apps/cli/bin/cli-debug.d.ts.map
-apps/web/vite.config.js
-apps/web/vite.config.d.ts
-apps/web/vite.config.d.ts.map
+packages/frontend/apps/web/vite.config.js
+packages/frontend/apps/web/vite.config.d.ts
+packages/frontend/apps/web/vite.config.d.ts.map
 *.js.map
 
 # Environment

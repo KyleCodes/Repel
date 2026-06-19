@@ -29,9 +29,10 @@ packages/
   backend/
     apps/       — deployables: api, cli, worker
     libs/       — importable: features, adapters, db, transport, crypto, env
+  frontend/
+    apps/       — deployables: web (React SPA)
+    libs/       — importable FE libs (none yet)
   shared/       — isomorphic libs: enums, http, errors, slug
-apps/
-  web/          — React SPA (moves under packages/frontend in a later ticket)
 docs/
   context/      — Domain knowledge, ADRs, git conventions
   summaries/    — Session handoffs and decision records

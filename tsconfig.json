@@ -29,6 +29,6 @@
     { "path": "./packages/backend/libs/features" },
     { "path": "./packages/backend/libs/processing-pipeline" },
     { "path": "./packages/backend/libs/transport" },
-    { "path": "./apps/web" }
+    { "path": "./packages/frontend/apps/web" }
   ]
 }

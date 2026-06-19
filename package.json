@@ -5,16 +5,16 @@
     "packages/shared/*",
     "packages/backend/apps/*",
     "packages/backend/libs/*",
-    "apps/*"
+    "packages/frontend/apps/*"
   ],
   "scripts": {
-    "build": "tsc --build && cd apps/web && bun run build",
+    "build": "tsc --build && cd packages/frontend/apps/web && bun run build",
     "clean": "tsc --build --clean && find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete && find . -type d -name dist -not -path '*/node_modules/*' -prune -exec rm -rf {} +",
     "cli": "cd packages/backend/apps/cli && bun run cli",
     "cli:debug": "cd packages/backend/apps/cli && bun run cli:debug",
     "dev:docker": "docker compose --profile dev up -d",
     "dev:docker:down": "docker compose --profile dev down",
-    "dev:web": "cd apps/web && bun run dev",
+    "dev:web": "cd packages/frontend/apps/web && bun run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
