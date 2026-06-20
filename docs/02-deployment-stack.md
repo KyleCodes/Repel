@@ -60,11 +60,27 @@ No SSR. No Next.js. No Redux. No GraphQL. No tRPC.
 | Type checking     | TypeScript project references |
 | Task runner       | Makefile                      |
 
+## Deployment Model
+
+The deploy target is one VM running Docker Compose. There is no cloud control plane and no synthesis step — the `docker-compose.yml` (plus environment override files) **is** the deployable artifact. The CDK instinct of "declare resources in a stack and synth them" maps to flat Compose primitives:
+
+| CDK concept                    | Compose equivalent                                         |
+| ------------------------------ | ---------------------------------------------------------- |
+| Stack                          | a `docker-compose` file / fragment (one per stack folder)  |
+| Resource declaration           | a service block                                            |
+| Logical id / `Ref`             | the service name (its DNS name on the Compose network)     |
+| `GetAtt` (an address/endpoint) | `${SERVICE}:PORT`, injected into a container as an env var |
+| Environment-specific synth     | a `docker-compose.override.yml` / per-env override file    |
+
+**Resource addressing.** Services reach each other by service-name DNS on the shared Compose network (`postgres:5432`, never a hardcoded IP — Compose reassigns container IPs on restart). Connection strings and secrets are injected as **runtime** env vars (via `environment:` / `env_file:`), not baked into images at build time.
+
+**One container per process.** Each app (§ Backend) is its own Compose service, launched by `cli services run <name>` so config/env resolution is identical to development. There is no `MODE` switch, no generic worker host, and no Kubernetes — an orchestrator scheduling onto a single VM would be all overhead. If a thin deploy wrapper is ever wanted (rolling restarts, SSH-based deploys), Kamal sits one step past raw Compose without a control plane; that is a future option, not a current dependency. Terraform, if used at all, is scoped to provisioning the VM itself and lives outside the Nx graph.
+
 ## Docker Compose Profiles
 
 ### `dev` Profile
 
-Runs infrastructure services only. The application runs as a bare process on the host for hot reload, debugger attach, and fast iteration.
+Runs infrastructure services only. The application runs as bare processes on the host for hot reload, debugger attach, and fast iteration.
 
 Services started: `postgres`
 
@@ -72,21 +88,17 @@ Developer workflow:
 
 ```
 docker compose --profile dev up -d
-bun run packages/backend/apps/api/src/main.ts    # terminal 1
-bun run dev:web                                   # terminal 2
+bun run cli services run api      # terminal 1 — one app, CLI-resolved env
+bun run dev:web                   # terminal 2
 ```
 
-Each backend app (`api`, `worker`, …) is launched directly via its own
-`main.ts` entrypoint; there is no `MODE` switch and no per-app `package.json`
-run script. A `repel services run <name>` CLI verb that spawns these as
-subprocesses (one per tmux pane, debugger per pane) is planned but not yet
-implemented.
+The cli (`@repel/backend-cli`, tagged `type:cli`) is the launcher. `cli services run <name>` resolves config, renders the env a service needs, and calls that app's exported `start()` (ADR-003, ADR-016). `cli services run --all` runs every registered app's `start()` in **one process** — a single event loop and a single step-debugger spanning the whole backend (the replacement for the old `MODE=all`). There is no per-app `package.json` run script and no `MODE` switch.
 
 ### `full` Profile
 
-Runs everything. Used for "production" deployment on the home server and for validating containerized behavior.
+Runs everything. Used for "production" deployment on the home server and for validating containerized behavior. Each backend app is its own service (one container per process), each launched via `cli services run <name>`; services in a stack (e.g. `apps/sync/`) are deployed together by that stack's compose fragment.
 
-Services started: `postgres`, `app`
+Services started: `postgres`, `api`, `sync-worker`, … (one per deployable app)
 
 Deployment workflow:
 

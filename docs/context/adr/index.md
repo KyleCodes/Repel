@@ -17,6 +17,7 @@
 | ADR-013 | User-Scoped Feeds — Org-Only RLS Now, User Dimension Denormalized | data-storage, multi-tenancy, data-access  | Accepted | docs/context/adr/ADR-013-user-scoped-feeds-org-rls.md               |
 | ADR-014 | Credential Encryption at Rest — App-Side AES-256-GCM              | data-storage, infrastructure              | Accepted | docs/context/adr/ADR-014-credential-encryption-at-rest.md           |
 | ADR-015 | Module Public Contract via the `exports` Map — No Barrel Files    | architecture, conventions                 | Accepted | docs/context/adr/ADR-015-module-public-contract-exports-map.md      |
+| ADR-016 | App as Deploy Unit; CLI as Privileged Launcher; Stack as Folder   | deployment, architecture                  | Accepted | docs/context/adr/ADR-016-app-deploy-unit-cli-launcher-stack.md      |
 
 ## Domain Tags
 
