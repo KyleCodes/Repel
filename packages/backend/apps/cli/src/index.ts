@@ -4,6 +4,7 @@ import { registerAccountsCommands } from './accounts/handler';
 import { registerDbCommands } from './db/handler';
 import { handleCliError } from './lib/handle-cli-error';
 import { registerOrgsCommands } from './orgs/handler';
+import { registerSyncCommands } from './sync/handler';
 
 const program = new Command();
 
@@ -17,6 +18,7 @@ program.name('repel').description('Repel CLI').version('0.0.1');
 
 registerOrgsCommands(program);
 registerAccountsCommands(program);
+registerSyncCommands(program);
 registerDbCommands(program);
 
 // Commander signals "displayed help / version" via these codes — that is the

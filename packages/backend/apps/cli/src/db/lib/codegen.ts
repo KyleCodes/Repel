@@ -50,5 +50,5 @@ export async function runCodegen(): Promise<void> {
     ['--bun', 'x', 'prettier', '--write', GENERATED_TYPES_FILE],
     { encoding: 'utf8', stdio: 'inherit' }
   );
-  console.error(`db codegen: regenerated ${GENERATED_TYPES_FILE}`);
+  console.log(`db codegen: regenerated ${GENERATED_TYPES_FILE}`);
 }

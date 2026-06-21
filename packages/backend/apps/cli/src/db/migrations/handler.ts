@@ -98,7 +98,7 @@ export async function runMigrateCreate(
     createdAt: new Date(),
   });
   applyHeaderToFile(filePath, header);
-  console.error(`db migrations create: wrote ${filePath}`);
+  console.log(`db migrations create: wrote ${filePath}`);
 }
 
 export async function runMigrateUp(input: MigrateUpInput): Promise<void> {

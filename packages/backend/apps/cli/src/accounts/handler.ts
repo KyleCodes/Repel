@@ -157,7 +157,7 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
   if (!input.yes) {
     const ok = await confirm(`Deactivate ${label}? [y/N] `);
     if (!ok) {
-      console.error('accounts rm: cancelled');
+      console.log('accounts rm: cancelled');
       return;
     }
   }
@@ -165,7 +165,7 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
     orgId,
     providerAccount: { id: account.id },
   });
-  console.error(`accounts rm: deactivated ${account.id}`);
+  console.log(`accounts rm: deactivated ${account.id}`);
 }
 
 // Injectable seams so the OAuth + persistence path can be unit-tested without

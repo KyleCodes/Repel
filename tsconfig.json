@@ -25,6 +25,7 @@
     { "path": "./packages/backend/libs/db" },
     { "path": "./packages/backend/libs/env" },
     { "path": "./packages/backend/libs/features" },
+    { "path": "./packages/backend/libs/sync" },
     { "path": "./packages/backend/libs/processing-pipeline" },
     { "path": "./packages/backend/libs/transport" },
     { "path": "./packages/frontend/apps/web" }

@@ -1,0 +1,25 @@
+{
+  "name": "@repel/backend-sync",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./handler": "./src/handler.ts",
+    "./types": "./src/types.ts",
+    "./error": "./src/error.ts"
+  },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@repel/backend-adapters": "workspace:*",
+    "@repel/errors": "workspace:*"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:backend",
+      "area:sync"
+    ]
+  }
+}

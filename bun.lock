@@ -42,6 +42,7 @@
         "@repel/backend-db": "workspace:*",
         "@repel/backend-env": "workspace:*",
         "@repel/backend-features": "workspace:*",
+        "@repel/backend-sync": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
         "@repel/slug": "workspace:*",
@@ -119,6 +120,14 @@
     "packages/backend/libs/processing-pipeline": {
       "name": "@repel/backend-processing-pipeline",
       "version": "0.0.1",
+    },
+    "packages/backend/libs/sync": {
+      "name": "@repel/backend-sync",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-adapters": "workspace:*",
+        "@repel/errors": "workspace:*",
+      },
     },
     "packages/backend/libs/transport": {
       "name": "@repel/backend-transport",
@@ -503,6 +512,8 @@
     "@repel/backend-features": ["@repel/backend-features@workspace:packages/backend/libs/features"],
 
     "@repel/backend-processing-pipeline": ["@repel/backend-processing-pipeline@workspace:packages/backend/libs/processing-pipeline"],
+
+    "@repel/backend-sync": ["@repel/backend-sync@workspace:packages/backend/libs/sync"],
 
     "@repel/backend-transport": ["@repel/backend-transport@workspace:packages/backend/libs/transport"],
 

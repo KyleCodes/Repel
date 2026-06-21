@@ -9,7 +9,8 @@
     "./error": "./src/error.ts",
     "./types": "./src/types.ts",
     "./lib/oauth2/loopback": "./src/lib/oauth2/loopback.ts",
-    "./lib/oauth2/error": "./src/lib/oauth2/error.ts"
+    "./lib/oauth2/error": "./src/lib/oauth2/error.ts",
+    "./lib/oauth2/types": "./src/lib/oauth2/types.ts"
   },
   "scripts": {
     "test": "bun test --pass-with-no-tests"
