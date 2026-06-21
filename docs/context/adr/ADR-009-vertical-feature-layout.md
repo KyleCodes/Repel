@@ -16,11 +16,11 @@ Organize application code as vertical capability slices under `apps/server/src/f
 
 - `flows/<verb-noun>.ts` — one file per write use case. Plain `async (trx, input) => ...`. Owns a private Kysely query builder; result type is derived via `InferResult<ReturnType<typeof buildX>>[number]`.
 - `views/<verb-noun>.ts` — one file per read use case. Same shape as a flow but read-only.
-- `handlers/` — async entry points consumed by `processing-pipeline/`.
+- `handlers/` — async entry points a queue consumer invokes per envelope (`libs/queue`).
 - `service.ts` — exactly one per feature. Imports flows and views, decorates each public operation with `runInTx` or `runInOrgTx` (see ADR-010), and owns feature-level business rules.
 - `error.ts` — feature-local error hierarchy (an abstract base extending `AppError`, plus concrete subclasses thrown by service methods).
 
-There is no per-feature `queries.ts` bundle, no `repo.ts`, no `mappers.ts`, no `types.ts` for domain entity shapes. Kysely's `DB` schema in `infra/db/types.ts` is the source of truth; every return type reaches the rest of the application through Kysely's type inference.
+There is no per-feature `queries.ts` bundle, no `repo.ts`, no `mappers.ts`, no `types.ts` for domain entity shapes. Kysely's `DB` schema in `libs/db` (`@repel/backend-db`) is the source of truth; every return type reaches the rest of the application through Kysely's type inference.
 
 ## Alternatives Considered
 
@@ -57,7 +57,7 @@ There is no per-feature `queries.ts` bundle, no `repo.ts`, no `mappers.ts`, no `
 - MUST: Each flow/view derives its result type from its Kysely query builder via inference (`InferResult<ReturnType<typeof buildX>>[number]`). No parallel domain-type layer.
 - MUST: `service.ts` is the only place that applies `runInTx` / `runInOrgTx` (see ADR-010). Business rules (uniqueness checks, default roles, validation) live in the service.
 - MUST: Service methods throw errors extending the feature's `error.ts` base (which extends `AppError` in `lib/error.ts`).
-- MUST NOT: Per-feature `queries.ts`, `repo.ts`, `mappers.ts`, or `types.ts` for domain entity shapes. Kysely's `DB` schema in `infra/db/types.ts` is the source.
+- MUST NOT: Per-feature `queries.ts`, `repo.ts`, `mappers.ts`, or `types.ts` for domain entity shapes. Kysely's `DB` schema in `libs/db` (`@repel/backend-db`) is the source.
 - MUST NOT: Flows or views open transactions, apply decorators, or invoke `getDb()` directly.
 - SHOULD: A flow that grows past ~150 lines is promoted to `flows/<verb-noun>/` with step-files (`index.ts` + helpers split by operation step).
 

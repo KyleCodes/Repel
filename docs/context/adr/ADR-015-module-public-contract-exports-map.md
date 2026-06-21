@@ -1,6 +1,6 @@
 # ADR-015: Module Public Contract via the `exports` Map — No Barrel Files
 
-**Date:** 2026-06-18
+**Date:** 2026-06-18 (amended 2026-06-20 REP-60 phase 4)
 **Status:** ACCEPTED
 **Domain:** architecture, conventions
 
@@ -60,6 +60,17 @@ is a real module file, not a barrel — it is exposed as that module's subpath
 (`@repel/backend-adapters/gmail`). The ban is on pure pass-through re-export
 files, not on modules that happen to assemble a value.
 
+**Apps (`type:app`) are the exception to "expose your public files".** An app is a
+deployable, not a library; its internals are nobody's to import. An app therefore
+exposes **exactly one** entry in its `exports` map: `./start`, the function that
+boots it (`@repel/backend-api/start` → `startApi`). Everything else in the app is
+private. The single licensed consumer of `./start` is the cli (`type:cli`): the
+`@nx/enforce-module-boundaries` rules let `type:cli` import `type:app` but forbid
+`type:lib` and `type:app` from doing so, so even though `./start` is listed in the
+`exports` map, no lib or sibling app can import it — only the launcher can (manifesto
+§3, §5 Rule 9; ADR-003). This keeps apps mutually un-importable while giving the
+`cli services run` launcher a typed entrypoint to call instead of spawning a process.
+
 ## Alternatives Considered
 
 | Option                                  | Reason Rejected                                                                                                                                                                                                                             |
@@ -107,3 +118,12 @@ files, not on modules that happen to assemble a value.
   a multi-file module.
 - MUST: Cross-package imports reference a declared subpath (e.g.
   `@repel/shared/http/client`), never a path outside the `exports` map.
+- MUST: A `type:app` package expose exactly one entry, `./start`, and nothing
+  else. It is consumed only by the cli (`type:cli`); the boundary rules forbid any
+  lib or sibling app from importing it.
+
+## Related
+
+- SUPERSEDES: NONE
+- RELATED TO: ADR-003 (apps run by `cli services run`), ADR-016 (app as deploy unit; CLI as privileged launcher)
+- REFERENCED BY: NONE
