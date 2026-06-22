@@ -1,5 +1,8 @@
 import { resolveProviderAdapter as defaultResolveProviderAdapter } from '@repel/backend-adapters/registry';
-import type { IngestInput } from '@repel/backend-adapters/types';
+import type {
+  IngestInput,
+  ProviderCredentials,
+} from '@repel/backend-adapters/types';
 import {
   decrypt as defaultDecrypt,
   loadEncryptionKey as defaultLoadEncryptionKey,
@@ -16,13 +19,6 @@ import type {
   SyncTaskResult,
   SyncTaskStatus,
 } from './types';
-
-// The decrypted credential shape an adapter consumes, derived structurally from
-// the ingest input so the sync lib names no provider and no oauth2 type. It is
-// the bare shape stored in provider_account.credentials_encrypted (for an oauth2
-// adapter, a TokenSet); the executor holds it opaquely and hands it to ingest()
-// unread.
-type ProviderCredentials = IngestInput['credentials'];
 
 // Injectable seams so the executor is unit-testable without a real DB, browser,
 // or network. The service/adapter/crypto functions are module-imported, so an
