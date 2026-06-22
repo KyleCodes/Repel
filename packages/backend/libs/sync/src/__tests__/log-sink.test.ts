@@ -2,16 +2,13 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { AdapterError } from '@repel/backend-adapters/error';
 import type { AdapterEvent } from '@repel/backend-adapters/types';
 import { logSink } from '../log-sink';
-import type { SyncTaskContext } from '../types';
+import type { SyncContext } from '../types';
 
 class TestAdapterError extends AdapterError {}
 
-const ctx: SyncTaskContext = {
-  jobId: 'job-1',
-  orgId: 'org-1',
-  userId: 'user-1',
-  taskId: 'task-1',
-  providerAccountId: 'pa-1',
+const ctx: SyncContext = {
+  syncJob: { id: 'job-1', orgId: 'org-1', userId: 'user-1', tasks: [] },
+  syncTask: { id: 'task-1', providerAccountId: 'pa-1', spec: { type: 'full' } },
 };
 
 let logSpy: ReturnType<typeof spyOn>;

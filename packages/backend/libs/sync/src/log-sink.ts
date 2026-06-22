@@ -1,13 +1,13 @@
 import type { AdapterEvent } from '@repel/backend-adapters/types';
-import type { SyncEventSink, SyncTaskContext } from './types';
+import type { SyncContext, SyncEventSink } from './types';
 
 // The v0 default sink: log one line per adapter event to stdout and persist
 // nothing. REP-56 replaces this with a sink that writes the message graph. The
 // sink owns only its log lines — the machine-readable job summary is the
 // caller's (the CLI prints it).
 export const logSink: SyncEventSink = {
-  onEvent(event: AdapterEvent, ctx: SyncTaskContext): void {
-    const tag = `[sync ${ctx.taskId}]`;
+  onEvent(event: AdapterEvent, ctx: SyncContext): void {
+    const tag = `[sync ${ctx.syncTask.id}]`;
     switch (event.type) {
       case 'started':
         console.log(

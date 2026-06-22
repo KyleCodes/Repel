@@ -4,13 +4,8 @@ import type {
   AdapterEvent,
   IProviderAdapter,
 } from '@repel/backend-adapters/types';
-import { runSyncJob } from '../handler';
-import type {
-  SyncDeps,
-  SyncEventSink,
-  SyncJob,
-  SyncTaskContext,
-} from '../types';
+import { type SyncDeps, runSyncJob } from '../handler';
+import type { SyncContext, SyncEventSink, SyncJob } from '../types';
 
 // A concrete AdapterError for the `failed`-event tests (AdapterError is abstract).
 class TestAdapterError extends AdapterError {}
@@ -128,7 +123,7 @@ describe('runSyncJob — happy path', function () {
   });
 
   test('every event reaches the sink in order with the right context', async function () {
-    const seen: Array<{ type: string; ctx: SyncTaskContext }> = [];
+    const seen: Array<{ type: string; ctx: SyncContext }> = [];
     const recordingSink: SyncEventSink = {
       onEvent(event, ctx) {
         seen.push({ type: event.type, ctx });
@@ -139,16 +134,15 @@ describe('runSyncJob — happy path', function () {
       { type: 'auth', refreshed: false },
       { type: 'completed', cursor: null, processed: 0 },
     ]);
-    await runSyncJob(job(oneTask), makeDeps(adapter, { sink: recordingSink }));
+    const theJob = job(oneTask);
+    await runSyncJob(theJob, makeDeps(adapter, { sink: recordingSink }));
 
     expect(seen.map((s) => s.type)).toEqual(['started', 'auth', 'completed']);
-    expect(seen[0]!.ctx).toEqual({
-      jobId: 'job-1',
-      orgId: 'org-1',
-      userId: 'user-1',
-      taskId: 'task-1',
-      providerAccountId: 'pa-1',
-    });
+    // The context carries the job + task objects, not a denormalized copy.
+    expect(seen[0]!.ctx.syncJob).toBe(theJob);
+    expect(seen[0]!.ctx.syncTask).toBe(theJob.tasks[0]!);
+    expect(seen[0]!.ctx.syncJob.orgId).toBe('org-1');
+    expect(seen[0]!.ctx.syncTask.providerAccountId).toBe('pa-1');
   });
 
   test('decrypted credentials are re-tagged and passed to the adapter', async function () {

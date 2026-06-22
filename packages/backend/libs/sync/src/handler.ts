@@ -1,5 +1,5 @@
 import { resolveProviderAdapter as defaultResolveProviderAdapter } from '@repel/backend-adapters/registry';
-import type { GmailIngestInput } from '@repel/backend-adapters/types';
+import type { IngestInput } from '@repel/backend-adapters/types';
 import {
   decrypt as defaultDecrypt,
   loadEncryptionKey as defaultLoadEncryptionKey,
@@ -8,14 +8,26 @@ import { accountsService as defaultAccountsService } from '@repel/backend-featur
 import { SyncIncompleteStreamError, SyncTaskFailedError } from './error';
 import { logSink } from './log-sink';
 import type {
-  SyncDeps,
+  SyncContext,
+  SyncEventSink,
   SyncJob,
   SyncJobResult,
   SyncTask,
-  SyncTaskContext,
   SyncTaskResult,
   SyncTaskStatus,
 } from './types';
+
+// Injectable seams so the executor is unit-testable without a real DB, browser,
+// or network. The service/adapter/crypto functions are module-imported, so an
+// optional deps param is the contained seam (production calls pass nothing).
+// `sink` defaults to the log sink.
+export interface SyncDeps {
+  accountsService?: Partial<typeof defaultAccountsService>;
+  resolveProviderAdapter?: typeof defaultResolveProviderAdapter;
+  decrypt?: typeof defaultDecrypt;
+  loadEncryptionKey?: typeof defaultLoadEncryptionKey;
+  sink?: SyncEventSink;
+}
 
 // Run a sync job: drive every task's ingest stream concurrently and roll the
 // per-task outcomes up into a job result. The executor is the invocation-agnostic
@@ -79,13 +91,7 @@ async function runSyncTask(
   const loadEncryptionKey = deps.loadEncryptionKey ?? defaultLoadEncryptionKey;
   const sink = deps.sink ?? logSink;
 
-  const ctx: SyncTaskContext = {
-    jobId: job.id,
-    orgId: job.orgId,
-    userId: job.userId,
-    taskId: task.id,
-    providerAccountId: task.providerAccountId,
-  };
+  const ctx: SyncContext = { syncJob: job, syncTask: task };
 
   try {
     // Resolve the provider account (RLS-scoped to job.orgId). A missing row
@@ -101,10 +107,11 @@ async function runSyncTask(
       );
     }
 
-    // Decrypt the stored credentials (a bare OAuth token set at rest) and re-tag
-    // them with the provider so the adapter narrows without a cast. Plaintext is
-    // built here, inside the executor — never handed in by the caller, so a
-    // future queue envelope carries only ids.
+    // Decrypt the stored credentials (a bare OAuth token set at rest). The
+    // adapter narrows on the provider tag, so each provider's input is built
+    // with its own credentials shape. Plaintext is built here, inside the
+    // executor — never handed in by the caller, so a future queue envelope
+    // carries only ids.
     const tokens = JSON.parse(
       decrypt(loadEncryptionKey(), account.credentialsEncrypted).toString(
         'utf8'
@@ -112,17 +119,7 @@ async function runSyncTask(
     );
 
     const adapter = resolveProviderAdapter(account.provider);
-
-    // Only Gmail exists today; IngestInput is the Gmail member. When a second
-    // provider lands this construction widens on account.provider.
-    const input: GmailIngestInput = {
-      providerSlug: 'gmail',
-      orgId: job.orgId,
-      userId: job.userId,
-      providerAccountId: task.providerAccountId,
-      spec: task.spec,
-      credentials: { provider: 'gmail', tokens },
-    };
+    const input = buildIngestInput(job, task, account.provider, tokens);
 
     let processed = 0;
     let cursor: unknown = null;
@@ -176,5 +173,40 @@ async function runSyncTask(
       cursor: null,
       error: e instanceof Error ? e.message : String(e),
     };
+  }
+}
+
+// Build the per-provider ingest input. Each provider's credentials carry a
+// provider tag and its own token shape, so this is the one place that maps a
+// decrypted token set onto the provider's input member — the only spot that
+// names a provider. The switch is exhaustive on the Provider enum: when a second
+// adapter lands, IngestInput widens and this stops compiling until its case is
+// added. `tokens` is cast at the decrypt boundary — JSON.parse yields unknown
+// and the stored shape is trusted (it was written by the connect flow).
+function buildIngestInput(
+  job: SyncJob,
+  task: SyncTask,
+  provider: Awaited<
+    ReturnType<typeof defaultAccountsService.getProviderAccount>
+  >['provider'],
+  tokens: unknown
+): IngestInput {
+  const base = {
+    orgId: job.orgId,
+    userId: job.userId,
+    providerAccountId: task.providerAccountId,
+    spec: task.spec,
+  };
+  switch (provider) {
+    case 'gmail':
+      return {
+        ...base,
+        providerSlug: 'gmail',
+        credentials: { provider: 'gmail', tokens: tokens as never },
+      };
+    default:
+      throw new SyncTaskFailedError(
+        `no ingest input builder for provider "${provider}"`
+      );
   }
 }

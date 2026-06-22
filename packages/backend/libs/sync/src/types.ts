@@ -1,13 +1,7 @@
-import type { resolveProviderAdapter as DefaultResolveProviderAdapter } from '@repel/backend-adapters/registry';
 import type {
   AdapterEvent,
   AdapterSyncSpec,
 } from '@repel/backend-adapters/types';
-import type {
-  decrypt as DefaultDecrypt,
-  loadEncryptionKey as DefaultLoadEncryptionKey,
-} from '@repel/backend-crypto/encryption';
-import type { accountsService as DefaultAccountsService } from '@repel/backend-features/accounts/service';
 
 // The sync job/task model. A job is a unit of sync work for one org/user; each
 // task drives one provider account's ingest stream. v0's CLI builds a one-task
@@ -27,14 +21,13 @@ export interface SyncJob {
 }
 
 // Handed to the sink alongside each event so a sink can scope its work without
-// ever seeing the credentials or the adapter. The persisting sink (REP-56) uses
-// orgId to open a short per-message transaction; the log sink ignores it.
-export interface SyncTaskContext {
-  readonly jobId: string;
-  readonly orgId: string;
-  readonly userId: string;
-  readonly taskId: string;
-  readonly providerAccountId: string;
+// ever seeing the credentials or the adapter. Carries the job + task it belongs
+// to (orgId/userId on the job, providerAccountId/spec on the task); the
+// persisting sink (REP-56) reads syncJob.orgId to open a short per-message
+// transaction, the log sink ignores it.
+export interface SyncContext {
+  readonly syncJob: SyncJob;
+  readonly syncTask: SyncTask;
 }
 
 // Where the executor delivers each adapter event. The executor is sink-agnostic
@@ -42,7 +35,7 @@ export interface SyncTaskContext {
 // persisting sink that writes the message graph. `onEvent` may be async so a
 // sink can await its own (short) DB transaction.
 export interface SyncEventSink {
-  onEvent(event: AdapterEvent, ctx: SyncTaskContext): void | Promise<void>;
+  onEvent(event: AdapterEvent, ctx: SyncContext): void | Promise<void>;
 }
 
 export type SyncTaskStatus = 'completed' | 'failed';
@@ -64,16 +57,4 @@ export interface SyncJobResult {
   readonly jobId: string;
   readonly status: SyncTaskStatus;
   readonly tasks: readonly SyncTaskResult[];
-}
-
-// Injectable seams so the executor is unit-testable without a real DB, browser,
-// or network. The service/adapter/crypto functions are module-imported, so an
-// optional deps param is the contained seam (production calls pass nothing).
-// `sink` defaults to the log sink.
-export interface SyncDeps {
-  accountsService?: Partial<typeof DefaultAccountsService>;
-  resolveProviderAdapter?: typeof DefaultResolveProviderAdapter;
-  decrypt?: typeof DefaultDecrypt;
-  loadEncryptionKey?: typeof DefaultLoadEncryptionKey;
-  sink?: SyncEventSink;
 }
