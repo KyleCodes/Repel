@@ -1,11 +1,11 @@
 {
-  "name": "@repel/backend-features",
+  "name": "@repel/backend-accounts",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "exports": {
-    "./accounts/service": "./src/accounts/service.ts",
-    "./accounts/error": "./src/accounts/error.ts"
+    "./service": "./src/persistence/service.ts",
+    "./error": "./src/persistence/error.ts"
   },
   "scripts": {
     "test": "bun test --pass-with-no-tests"
@@ -22,8 +22,7 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:backend",
-      "area:feature"
+      "scope:backend"
     ]
   }
 }

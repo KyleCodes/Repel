@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { accountsService } from '@repel/backend-features/accounts/service';
+import { accountsService } from '@repel/backend-accounts/service';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { type BootstrapInput, BootstrapInputSchema } from './schemas/index';
 

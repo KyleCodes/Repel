@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
+import { DuplicateProviderAccountError } from '@repel/backend-accounts/error';
 import { ProviderNotFoundError } from '@repel/backend-adapters/error';
 import { OAuth2TimeoutError } from '@repel/backend-adapters/lib/oauth2/error';
 import { OAuth2DeniedError } from '@repel/backend-adapters/lib/oauth2/error';
@@ -13,7 +14,6 @@ import {
   encrypt,
   loadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
-import { DuplicateProviderAccountError } from '@repel/backend-features/accounts/error';
 import * as resolveAccountModule from '../../lib/resolve-account';
 import {
   AccountIdentityMismatchError,

@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { accountsService as defaultAccountsService } from '@repel/backend-accounts/service';
 import { runLoopbackFlow as defaultRunLoopbackFlow } from '@repel/backend-adapters/lib/oauth2/loopback';
 import { resolveProviderAdapter as defaultResolveProviderAdapter } from '@repel/backend-adapters/registry';
 import {
@@ -6,7 +7,6 @@ import {
   encrypt,
   loadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
-import { accountsService as defaultAccountsService } from '@repel/backend-features/accounts/service';
 import { confirm } from '../lib/confirm';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { resolveAccount } from '../lib/resolve-account';

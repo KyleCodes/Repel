@@ -1,4 +1,8 @@
-import { accountsService } from '@repel/backend-features/accounts/service';
+import {
+  ProviderAccountAmbiguousError,
+  ProviderAccountNotFoundError,
+} from '@repel/backend-accounts/error';
+import { accountsService } from '@repel/backend-accounts/service';
 import { Provider, type ProviderSlug } from '@repel/enums';
 import { AccountTokenSchema } from '../accounts/schemas/index';
 
@@ -43,7 +47,7 @@ export async function resolveAccount(
       providerAccount: { id: token },
     });
     if (!providerAccount) {
-      throw new Error(
+      throw new ProviderAccountNotFoundError(
         `account not found: no provider account with id ${token}`
       );
     }
@@ -69,10 +73,12 @@ export async function resolveAccount(
   }
 
   if (matches.length === 0) {
-    throw new Error(`account not found: no provider account matching ${token}`);
+    throw new ProviderAccountNotFoundError(
+      `account not found: no provider account matching ${token}`
+    );
   }
   if (matches.length > 1) {
-    throw new Error(
+    throw new ProviderAccountAmbiguousError(
       `account ambiguous: ${token} matches ${matches.length} accounts — ` +
         matches.map(describe).join('; ')
     );

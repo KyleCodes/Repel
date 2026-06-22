@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./handler": "./src/handler.ts",
+    "./service": "./src/persistence/service.ts",
+    "./contract": "./src/persistence/contract.ts",
+    "./events": "./src/persistence/lib/events.ts",
+    "./handler": "./src/async/handler.ts",
     "./types": "./src/types.ts",
     "./error": "./src/error.ts"
   },
@@ -12,10 +15,17 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
+    "@repel/backend-accounts": "workspace:*",
     "@repel/backend-adapters": "workspace:*",
     "@repel/backend-crypto": "workspace:*",
-    "@repel/backend-features": "workspace:*",
-    "@repel/errors": "workspace:*"
+    "@repel/backend-db": "workspace:*",
+    "@repel/enums": "workspace:*",
+    "@repel/errors": "workspace:*",
+    "kysely": "^0.27.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.6",
+    "pg": "^8.12.0"
   },
   "nx": {
     "tags": [

@@ -26,8 +26,7 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:backend",
-      "area:adapter"
+      "scope:backend"
     ]
   }
 }

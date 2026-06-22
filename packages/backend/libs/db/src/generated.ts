@@ -33,6 +33,15 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Provider = 'generic_imap' | 'gmail' | 'icloud';
 
+export type SyncEventType =
+  | 'auth'
+  | 'completed'
+  | 'enqueued'
+  | 'failed'
+  | 'message'
+  | 'progress'
+  | 'started';
+
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface Attachment {
@@ -164,8 +173,36 @@ export interface ProviderAccount {
   lastSyncedAt: Timestamp | null;
   orgId: string;
   provider: Provider;
-  syncCursor: Json | null;
   updatedAt: Generated<Timestamp>;
+  userId: string;
+}
+
+export interface SyncJob {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  orgId: string;
+  updatedAt: Generated<Timestamp>;
+  userId: string;
+}
+
+export interface SyncTask {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  jobId: string;
+  orgId: string;
+  providerAccountId: string;
+  spec: Json;
+  userId: string;
+}
+
+export interface SyncTaskEvent {
+  createdAt: Generated<Timestamp>;
+  id: Generated<string>;
+  orgId: string;
+  payload: Json | null;
+  rawMessageId: string | null;
+  taskId: string;
+  type: SyncEventType;
   userId: string;
 }
 
@@ -204,6 +241,9 @@ export interface DB {
   org: Org;
   pgmigrations: Pgmigrations;
   providerAccount: ProviderAccount;
+  syncJob: SyncJob;
+  syncTask: SyncTask;
+  syncTaskEvent: SyncTaskEvent;
   thread: Thread;
   user: User;
 }

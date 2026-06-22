@@ -68,7 +68,7 @@ private. The single licensed consumer of `./start` is the cli (`type:cli`): the
 `@nx/enforce-module-boundaries` rules let `type:cli` import `type:app` but forbid
 `type:lib` and `type:app` from doing so, so even though `./start` is listed in the
 `exports` map, no lib or sibling app can import it — only the launcher can (manifesto
-§3, §5 Rule 9; ADR-003). This keeps apps mutually un-importable while giving the
+§3, §5 Rule 8; ADR-003). This keeps apps mutually un-importable while giving the
 `cli services run` launcher a typed entrypoint to call instead of spawning a process.
 
 ## Alternatives Considered

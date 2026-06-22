@@ -74,3 +74,38 @@ export const UserRole = {
   viewer: 'viewer',
 } as const;
 export type UserRoleSlug = (typeof UserRole)[keyof typeof UserRole];
+
+// Sync task lifecycle events. The slugs match the adapter's AdapterEvent.type
+// plus a caller-authored `enqueued`. Sourced here so the migration creates the
+// pg enum from one place and the union reaches generated.ts.
+export const SyncEventType = {
+  enqueued: 'enqueued',
+  started: 'started',
+  auth: 'auth',
+  progress: 'progress',
+  message: 'message',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+export type SyncEventTypeSlug =
+  (typeof SyncEventType)[keyof typeof SyncEventType];
+
+// Derived sync status (computed from the event log, never stored — so a const
+// here rather than a pg enum). A task is completed/failed/running; a job rolls
+// its tasks up and adds `partial` (some completed, some failed).
+export const SyncTaskStatus = {
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+export type SyncTaskStatusSlug =
+  (typeof SyncTaskStatus)[keyof typeof SyncTaskStatus];
+
+export const SyncJobStatus = {
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  partial: 'partial',
+} as const;
+export type SyncJobStatusSlug =
+  (typeof SyncJobStatus)[keyof typeof SyncJobStatus];

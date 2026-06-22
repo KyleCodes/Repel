@@ -13,21 +13,47 @@
     "types": ["bun-types"]
   },
   "references": [
-    { "path": "./packages/shared/enums" },
-    { "path": "./packages/shared/errors" },
-    { "path": "./packages/shared/slug" },
-    { "path": "./packages/shared/http" },
-    { "path": "./packages/backend/apps/api" },
-    { "path": "./packages/backend/apps/cli" },
-    { "path": "./packages/backend/apps/worker" },
-    { "path": "./packages/backend/libs/adapters" },
-    { "path": "./packages/backend/libs/crypto" },
-    { "path": "./packages/backend/libs/db" },
-    { "path": "./packages/backend/libs/env" },
-    { "path": "./packages/backend/libs/features" },
-    { "path": "./packages/backend/libs/processing-pipeline" },
-    { "path": "./packages/backend/libs/sync" },
-    { "path": "./packages/backend/libs/transport" },
-    { "path": "./packages/frontend/apps/web" }
+    {
+      "path": "./packages/shared/enums"
+    },
+    {
+      "path": "./packages/shared/errors"
+    },
+    {
+      "path": "./packages/shared/slug"
+    },
+    {
+      "path": "./packages/shared/http"
+    },
+    {
+      "path": "./packages/backend/apps/api"
+    },
+    {
+      "path": "./packages/backend/apps/cli"
+    },
+    {
+      "path": "./packages/backend/libs/accounts"
+    },
+    {
+      "path": "./packages/backend/libs/adapters"
+    },
+    {
+      "path": "./packages/backend/libs/crypto"
+    },
+    {
+      "path": "./packages/backend/libs/db"
+    },
+    {
+      "path": "./packages/backend/libs/env"
+    },
+    {
+      "path": "./packages/backend/libs/sync"
+    },
+    {
+      "path": "./packages/backend/libs/transport"
+    },
+    {
+      "path": "./packages/frontend/apps/web"
+    }
   ]
 }

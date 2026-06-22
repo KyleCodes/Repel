@@ -37,11 +37,11 @@
       "name": "@repel/backend-cli",
       "version": "0.0.1",
       "dependencies": {
+        "@repel/backend-accounts": "workspace:*",
         "@repel/backend-adapters": "workspace:*",
         "@repel/backend-crypto": "workspace:*",
         "@repel/backend-db": "workspace:*",
         "@repel/backend-env": "workspace:*",
-        "@repel/backend-features": "workspace:*",
         "@repel/backend-sync": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
@@ -56,9 +56,18 @@
         "kysely-codegen": "^0.20.0",
       },
     },
-    "packages/backend/apps/worker": {
-      "name": "@repel/backend-worker",
+    "packages/backend/libs/accounts": {
+      "name": "@repel/backend-accounts",
       "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-db": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "kysely": "^0.27.3",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.11.6",
+        "pg": "^8.12.0",
+      },
     },
     "packages/backend/libs/adapters": {
       "name": "@repel/backend-adapters",
@@ -104,31 +113,21 @@
         "@repel/errors": "workspace:*",
       },
     },
-    "packages/backend/libs/features": {
-      "name": "@repel/backend-features",
+    "packages/backend/libs/sync": {
+      "name": "@repel/backend-sync",
       "version": "0.0.1",
       "dependencies": {
+        "@repel/backend-accounts": "workspace:*",
+        "@repel/backend-adapters": "workspace:*",
+        "@repel/backend-crypto": "workspace:*",
         "@repel/backend-db": "workspace:*",
+        "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
         "kysely": "^0.27.3",
       },
       "devDependencies": {
         "@types/pg": "^8.11.6",
         "pg": "^8.12.0",
-      },
-    },
-    "packages/backend/libs/processing-pipeline": {
-      "name": "@repel/backend-processing-pipeline",
-      "version": "0.0.1",
-    },
-    "packages/backend/libs/sync": {
-      "name": "@repel/backend-sync",
-      "version": "0.0.1",
-      "dependencies": {
-        "@repel/backend-adapters": "workspace:*",
-        "@repel/backend-crypto": "workspace:*",
-        "@repel/backend-features": "workspace:*",
-        "@repel/errors": "workspace:*",
       },
     },
     "packages/backend/libs/transport": {
@@ -499,6 +498,8 @@
 
     "@phenomnomnominal/tsquery": ["@phenomnomnominal/tsquery@6.2.0", "", { "dependencies": { "@types/esquery": "^1.5.4", "esquery": "^1.7.0" }, "peerDependencies": { "typescript": ">3.0.0" } }, "sha512-Vo9nkhfZxDB/sBiqIY3pjDC4mOSyure+AFlEW5hcy/tRE82MqCXjRN4InnVNMldinRt0dLYqg4HAU2XPq5e1LA=="],
 
+    "@repel/backend-accounts": ["@repel/backend-accounts@workspace:packages/backend/libs/accounts"],
+
     "@repel/backend-adapters": ["@repel/backend-adapters@workspace:packages/backend/libs/adapters"],
 
     "@repel/backend-api": ["@repel/backend-api@workspace:packages/backend/apps/api"],
@@ -511,15 +512,9 @@
 
     "@repel/backend-env": ["@repel/backend-env@workspace:packages/backend/libs/env"],
 
-    "@repel/backend-features": ["@repel/backend-features@workspace:packages/backend/libs/features"],
-
-    "@repel/backend-processing-pipeline": ["@repel/backend-processing-pipeline@workspace:packages/backend/libs/processing-pipeline"],
-
     "@repel/backend-sync": ["@repel/backend-sync@workspace:packages/backend/libs/sync"],
 
     "@repel/backend-transport": ["@repel/backend-transport@workspace:packages/backend/libs/transport"],
-
-    "@repel/backend-worker": ["@repel/backend-worker@workspace:packages/backend/apps/worker"],
 
     "@repel/enums": ["@repel/enums@workspace:packages/shared/enums"],
 

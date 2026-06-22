@@ -1,60 +1,45 @@
-import type {
-  AdapterEvent,
-  AdapterSyncSpec,
-} from '@repel/backend-adapters/types';
+import type { AdapterEvent } from '@repel/backend-adapters/types';
+import type { SyncTaskStatusSlug } from '@repel/enums';
+import type { SyncJob, SyncTask } from './persistence/contract';
 
-// The sync job/task model. A job is a unit of sync work for one org/user; each
-// task drives one provider account's ingest stream. v0's CLI builds a one-task
-// job, but the executor fans out across tasks so the async runner (REP-57) can
-// enqueue multi-task jobs without an executor rewrite.
-export interface SyncTask {
-  readonly id: string;
-  readonly providerAccountId: string;
-  readonly spec: AdapterSyncSpec;
-}
+// Re-exported so executor-facing consumers get the working model from the same
+// entrypoint as the handler types. contract.ts is the source of truth.
+export type { SyncJob, SyncTask } from './persistence/contract';
 
-export interface SyncJob {
-  readonly id: string;
-  readonly orgId: string;
-  readonly userId: string;
-  readonly tasks: readonly SyncTask[];
-}
+// The executor-facing types. The working model (SyncJob/SyncTask) is owned by
+// persistence/contract.ts (derived from the generated row types); the handler
+// contract below references the adapter event stream it consumes.
 
-// Handed to the sink alongside each event so a sink can scope its work without
-// ever seeing the credentials or the adapter. Carries the job + task it belongs
-// to (orgId/userId on the job, providerAccountId/spec on the task); the
-// persisting sink (REP-56) reads syncJob.orgId to open a short per-message
-// transaction, the log sink ignores it.
 export interface SyncContext {
   readonly syncJob: SyncJob;
   readonly syncTask: SyncTask;
 }
 
-// Where the executor delivers each adapter event. The executor is sink-agnostic
-// and does no persistence itself: v0 ships a log sink; REP-56 swaps in a
-// persisting sink that writes the message graph. `onEvent` may be async so a
-// sink can await its own (short) DB transaction.
-export interface SyncEventSink {
-  onEvent(event: AdapterEvent, ctx: SyncContext): void | Promise<void>;
+export interface SyncEventHandler {
+  handle(event: AdapterEvent, ctx: SyncContext): void | Promise<void>;
 }
 
-export type SyncTaskStatus = 'completed' | 'failed';
+// The executor's in-memory rollup of a run, built from Promise.allSettled — a
+// transient outcome, distinct from the event-log-derived view rows in
+// persistence/views (which carry timestamps the rollup never sees). A task the
+// executor returns is always terminal, so its status is the completed|failed
+// subset of the derived SyncTaskStatusSlug.
+export type SyncTerminalStatus = Extract<
+  SyncTaskStatusSlug,
+  'completed' | 'failed'
+>;
 
-// The outcome of one task. `cursor` is the resumption token from the terminal
-// `completed` event (null on failure); `error` is the failure message when
-// status is 'failed'.
 export interface SyncTaskResult {
   readonly taskId: string;
   readonly providerAccountId: string;
-  readonly status: SyncTaskStatus;
+  readonly status: SyncTerminalStatus;
   readonly processed: number;
   readonly cursor: unknown;
   readonly error?: string;
 }
 
-// The job rollup. `completed` iff every task completed; otherwise `failed`.
 export interface SyncJobResult {
   readonly jobId: string;
-  readonly status: SyncTaskStatus;
+  readonly status: SyncTerminalStatus;
   readonly tasks: readonly SyncTaskResult[];
 }
