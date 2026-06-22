@@ -47,7 +47,7 @@ A single TypeScript codebase whose runtime roles are separate **app packages** t
 - MUST NOT: Reintroduce a `MODE` env switch, a combined entrypoint, or a generic `worker` host; each runtime role stays its own named app run by `cli services run`
 - MUST: Each app is its own deployable (one image / one container / one compose service); apps never import each other (`type:app ↛ type:app`)
 - MUST: An app expose only `./start` publicly, consumed solely by the cli (`type:cli`); see ADR-015
-- SHOULD: Keep apps as composition roots over `libs/` and `packages/shared/` — tag-enforced (`type:app → type:lib`; `type:cli → type:lib, type:app`, see manifesto §5 Rule 9)
+- SHOULD: Keep apps as composition roots over `libs/` and `packages/shared/` — tag-enforced (`type:app → type:lib`; `type:cli → type:lib, type:app`, see manifesto §5 Rule 8)
 
 ## Review Trigger
 

@@ -66,14 +66,6 @@ export default [
               sourceTag: 'scope:frontend',
               onlyDependOnLibsWithTags: ['scope:frontend', 'scope:shared'],
             },
-            {
-              sourceTag: 'area:feature',
-              notDependOnLibsWithTags: ['area:adapter'],
-            },
-            {
-              sourceTag: 'area:adapter',
-              notDependOnLibsWithTags: ['area:feature'],
-            },
           ],
         },
       ],

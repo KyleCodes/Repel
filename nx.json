@@ -44,5 +44,12 @@
       "cache": true
     }
   },
-  "analytics": false
+  "analytics": false,
+  "neverConnectToCloud": true,
+  "tui": {
+    "enabled": false
+  },
+  "sync": {
+    "applyChanges": true
+  }
 }

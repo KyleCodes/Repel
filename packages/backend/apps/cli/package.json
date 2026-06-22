@@ -9,11 +9,11 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
+    "@repel/backend-accounts": "workspace:*",
     "@repel/backend-adapters": "workspace:*",
     "@repel/backend-crypto": "workspace:*",
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
-    "@repel/backend-features": "workspace:*",
     "@repel/backend-sync": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",

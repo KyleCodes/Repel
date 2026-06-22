@@ -10,10 +10,11 @@ import { resolveUserId } from '../lib/resolve-user';
 import { SyncRunFullRequiredError } from './error';
 import { type SyncRunInput, SyncRunInputSchema } from './schemas/index';
 
-// `sync` namespace. Drives a provider sync against a connected account. v0 is a
-// proof of concept: `sync run` invokes the adapter's ingest() in-process and
-// logs every event — no persistence, no queue. The async runner (REP-57) will
-// enqueue the same SyncJob shape onto the queue instead.
+// `sync` namespace. Drives a provider sync against a connected account in-process
+// and synchronously: `sync run` invokes the adapter's ingest() and the executor's
+// persisting handler writes the message graph + the event log as it streams. No
+// queue yet — the async runner (REP-57) will enqueue the same SyncJob shape onto
+// the queue instead.
 
 export function registerSyncCommands(program: Command): void {
   const sync = program.command('sync').description('Run provider syncs');
@@ -21,7 +22,7 @@ export function registerSyncCommands(program: Command): void {
   sync
     .command('run <account>')
     .description(
-      'Run a full sync for one connected account (POC: logs events, writes nothing)'
+      'Run a full sync for one connected account (persists the message graph)'
     )
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
@@ -84,6 +85,7 @@ export async function runSyncRun(
   const result = await runSyncJob(job);
 
   // Structured summary to stdout (matches the accounts handlers' convention).
-  // The per-event human log lines come from the executor's default sink.
+  // The per-event human log lines come from the executor's default handler
+  // (the persisting handler, which logs and writes the message graph).
   process.stdout.write(JSON.stringify(result) + '\n');
 }

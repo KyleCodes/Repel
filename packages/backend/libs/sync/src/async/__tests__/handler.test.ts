@@ -1,11 +1,41 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { AdapterError } from '@repel/backend-adapters/error';
 import type {
   AdapterEvent,
   IProviderAdapter,
 } from '@repel/backend-adapters/types';
+import { syncService } from '../../persistence/service';
+import type { SyncContext, SyncEventHandler, SyncJob } from '../../types';
 import { type SyncDeps, runSyncJob } from '../handler';
-import type { SyncContext, SyncEventSink, SyncJob } from '../types';
+
+// A no-op syncService seam so the executor's up-front skeleton write (and any
+// persistence the default handler would do) touches no DB in these unit tests.
+const noopSyncService = {
+  createSyncJob: async () => ({}) as never,
+  persistMessage: async () => ({}) as never,
+  persistEvent: async () => ({}) as never,
+  getSyncTaskResults: async () => [] as never,
+  getSyncJobResult: async () => ({}) as never,
+} satisfies SyncDeps['syncService'];
+
+// Build a full accountsService seam from a partial: methods the test does not
+// supply throw if the executor unexpectedly calls them.
+function makeAccountsServiceStub(
+  overrides: Partial<NonNullable<SyncDeps['accountsService']>>
+): NonNullable<SyncDeps['accountsService']> {
+  return new Proxy(overrides, {
+    get(target, prop, receiver) {
+      if (prop in target) return Reflect.get(target, prop, receiver);
+      return async () => {
+        throw new Error(`accountsService.${String(prop)} called unexpectedly`);
+      };
+    },
+  }) as NonNullable<SyncDeps['accountsService']>;
+}
+
+// A no-op handler so the executor delivers events nowhere by default; tests that
+// assert on delivery inject a recording handler.
+const noopHandler: SyncEventHandler = { handle() {} };
 
 // A concrete AdapterError for the `failed`-event tests (AdapterError is abstract).
 class TestAdapterError extends AdapterError {}
@@ -71,11 +101,11 @@ function makeDeps(
   overrides: Partial<SyncDeps> = {}
 ): SyncDeps {
   return {
-    accountsService: {
+    accountsService: makeAccountsServiceStub({
       getProviderAccount: async function () {
         return makeAccount();
       },
-    },
+    }),
     resolveProviderAdapter: function () {
       return adapter;
     },
@@ -85,7 +115,8 @@ function makeDeps(
     loadEncryptionKey: function () {
       return Buffer.alloc(32);
     },
-    sink: { onEvent() {} },
+    syncService: noopSyncService,
+    handler: noopHandler,
     ...overrides,
   };
 }
@@ -122,10 +153,10 @@ describe('runSyncJob — happy path', function () {
     expect(result.tasks[0]!.taskId).toBe('task-1');
   });
 
-  test('every event reaches the sink in order with the right context', async function () {
+  test('every event reaches the handler in order with the right context', async function () {
     const seen: Array<{ type: string; ctx: SyncContext }> = [];
-    const recordingSink: SyncEventSink = {
-      onEvent(event, ctx) {
+    const recordingHandler: SyncEventHandler = {
+      handle(event, ctx) {
         seen.push({ type: event.type, ctx });
       },
     };
@@ -135,7 +166,7 @@ describe('runSyncJob — happy path', function () {
       { type: 'completed', cursor: null, processed: 0 },
     ]);
     const theJob = job(oneTask);
-    await runSyncJob(theJob, makeDeps(adapter, { sink: recordingSink }));
+    await runSyncJob(theJob, makeDeps(adapter, { handler: recordingHandler }));
 
     expect(seen.map((s) => s.type)).toEqual(['started', 'auth', 'completed']);
     // The context carries the job + task objects, not a denormalized copy.
@@ -173,6 +204,29 @@ describe('runSyncJob — failure isolation', function () {
     expect(result.tasks[0]!.error).toBe('boom');
   });
 
+  test('a thrown ingest persists a terminal failed event (so derived status is correct)', async function () {
+    // The adapter emits no `failed` event, so without this the log would end at
+    // `started` and the derived status would stay `running`. The executor writes
+    // the failed event itself via createFailedEvent, which calls the module
+    // syncService directly — spy on it rather than the injectable seam.
+    const persistEvent = spyOn(syncService, 'persistEvent').mockResolvedValue(
+      {} as never
+    );
+    try {
+      const adapter = makeThrowingAdapter(new Error('refresh failed'));
+      await runSyncJob(job(oneTask), makeDeps(adapter));
+
+      const calls = persistEvent.mock.calls.map(
+        (c) => c[0] as { type: string; payload: { error?: string } | null }
+      );
+      const failed = calls.find((e) => e.type === 'failed');
+      expect(failed).toBeDefined();
+      expect(failed!.payload?.error).toBe('refresh failed');
+    } finally {
+      persistEvent.mockRestore();
+    }
+  });
+
   test('a stream with no terminal event fails as incomplete', async function () {
     const adapter = makeAdapter([
       { type: 'started' },
@@ -203,11 +257,11 @@ describe('runSyncJob — failure isolation', function () {
     const result = await runSyncJob(
       job(oneTask),
       makeDeps(adapter, {
-        accountsService: {
+        accountsService: makeAccountsServiceStub({
           getProviderAccount: async function () {
             return makeAccount({ credentialsEncrypted: null });
           },
-        },
+        }),
         decrypt: function () {
           decryptCalled = true;
           return Buffer.from('x');
@@ -241,7 +295,7 @@ describe('runSyncJob — failure isolation', function () {
     const result = await runSyncJob(
       job(twoTasks),
       makeDeps(good, {
-        accountsService: {
+        accountsService: makeAccountsServiceStub({
           getProviderAccount: async function (input: {
             providerAccount: { id: string };
           }) {
@@ -252,7 +306,7 @@ describe('runSyncJob — failure isolation', function () {
                 id === 'pa-b' ? null : Buffer.from('cipher'),
             });
           },
-        },
+        }),
       })
     );
 

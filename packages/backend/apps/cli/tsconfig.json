@@ -15,7 +15,7 @@
       "path": "../../../shared/enums"
     },
     {
-      "path": "../../libs/features"
+      "path": "../../libs/sync"
     },
     {
       "path": "../../libs/env"
@@ -30,7 +30,7 @@
       "path": "../../libs/adapters"
     },
     {
-      "path": "../../libs/sync"
+      "path": "../../libs/accounts"
     }
   ],
   "include": ["src"]

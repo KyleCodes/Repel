@@ -4,7 +4,7 @@
 **Status:** ACCEPTED
 **Domain:** architecture, data-access
 
-> **Path note (REP-63):** the REP-60 restructure moved this tree out of `apps/server/src/`. Features now live inside the `@repel/backend-features` package at `packages/backend/libs/features/src/accounts/…`. The vertical-slice decision below is unchanged; only the base path moved. Read `features/<feature>/` as `packages/backend/libs/features/src/<feature>/`.
+> **Path note (REP-56):** each capability is now its own domain lib — `@repel/backend-<domain>` at `packages/backend/libs/<domain>/`, with the vertical slice under `src/persistence/` (and `src/async/` for worker code). The monolithic `@repel/backend-features` package was dissolved (accounts → `@repel/backend-accounts`, sync → `@repel/backend-sync`). The vertical-slice decision below is unchanged; only the home moved. Read `features/<feature>/` as `libs/<domain>/src/persistence/`.
 
 ## Context
 
@@ -71,6 +71,7 @@ A feature directory's `flows/` or `views/` exceeds approximately eight entries �
 - **2026-04-18:** Services moved from factories (`makeXService(repos: Repos)`) to module-level singletons (`export const xService = { ... }`) whose methods are composed with `runInOrgTx` / `runInTx` decorators from `db/tx.ts`. Transport layers stopped constructing services per-request. Cross-service composition inside `runInTx` used a sibling `*Impl` export convention.
 - **2026-05-13:** Moved the `Repos` bundle from `db/repos.ts` to `core/repos.ts` to break a directory cycle between `db/` and `core/`. REP-42.
 - **2026-05-16:** REP-44 — `core/` renamed to `features/`; the `Repos` bundle was deleted entirely; the per-feature `repo.ts`/`mappers.ts`/`types.ts` quartet collapsed into per-flow / per-view files that each own their Kysely query builder; the `*Impl` sibling export convention was dropped (service.ts composes flow/view runners directly); `error.ts` was added as the fifth per-feature entry. The Decision and Compliance sections above describe the current shape; this Amendments list is the journey.
+- **2026-06-22:** REP-56 — the single `@repel/backend-features` package dissolved into one domain lib per capability (`@repel/backend-accounts`, `@repel/backend-sync`); the vertical slice now lives under `libs/<domain>/src/persistence/` (plus `async/` for worker code). A domain lib may own its adapter integration, so the former adapters↔features wall (manifesto Rule 6) and its `area:` tag dimension were removed. The service may define its own public input/output interfaces (`contract.ts`) and map to/from the kysely shapes (`transform.ts`), relaxing the original "no parallel domain-type layer" below the service while keeping the query layer kysely-inferred.
 
 ## Related
 

@@ -19,6 +19,12 @@ export class ProviderAccountNotFoundError extends AccountsServiceError {
   }
 }
 
+export class ProviderAccountAmbiguousError extends AccountsServiceError {
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 export class OrgNotFoundError extends AccountsServiceError {
   constructor(message: string) {
     super(message);
