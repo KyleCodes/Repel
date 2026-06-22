@@ -52,18 +52,19 @@ export async function* ingest(
   yield { type: 'started' };
 
   // Refresh the access token only if it is expired/near-expiry; the policy and
-  // its error vocabulary live in oauth2/. On a refresh, carry the rotated
-  // credential so the runner can persist it.
+  // its error vocabulary live in oauth2/. credentials is the bare stored
+  // TokenSet — the platform hands it in unread. On a refresh, carry the rotated
+  // set (same bare shape that gets stored) so the runner can persist it.
   const config = withRedirectUri(loadGmailOAuthConfig(), '');
   const { tokens, refreshed } = await refreshIfExpired(
-    { config, tokens: input.credentials.tokens },
+    { config, tokens: input.credentials },
     deps
   );
   const accessToken = tokens.accessToken;
   yield {
     type: 'auth',
     refreshed,
-    ...(refreshed && { credentials: { provider: 'gmail', tokens } }),
+    ...(refreshed && { credentials: tokens }),
   };
 
   // Capture the cursor BEFORE listing so the next incremental sync replays

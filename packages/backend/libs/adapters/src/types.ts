@@ -13,7 +13,7 @@ import type {
 import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/enums';
 import type { HttpDeps } from '@repel/http/client';
 import type { AdapterError } from './error';
-import type { GmailCredentials } from './gmail/types';
+import type { TokenSet } from './lib/oauth2/types';
 
 // What a provider can do, declared once per adapter as a const. Per-account
 // variance (e.g. scope-driven send/receive toggles) isn't modeled yet. The auth
@@ -107,17 +107,19 @@ export type AdapterSyncSpec =
   | { readonly type: 'range'; readonly from?: Date; readonly to?: Date }
   | { readonly type: 'full'; readonly limit?: number };
 
-// The decrypted credentials the runner hands an adapter, one member per
-// provider. Today only Gmail exists. The adapter narrows to its own member on
-// the `provider` tag — no cast. When a second provider lands, this union widens
-// and the narrow stops compiling until a discriminant check is added.
-export type ProviderCredentials = GmailCredentials;
+// The decrypted credentials the runner hands an adapter. What's stored at rest
+// in provider_account.credentials_encrypted is the bare shape the auth flow
+// produced — for an oauth2 adapter, a TokenSet — and ingest() consumes it as-is,
+// unread by the platform. The runner does not interpret or tag it; it decrypts
+// and passes it straight through. Today only oauth2 adapters exist, so this is a
+// TokenSet; a future app-password / api-key adapter widens it.
+export type ProviderCredentials = TokenSet;
 
 // Input to a sync. The runner reads provider_account.credentials_encrypted,
 // decrypts it (the adapter can't — the import barrier fences features/ off), and
-// passes the credentials in. `providerSlug` discriminates the union so each
-// adapter receives its own input member (and its own credentials shape) without
-// a cast — mirroring ProviderCredentials.
+// passes the bare credentials in. `providerSlug` discriminates the union so each
+// adapter receives its own input member; the credentials are opaque to the
+// runner and shaped by the adapter that consumes them.
 interface IngestInputBase {
   readonly orgId: string;
   readonly userId: string;
@@ -127,7 +129,7 @@ interface IngestInputBase {
 
 export interface GmailIngestInput extends IngestInputBase {
   readonly providerSlug: 'gmail';
-  readonly credentials: GmailCredentials;
+  readonly credentials: TokenSet;
 }
 
 // The union of per-provider sync inputs. Today only Gmail exists; widens as
