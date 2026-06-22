@@ -60,13 +60,10 @@ describe('gmailAdapter wiring', function () {
       providerAccountId: 'pa',
       spec: { type: 'full', limit: 1 },
       credentials: {
-        provider: 'gmail',
-        tokens: {
-          accessToken: 'a',
-          refreshToken: 'r',
-          expiresAt: 0,
-          tokenType: 'Bearer',
-        },
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresAt: 0,
+        tokenType: 'Bearer',
       },
     });
     expect(typeof (it as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe(

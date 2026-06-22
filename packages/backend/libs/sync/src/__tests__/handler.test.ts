@@ -145,19 +145,21 @@ describe('runSyncJob — happy path', function () {
     expect(seen[0]!.ctx.syncTask.providerAccountId).toBe('pa-1');
   });
 
-  test('decrypted credentials are re-tagged and passed to the adapter', async function () {
-    let received: { provider: unknown; tokens: unknown } | undefined;
+  test('the decrypted credential is passed to the adapter opaquely (no re-tagging)', async function () {
+    let received: { providerSlug: unknown; credentials: unknown } | undefined;
     const adapter: IProviderAdapter = {
       ...makeAdapter([{ type: 'completed', cursor: null, processed: 0 }]),
       ingest: async function* (input) {
-        received = (input as { credentials: typeof received }).credentials;
+        received = input as typeof received;
         yield { type: 'completed', cursor: null, processed: 0 };
       },
     };
     await runSyncJob(job(oneTask), makeDeps(adapter));
 
-    expect(received?.provider).toBe('gmail');
-    expect(received?.tokens).toEqual(TOKENS);
+    // The slug comes off the resolved account row; the credential is the bare
+    // parsed token set, handed through untouched (not wrapped in {provider,tokens}).
+    expect(received?.providerSlug).toBe('gmail');
+    expect(received?.credentials).toEqual(TOKENS);
   });
 });
 

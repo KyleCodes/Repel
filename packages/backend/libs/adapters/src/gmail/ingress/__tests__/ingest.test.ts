@@ -56,13 +56,10 @@ function input(overrides?: Partial<IngestInput>): IngestInput {
     providerAccountId: 'pa-1',
     spec: { type: 'full', limit: 10 },
     credentials: {
-      provider: 'gmail',
-      tokens: {
-        accessToken: 'stale',
-        refreshToken: 'r-1',
-        expiresAt: 0,
-        tokenType: 'Bearer',
-      },
+      accessToken: 'stale',
+      refreshToken: 'r-1',
+      expiresAt: 0,
+      tokenType: 'Bearer',
     },
     ...overrides,
   };
@@ -241,10 +238,7 @@ describe('ingest — auth failures', function () {
   });
 
   test('an expired token with no refresh token throws OAuth2NoRefreshTokenError', async function () {
-    const creds = {
-      provider: 'gmail' as const,
-      tokens: { accessToken: 'a', expiresAt: 0, tokenType: 'Bearer' },
-    };
+    const creds = { accessToken: 'a', expiresAt: 0, tokenType: 'Bearer' };
     const it = ingest(input({ credentials: creds }), {
       fetchImpl: (async () => json({})) as unknown as typeof fetch,
     });
@@ -267,14 +261,11 @@ describe('ingest — conditional refresh', function () {
     if (auth?.type === 'auth') {
       expect(auth.refreshed).toBe(true);
       expect(auth.credentials).toEqual({
-        provider: 'gmail',
-        tokens: {
-          accessToken: 'fresh-access',
-          refreshToken: 'r-new',
-          expiresAt: expect.any(Number),
-          scope: undefined,
-          tokenType: 'Bearer',
-        },
+        accessToken: 'fresh-access',
+        refreshToken: 'r-new',
+        expiresAt: expect.any(Number),
+        scope: undefined,
+        tokenType: 'Bearer',
       });
     } else {
       throw new Error('expected an auth event');
@@ -293,13 +284,10 @@ describe('ingest — conditional refresh', function () {
       return json({ resultSizeEstimate: 0 });
     };
     const validCreds = {
-      provider: 'gmail' as const,
-      tokens: {
-        accessToken: 'still-good',
-        refreshToken: 'r-1',
-        expiresAt: Date.now() + 3_600_000,
-        tokenType: 'Bearer',
-      },
+      accessToken: 'still-good',
+      refreshToken: 'r-1',
+      expiresAt: Date.now() + 3_600_000,
+      tokenType: 'Bearer',
     };
     const events = await collect(
       ingest(input({ credentials: validCreds }), {

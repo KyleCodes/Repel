@@ -17,6 +17,13 @@ import type {
   SyncTaskStatus,
 } from './types';
 
+// The decrypted credential shape an adapter consumes, derived structurally from
+// the ingest input so the sync lib names no provider and no oauth2 type. It is
+// the bare shape stored in provider_account.credentials_encrypted (for an oauth2
+// adapter, a TokenSet); the executor holds it opaquely and hands it to ingest()
+// unread.
+type ProviderCredentials = IngestInput['credentials'];
+
 // Injectable seams so the executor is unit-testable without a real DB, browser,
 // or network. The service/adapter/crypto functions are module-imported, so an
 // optional deps param is the contained seam (production calls pass nothing).
@@ -107,19 +114,34 @@ async function runSyncTask(
       );
     }
 
-    // Decrypt the stored credentials (a bare OAuth token set at rest). The
-    // adapter narrows on the provider tag, so each provider's input is built
-    // with its own credentials shape. Plaintext is built here, inside the
-    // executor — never handed in by the caller, so a future queue envelope
-    // carries only ids.
-    const tokens = JSON.parse(
+    // Resolve the adapter first — it validates the provider slug (an unknown
+    // provider throws ProviderNotFoundError before we touch credentials).
+    const adapter = resolveProviderAdapter(account.provider);
+
+    // Decrypt the stored credentials and hand them to ingest() opaquely. The
+    // platform does not interpret the credential shape — the adapter does. This
+    // is the single trusted cast at the decrypt boundary: JSON.parse yields
+    // unknown and the stored blob is trusted (it was written by the connect
+    // flow). The executor names no provider and no credential type. Plaintext is
+    // built here, inside the executor, so a future queue envelope carries only
+    // ids.
+    const credentials = JSON.parse(
       decrypt(loadEncryptionKey(), account.credentialsEncrypted).toString(
         'utf8'
       )
-    );
+    ) as ProviderCredentials;
 
-    const adapter = resolveProviderAdapter(account.provider);
-    const input = buildIngestInput(job, task, account.provider, tokens);
+    // The only provider-specific value is the slug discriminant, taken straight
+    // off the resolved row; credentials stay opaque. The cast to the IngestInput
+    // union is sound because resolveProviderAdapter already validated the slug.
+    const input = {
+      providerSlug: account.provider,
+      orgId: job.orgId,
+      userId: job.userId,
+      providerAccountId: task.providerAccountId,
+      spec: task.spec,
+      credentials,
+    } as IngestInput;
 
     let processed = 0;
     let cursor: unknown = null;
@@ -173,40 +195,5 @@ async function runSyncTask(
       cursor: null,
       error: e instanceof Error ? e.message : String(e),
     };
-  }
-}
-
-// Build the per-provider ingest input. Each provider's credentials carry a
-// provider tag and its own token shape, so this is the one place that maps a
-// decrypted token set onto the provider's input member — the only spot that
-// names a provider. The switch is exhaustive on the Provider enum: when a second
-// adapter lands, IngestInput widens and this stops compiling until its case is
-// added. `tokens` is cast at the decrypt boundary — JSON.parse yields unknown
-// and the stored shape is trusted (it was written by the connect flow).
-function buildIngestInput(
-  job: SyncJob,
-  task: SyncTask,
-  provider: Awaited<
-    ReturnType<typeof defaultAccountsService.getProviderAccount>
-  >['provider'],
-  tokens: unknown
-): IngestInput {
-  const base = {
-    orgId: job.orgId,
-    userId: job.userId,
-    providerAccountId: task.providerAccountId,
-    spec: task.spec,
-  };
-  switch (provider) {
-    case 'gmail':
-      return {
-        ...base,
-        providerSlug: 'gmail',
-        credentials: { provider: 'gmail', tokens: tokens as never },
-      };
-    default:
-      throw new SyncTaskFailedError(
-        `no ingest input builder for provider "${provider}"`
-      );
   }
 }
