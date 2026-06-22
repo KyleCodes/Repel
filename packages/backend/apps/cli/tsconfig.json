@@ -28,6 +28,9 @@
     },
     {
       "path": "../../libs/adapters"
+    },
+    {
+      "path": "../../libs/sync"
     }
   ],
   "include": ["src"]

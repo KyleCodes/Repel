@@ -14,6 +14,7 @@
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
     "@repel/backend-features": "workspace:*",
+    "@repel/backend-sync": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
     "@repel/slug": "workspace:*",
