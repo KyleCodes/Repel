@@ -18,3 +18,17 @@ export const SyncRunInputSchema = z.object({
   enqueue: z.boolean().default(false),
 });
 export type SyncRunInput = z.infer<typeof SyncRunInputSchema>;
+
+// Read verbs. `syncs list` is org/user-scoped (env fallback); `syncs show` takes
+// a required job id positional and is org-scoped.
+export const SyncsListInputSchema = z.object({
+  org: z.string().optional(),
+  user: z.string().optional(),
+});
+export type SyncsListInput = z.infer<typeof SyncsListInputSchema>;
+
+export const SyncsShowInputSchema = z.object({
+  org: z.string().optional(),
+  jobId: z.string().min(1, 'jobId is required'),
+});
+export type SyncsShowInput = z.infer<typeof SyncsShowInputSchema>;

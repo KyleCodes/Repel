@@ -9,19 +9,28 @@ import { parseOrExit } from '../lib/parse-or-exit';
 import { resolveAccount as defaultResolveAccount } from '../lib/resolve-account';
 import { resolveOrgId } from '../lib/resolve-org';
 import { resolveUserId } from '../lib/resolve-user';
+import { SyncJobNotFoundError } from './error';
 import { SyncRunFullRequiredError } from './error';
-import { type SyncRunInput, SyncRunInputSchema } from './schemas/index';
+import {
+  type SyncRunInput,
+  SyncRunInputSchema,
+  type SyncsListInput,
+  SyncsListInputSchema,
+  type SyncsShowInput,
+  SyncsShowInputSchema,
+} from './schemas/index';
+import { registerTasksCommands } from './tasks/handler';
 
-// `sync` namespace. Drives a provider sync against a connected account.
+// `syncs` namespace. Drives provider syncs and exposes the read tree over them
+// (list/show + nested tasks). The namespace is `syncs` at the CLI surface only —
+// the underlying lib, the `sync` queue topic, and the `sync-worker` service keep
+// their names.
 //
-// Default (`sync run`): in-process and synchronous — writes the job/task
-// skeleton, then invokes the adapter's ingest() so the executor's persisting
-// handler writes the message graph + event log as it streams; prints the
-// SyncJobResult. Step-debuggable.
-//
-// `--enqueue`: writes the same skeleton, then pushes one envelope onto the
-// `sync` topic (REP-57) for the sync-worker to run later; prints
-// { enqueued, jobId } without running the sync in-process.
+// `syncs run`: in-process and synchronous — writes the job/task skeleton, then
+// invokes the adapter's ingest() so the executor's persisting handler writes the
+// message graph + event log as it streams; prints the SyncJobResult.
+// Step-debuggable. `--enqueue` instead pushes one envelope onto the `sync` topic
+// (REP-57) for the sync-worker to run later; prints { enqueued, jobId }.
 //
 // The skeleton write (createSyncJob) lives here, not in runSyncJob — the
 // executor no longer writes it (so the async worker doesn't write it twice).
@@ -30,13 +39,19 @@ import { type SyncRunInput, SyncRunInputSchema } from './schemas/index';
 // working model minus orgId (orgId rides the envelope wrapper).
 const SYNC_TOPIC = 'sync';
 
-export function registerSyncCommands(program: Command): void {
-  const sync = program.command('sync').description('Run provider syncs');
+export function registerSyncsCommands(program: Command): void {
+  const syncs = program
+    .command('syncs')
+    .description('Run and inspect provider syncs');
 
-  sync
-    .command('run <account>')
+  syncs
+    .command('run')
     .description(
       'Run a full sync for one connected account (persists the message graph)'
+    )
+    .requiredOption(
+      '--account <ref>',
+      'account to sync: id, alias, or provider:ext'
     )
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
@@ -46,26 +61,48 @@ export function registerSyncCommands(program: Command): void {
       '--enqueue',
       'enqueue the job on the sync topic for the worker to run, instead of running it in-process'
     )
-    .action(async function (
-      account: string,
-      opts: {
-        org?: string;
-        user?: string;
-        full?: boolean;
-        limit?: string;
-        enqueue?: boolean;
-      }
-    ) {
+    .action(async function (opts: {
+      account: string;
+      org?: string;
+      user?: string;
+      full?: boolean;
+      limit?: string;
+      enqueue?: boolean;
+    }) {
       const input = parseOrExit(SyncRunInputSchema, {
         org: opts.org,
         user: opts.user,
-        account,
+        account: opts.account,
         full: opts.full,
         limit: opts.limit,
         enqueue: opts.enqueue,
       });
       await runSyncRun(input);
     });
+
+  syncs
+    .command('list')
+    .description('List sync jobs for a user (one summary row per job)')
+    .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
+    .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
+    .action(async function (opts: { org?: string; user?: string }) {
+      const input = parseOrExit(SyncsListInputSchema, {
+        org: opts.org,
+        user: opts.user,
+      });
+      await runSyncsList(input);
+    });
+
+  syncs
+    .command('show <jobId>')
+    .description('Show one sync job with its tasks')
+    .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
+    .action(async function (jobId: string, opts: { org?: string }) {
+      const input = parseOrExit(SyncsShowInputSchema, { org: opts.org, jobId });
+      await runSyncsShow(input);
+    });
+
+  registerTasksCommands(syncs);
 }
 
 // Injectable seams so the resolve + skeleton + run/enqueue path can be
@@ -132,5 +169,59 @@ export async function runSyncRun(
   const result = await runSyncJob(job);
 
   // Structured summary to stdout (matches the accounts handlers' convention).
+  process.stdout.write(JSON.stringify(result) + '\n');
+}
+
+// Read-verb seams: the service is module-imported, so an optional deps param is
+// the contained way to drive these without a real DB (same rationale as
+// SyncRunDeps). Production calls pass nothing.
+export interface SyncsListDeps {
+  listSyncJobs?: typeof defaultSyncService.listSyncJobs;
+}
+
+export async function runSyncsList(
+  input: SyncsListInput,
+  deps: SyncsListDeps = {}
+): Promise<void> {
+  const listSyncJobs = deps.listSyncJobs ?? defaultSyncService.listSyncJobs;
+
+  // userId is resolved (env fallback) so the verb fails fast with the standard
+  // message when neither --user nor REPEL_USER_ID is set; the listing itself is
+  // org-scoped by RLS. orgId scopes the read.
+  const orgId = resolveOrgId(input.org);
+  resolveUserId(input.user);
+
+  const jobs = await listSyncJobs({ orgId });
+  process.stdout.write(JSON.stringify(jobs) + '\n');
+}
+
+export interface SyncsShowDeps {
+  getSyncJobResult?: typeof defaultSyncService.getSyncJobResult;
+  listSyncJobs?: typeof defaultSyncService.listSyncJobs;
+}
+
+export async function runSyncsShow(
+  input: SyncsShowInput,
+  deps: SyncsShowDeps = {}
+): Promise<void> {
+  const getSyncJobResult =
+    deps.getSyncJobResult ?? defaultSyncService.getSyncJobResult;
+  const listSyncJobs = deps.listSyncJobs ?? defaultSyncService.listSyncJobs;
+
+  const orgId = resolveOrgId(input.org);
+
+  // getSyncJobResult folds from the event log, so an unknown job and a real job
+  // with no tasks both return a row (taskCount 0). Check existence against the
+  // job list (membership) so an unknown id is a typed not-found, not an empty
+  // print. The typed error lives at the CLI boundary; the service stays a fold.
+  const jobs = await listSyncJobs({ orgId });
+  if (!jobs.some((j) => j.jobId === input.jobId)) {
+    throw new SyncJobNotFoundError(`sync job not found: ${input.jobId}`);
+  }
+
+  const result = await getSyncJobResult({
+    orgId,
+    syncJob: { id: input.jobId },
+  });
   process.stdout.write(JSON.stringify(result) + '\n');
 }

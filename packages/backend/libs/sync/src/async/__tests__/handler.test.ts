@@ -8,18 +8,23 @@ import { syncService } from '../../persistence/service';
 import type { SyncContext, SyncEventHandler, SyncJob } from '../../types';
 import { type SyncDeps, runSyncJob } from '../handler';
 
-// A no-op syncService seam so any persistence the default handler would do
-// touches no DB in these unit tests. (The executor no longer writes the skeleton
-// itself — the caller does — but the seam still carries createSyncJob so a test
-// can assert the executor leaves it alone; see the "does not write the skeleton"
-// test below.)
-const noopSyncService = {
-  createSyncJob: async () => ({}) as never,
-  persistMessage: async () => ({}) as never,
-  persistEvent: async () => ({}) as never,
-  getSyncTaskResults: async () => [] as never,
-  getSyncJobResult: async () => ({}) as never,
-} satisfies SyncDeps['syncService'];
+// Build a syncService seam from a partial: supplied methods win, the rest are
+// no-ops. A Proxy (rather than a fixed object literal) keeps the seam valid as
+// the service gains read methods the executor never calls. The executor no longer
+// writes the skeleton — the caller does — but createSyncJob stays reachable so a
+// test can assert the executor leaves it alone (see "does not write the skeleton").
+function makeSyncServiceStub(
+  overrides: Partial<NonNullable<SyncDeps['syncService']>> = {}
+): NonNullable<SyncDeps['syncService']> {
+  return new Proxy(overrides, {
+    get(target, prop, receiver) {
+      if (prop in target) return Reflect.get(target, prop, receiver);
+      return async () => ({}) as never;
+    },
+  }) as NonNullable<SyncDeps['syncService']>;
+}
+
+const noopSyncService = makeSyncServiceStub();
 
 // Build a full accountsService seam from a partial: methods the test does not
 // supply throw if the executor unexpectedly calls them.
@@ -170,7 +175,7 @@ describe('runSyncJob — happy path', function () {
     await runSyncJob(
       job(oneTask),
       makeDeps(adapter, {
-        syncService: { ...noopSyncService, createSyncJob },
+        syncService: makeSyncServiceStub({ createSyncJob }),
       })
     );
     expect(createSyncJob).not.toHaveBeenCalled();

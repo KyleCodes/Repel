@@ -1,25 +1,40 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import type { SyncJob, SyncJobResult } from '@repel/backend-sync/types';
-import { SyncRunFullRequiredError } from '../error';
-import { registerSyncCommands, runSyncRun } from '../handler';
+import { SyncJobNotFoundError, SyncRunFullRequiredError } from '../error';
+import {
+  registerSyncsCommands,
+  runSyncRun,
+  runSyncsList,
+  runSyncsShow,
+} from '../handler';
 import { SyncRunInputSchema } from '../schemas/index';
 
-describe('registerSyncCommands', function () {
-  test('registers the sync namespace with a run subcommand', function () {
+describe('registerSyncsCommands', function () {
+  test('registers the syncs namespace with run/list/show + tasks subcommands', function () {
     const program = new Command();
-    registerSyncCommands(program);
-    const sync = program.commands.find(function (c) {
-      return c.name() === 'sync';
+    registerSyncsCommands(program);
+    const syncs = program.commands.find(function (c) {
+      return c.name() === 'syncs';
     });
-    expect(sync).toBeDefined();
-    const run = sync!.commands.find(function (c) {
+    expect(syncs).toBeDefined();
+    const subNames = syncs!.commands.map(function (c) {
+      return c.name();
+    });
+    expect(subNames).toContain('run');
+    expect(subNames).toContain('list');
+    expect(subNames).toContain('show');
+    expect(subNames).toContain('tasks');
+
+    const run = syncs!.commands.find(function (c) {
       return c.name() === 'run';
     });
-    expect(run).toBeDefined();
     const optionNames = run!.options.map(function (o) {
       return o.long;
     });
+    // account is now a flag (was a positional) so support can redrive a sync for
+    // a non-dev user's account.
+    expect(optionNames).toContain('--account');
     expect(optionNames).toContain('--full');
     expect(optionNames).toContain('--limit');
     expect(optionNames).toContain('--enqueue');
@@ -230,5 +245,95 @@ describe('runSyncRun', function () {
       enqueued: true,
       jobId: skeletonJob!.id,
     });
+  });
+});
+
+const jobSummary = {
+  jobId: 'job-1',
+  userId: 'user-1',
+  status: 'completed' as const,
+  taskCount: 1,
+  processed: 5,
+  createdAt: new Date(0),
+};
+
+describe('runSyncsList', function () {
+  test('prints the light job summaries the service returns', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    let listArg: { orgId: string } | undefined;
+    let printed = '';
+    try {
+      await runSyncsList(
+        { org: undefined, user: undefined },
+        {
+          listSyncJobs: async function (arg) {
+            listArg = arg;
+            return [jobSummary] as never;
+          },
+        }
+      );
+      printed = String(writeSpy.mock.calls[0]![0]);
+    } finally {
+      writeSpy.mockRestore();
+    }
+    // Org from REPEL_ORG_ID scopes the read.
+    expect(listArg!.orgId).toBe('org-1');
+    // The handler JSON-stringifies, so Date fields land as ISO strings — compare
+    // against the same roundtrip rather than the live Date fixture.
+    expect(JSON.parse(printed)).toEqual(
+      JSON.parse(JSON.stringify([jobSummary]))
+    );
+  });
+});
+
+describe('runSyncsShow', function () {
+  test('prints the nested job result when the job exists', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    let printed = '';
+    try {
+      await runSyncsShow(
+        { org: undefined, jobId: 'job-1' },
+        {
+          listSyncJobs: async function () {
+            return [jobSummary] as never;
+          },
+          getSyncJobResult: async function () {
+            return jobResult as never;
+          },
+        }
+      );
+      printed = String(writeSpy.mock.calls[0]![0]);
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(JSON.parse(printed)).toEqual(jobResult as never);
+  });
+
+  test('throws SyncJobNotFoundError for an unknown job id', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    let getCalled = false;
+    let caught: unknown;
+    try {
+      await runSyncsShow(
+        { org: undefined, jobId: 'nope' },
+        {
+          listSyncJobs: async function () {
+            return [jobSummary] as never;
+          },
+          getSyncJobResult: async function () {
+            getCalled = true;
+            return jobResult as never;
+          },
+        }
+      );
+    } catch (e) {
+      caught = e;
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(caught).toBeInstanceOf(SyncJobNotFoundError);
+    // Unknown job short-circuits before the fold read and prints nothing.
+    expect(getCalled).toBe(false);
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 });
