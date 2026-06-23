@@ -35,7 +35,7 @@ services:
       [
         'bun',
         'run',
-        'packages/backend/apps/sync/worker/sync-worker/src/main.ts',
+        'packages/backend/apps/sync/worker/sync-worker/src/start.ts',
       ]
     environment:
       DATABASE_URL: postgres://repel:dev@postgres:5432/repel

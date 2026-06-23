@@ -13,9 +13,7 @@ export interface SyncWorkerDeps {
 
 // Build the sync-worker's RunnableApp: a libs/queue consumer bound to the `sync`
 // topic. start() installs the poll loop (resolve-when-ready); stop() drains
-// in-flight handlers before resolving — this is the first app to implement the
-// optional RunnableApp.stop() (REP-64 reserved it; REP-58 wired the launcher's
-// drainAndClose to call it).
+// in-flight handlers before resolving.
 export function createSyncWorkerApp(deps: SyncWorkerDeps = {}): RunnableApp {
   const consume = deps.consume ?? defaultConsume;
   const consumer = consume(SYNC_TOPIC, syncHandler);
@@ -24,4 +22,18 @@ export function createSyncWorkerApp(deps: SyncWorkerDeps = {}): RunnableApp {
     start: () => consumer.start(),
     stop: () => consumer.stop(),
   };
+}
+
+// The sync-worker's launch contract — the cli's `services run sync-worker`
+// imports this to boot it (and drains it via stop() on shutdown).
+export const syncWorkerApp: RunnableApp = createSyncWorkerApp();
+
+// Also a direct entrypoint: `bun run .../sync-worker/src/start.ts` boots it. The
+// guard keeps the cli's import of this module side-effect-free (import.meta.main
+// is true only when this file is the process entrypoint, false when imported).
+if (import.meta.main) {
+  syncWorkerApp.start().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }

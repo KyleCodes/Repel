@@ -211,18 +211,19 @@ describe('runSyncRun', function () {
     expect(ranSync).toBe(false);
     expect(enqueued).toBeDefined();
     expect(enqueued!.topic).toBe('sync');
-    // orgId rides the envelope wrapper, not the payload.
+    // orgId is the authoritative tenant scope on the envelope wrapper.
     expect(enqueued!.opts.orgId).toBe('org-1');
     expect(enqueued!.opts.dedupKey).toBe(skeletonJob!.id);
+    // The payload is the full SyncJob (orgId denormalized in too).
     const payload = enqueued!.payload as {
       id: string;
       userId: string;
-      orgId?: string;
+      orgId: string;
       tasks: unknown[];
     };
     expect(payload.id).toBe(skeletonJob!.id);
     expect(payload.userId).toBe('user-1');
-    expect('orgId' in payload).toBe(false);
+    expect(payload.orgId).toBe('org-1');
     expect(payload.tasks).toHaveLength(1);
     // Output is the enqueue receipt, not a SyncJobResult.
     expect(JSON.parse(printed)).toEqual({

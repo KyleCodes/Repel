@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./start": "./src/main.ts"
+    "./start": "./src/start.ts"
   },
   "scripts": {
     "test": "bun test --pass-with-no-tests"

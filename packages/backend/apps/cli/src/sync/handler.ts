@@ -116,12 +116,11 @@ export async function runSyncRun(
   await createSyncJob(job);
 
   if (input.enqueue) {
-    // Enqueue-only: orgId rides the envelope wrapper; the payload is the SyncJob
-    // working model the worker rebuilds. dedupKey = job id, so a duplicate
-    // enqueue is a no-op. The sync runs later in the worker; status is observed
-    // via the sync_event log (a future `sync status`), not this verb.
-    const { id, tasks } = job;
-    await enqueue(SYNC_TOPIC, { id, userId, tasks }, { orgId, dedupKey: id });
+    // Enqueue-only: the payload is the full SyncJob (orgId also rides the
+    // envelope wrapper as the authoritative tenant scope). dedupKey = job id, so
+    // a duplicate enqueue is a no-op. The sync runs later in the worker; status
+    // is observed via the sync_event log (a future `sync status`), not this verb.
+    await enqueue(SYNC_TOPIC, job, { orgId, dedupKey: job.id });
     process.stdout.write(
       JSON.stringify({ enqueued: true, jobId: job.id }) + '\n'
     );
