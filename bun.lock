@@ -89,6 +89,7 @@
       "dependencies": {
         "@repel/backend-db": "workspace:*",
         "@repel/backend-env": "workspace:*",
+        "@repel/concurrency": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
         "@repel/http": "workspace:*",
@@ -132,6 +133,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@repel/backend-db": "workspace:*",
+        "@repel/concurrency": "workspace:*",
         "@repel/errors": "workspace:*",
         "kysely": "^0.27.3",
       },
@@ -152,6 +154,7 @@
         "@repel/backend-adapters": "workspace:*",
         "@repel/backend-crypto": "workspace:*",
         "@repel/backend-db": "workspace:*",
+        "@repel/concurrency": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
         "kysely": "^0.27.3",
@@ -175,6 +178,10 @@
         "@vitejs/plugin-react": "^4.3.1",
         "vite": "^5.3.4",
       },
+    },
+    "packages/shared/concurrency": {
+      "name": "@repel/concurrency",
+      "version": "0.0.1",
     },
     "packages/shared/enums": {
       "name": "@repel/enums",
@@ -546,6 +553,8 @@
     "@repel/backend-sync": ["@repel/backend-sync@workspace:packages/backend/libs/sync"],
 
     "@repel/backend-sync-worker": ["@repel/backend-sync-worker@workspace:packages/backend/apps/sync/worker/sync-worker"],
+
+    "@repel/concurrency": ["@repel/concurrency@workspace:packages/shared/concurrency"],
 
     "@repel/enums": ["@repel/enums@workspace:packages/shared/enums"],
 

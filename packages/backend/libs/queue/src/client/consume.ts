@@ -1,3 +1,4 @@
+import { boundedConcurrencyPoolStream } from '@repel/concurrency';
 import { PermanentHandlerError } from '../error';
 import type { ClaimedJob, Transport } from '../persistence/service';
 import { pgTransport } from '../persistence/service';
@@ -13,14 +14,19 @@ function defaultConsumerId(): string {
   return `consumer-${process.pid}`;
 }
 
-// Bind a handler to a topic and return its control handle. The consumer polls
-// the topic on a self-pacing recursive timer, claims up to `concurrency` due
-// envelopes per tick, and runs the handler on each. A claimed job's `attempts`
-// already counts the current delivery (incremented at claim), so a handler
-// failure reschedules while attempts < maxAttempts and dead-letters once they
-// are exhausted (or immediately on PermanentHandlerError). A second, slower
-// timer sweeps old completed rows so the table does not grow without bound.
-// The transport is injectable so the runtime is testable without Postgres.
+// Bind a handler to a topic and return its control handle. Claimed jobs are
+// expressed as a lazy source and streamed through a bounded pool that keeps
+// `concurrency` handler invocations in flight, refilling each slot as it frees.
+// The source claims `batchSize` rows per DB round-trip (decoupled from the pool
+// size) and backs off `pollIntervalMs` whenever it does not get a full batch —
+// a partial/empty batch means the topic is drained, so spinning would just hammer
+// it. The stream's capacity gate bounds the in-memory backlog: the source is
+// suspended whenever the pool is saturated, so it never claims ahead. A claimed
+// job's `attempts` already counts the current delivery, so a handler failure
+// reschedules while attempts < maxAttempts and dead-letters once exhausted (or
+// immediately on PermanentHandlerError). A second, slower timer sweeps old
+// completed rows. The transport is injectable so the runtime is testable without
+// Postgres.
 export function consume(
   topic: string,
   handler: QueueHandler,
@@ -30,22 +36,25 @@ export function consume(
   const consumerId = config.consumerId ?? defaultConsumerId();
   const pollIntervalMs = config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const concurrency = config.concurrency ?? DEFAULT_CONCURRENCY;
+  const batchSize = config.batchSize ?? concurrency;
   const reapIntervalMs = config.reapIntervalMs ?? DEFAULT_REAP_INTERVAL_MS;
   const completedTtlMs = config.completedTtlMs ?? DEFAULT_COMPLETED_TTL_MS;
 
   let running = false;
-  let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let reapTimer: ReturnType<typeof setTimeout> | undefined;
-  const inFlight = new Set<Promise<void>>();
+  let consuming: Promise<void> | undefined;
+  // Resolves when stop() is called, so a mid-backoff sleep ends promptly instead
+  // of running out the full interval.
+  let signalStop: (() => void) | undefined;
 
-  // Track an in-flight handler promise so stop() can drain it, self-removing
-  // when it settles.
-  function track(p: Promise<void>): Promise<void> {
-    const tracked = p.finally(() => {
-      inFlight.delete(tracked);
+  function delay(ms: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      signalStop = () => {
+        clearTimeout(timer);
+        resolve();
+      };
     });
-    inFlight.add(tracked);
-    return tracked;
   }
 
   async function process(job: ClaimedJob): Promise<void> {
@@ -66,21 +75,14 @@ export function consume(
     }
   }
 
-  function scheduleNextPoll(delayMs: number): void {
-    if (!running) return;
-    pollTimer = setTimeout(() => {
-      void poll();
-    }, delayMs);
-  }
-
-  async function poll(): Promise<void> {
-    if (!running) return;
-    try {
-      const claimed = await transport.claim(topic, consumerId, concurrency);
-      const work = claimed.map((job) => track(process(job)));
-      await Promise.allSettled(work);
-    } finally {
-      scheduleNextPoll(pollIntervalMs);
+  // The lazy claimed-jobs source. The stream pulls one job per free pool slot, so
+  // claims are paced by the pool. A full batch loops immediately; a partial or
+  // empty batch backs off (the topic is drained).
+  async function* claimedJobs(): AsyncGenerator<ClaimedJob> {
+    while (running) {
+      const claimed = await transport.claim(topic, consumerId, batchSize);
+      for (const job of claimed) yield job;
+      if (claimed.length < batchSize) await delay(pollIntervalMs);
     }
   }
 
@@ -104,30 +106,38 @@ export function consume(
   }
 
   return {
-    // Resolve-when-ready: install the poll + reap loops and return. The loops
-    // keep the process alive; this promise is the launcher's "consumer is up"
-    // barrier. The first reap fires after one interval, not at boot.
+    // Resolve-when-ready: install the claim stream + reap loop and return. The
+    // stream keeps the process alive; this promise is the launcher's "consumer is
+    // up" barrier. The first reap fires after one interval, not at boot.
     async start(): Promise<void> {
       if (running) return;
       running = true;
-      scheduleNextPoll(0);
+      // process() never throws (it maps failures to reschedule/deadLetter), so
+      // the per-item results are uninteresting — just exhaust the stream.
+      consuming = (async () => {
+        for await (const _ of boundedConcurrencyPoolStream(
+          claimedJobs(),
+          concurrency,
+          process
+        )) {
+          // drained for its side effects
+        }
+      })();
       scheduleNextReap();
     },
 
-    // Stop claiming new work and wait for in-flight handlers to settle. The
-    // reaper is idempotent and side-effect-free, so its timer is simply cleared
-    // (not drained). Resolves once in-flight handlers drain.
+    // Stop claiming new work and wait for in-flight handlers to drain. Flipping
+    // `running` ends the source after its current claim; `signalStop` ends a
+    // mid-backoff sleep promptly. The reaper is side-effect-free, so its timer is
+    // simply cleared. Resolves once the stream drains.
     async stop(): Promise<void> {
       running = false;
-      if (pollTimer !== undefined) {
-        clearTimeout(pollTimer);
-        pollTimer = undefined;
-      }
+      signalStop?.();
       if (reapTimer !== undefined) {
         clearTimeout(reapTimer);
         reapTimer = undefined;
       }
-      await Promise.allSettled([...inFlight]);
+      await consuming;
     },
   };
 }

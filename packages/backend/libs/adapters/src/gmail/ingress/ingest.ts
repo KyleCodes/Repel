@@ -1,3 +1,4 @@
+import { boundedConcurrencyPoolStream } from '@repel/concurrency';
 import { type HttpDeps } from '@repel/http/client';
 import { refreshIfExpired } from '../../lib/oauth2/flow';
 import type {
@@ -33,14 +34,26 @@ const DEFAULT_FULL_SYNC_CAP = 100;
 // Gmail's per-page list size.
 const PAGE_SIZE = 100;
 
+// How many messages.get calls run concurrently. Gmail's per-user ceiling is 250
+// quota units/sec and messages.get is ~5 units (~50 gets/sec), so ~8 in flight at
+// ~150ms latency lands near that with headroom. The per-method cost reportedly
+// rose toward 20 units in 2026 (~12 gets/sec) — if so, tune this down to ~4.
+// Overridable via deps.fetchConcurrency.
+const DEFAULT_FETCH_CONCURRENCY = 8;
+
+// Deps for ingest: the HTTP seam plus an optional cap on concurrent message
+// fetches (defaults to DEFAULT_FETCH_CONCURRENCY).
+export type IngestDeps = HttpDeps & { fetchConcurrency?: number };
+
 // Run a v0 capped full sync as a stream of events:
 //   started -> auth -> message* -> completed
 // Only spec.type === 'full' is handled; incremental/range throw. Fail-loud: any
 // message-get / normalize / attachment-fetch failure aborts the sync with a typed
-// error rather than skipping the message.
+// error rather than skipping the message. Messages are fetched concurrently (up
+// to fetchConcurrency) and emitted in completion order.
 export async function* ingest(
   input: GmailIngestInput,
-  deps: HttpDeps = {}
+  deps: IngestDeps = {}
 ): AsyncGenerator<AdapterEvent> {
   if (input.spec.type !== 'full') {
     throw new GmailNotImplementedError(
@@ -71,25 +84,45 @@ export async function* ingest(
   // anything that arrives during this backfill (no gap).
   const cursor = await loadCursor(accessToken, deps);
 
-  // Paginate, capped. Stop following pages once the cap is reached.
+  // Fetch messages concurrently and emit each as it completes. The id source
+  // paginates lazily and stops at the cap, so at most `cap` messages are fetched.
+  const concurrency = deps.fetchConcurrency ?? DEFAULT_FETCH_CONCURRENCY;
   let processed = 0;
-  let pageToken: string | undefined;
-  do {
-    const remaining = cap - processed;
-    if (remaining <= 0) break;
-    const page = await listGmailMessages(
-      { accessToken, pageToken, maxResults: Math.min(PAGE_SIZE, remaining) },
-      deps
-    );
-    for (const messageRef of page.messages ?? []) {
-      if (processed >= cap) break;
-      yield await processMessage(messageRef.id, input, accessToken, deps);
-      processed += 1;
-    }
-    pageToken = page.nextPageToken;
-  } while (pageToken !== undefined && processed < cap);
+  for await (const event of boundedConcurrencyPoolStream(
+    messageIds(accessToken, cap, deps),
+    concurrency,
+    (id) => processMessage(id, input, accessToken, deps)
+  )) {
+    yield event;
+    processed += 1;
+  }
 
   yield { type: 'completed', cursor, processed };
+}
+
+// Page through the message list lazily, yielding ids up to the cap and no
+// further. Stops following pages once the cap is hit (the consumer pulls only as
+// fast as the fetch pool drains, so pages are listed on demand).
+async function* messageIds(
+  accessToken: string,
+  cap: number,
+  deps: HttpDeps
+): AsyncGenerator<string> {
+  let pageToken: string | undefined;
+  let n = 0;
+  while (n < cap) {
+    const page = await listGmailMessages(
+      { accessToken, pageToken, maxResults: Math.min(PAGE_SIZE, cap - n) },
+      deps
+    );
+    for (const ref of page.messages ?? []) {
+      if (n >= cap) return;
+      n += 1;
+      yield ref.id;
+    }
+    if (page.nextPageToken === undefined) return;
+    pageToken = page.nextPageToken;
+  }
 }
 
 // Fetch one message, normalize it, and fetch its attachment bytes. Each step

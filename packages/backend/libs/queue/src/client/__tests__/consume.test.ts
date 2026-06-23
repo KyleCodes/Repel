@@ -130,6 +130,59 @@ describe('consume', function () {
     expect(t.completed.sort()).toEqual(['a', 'b', 'c']);
   });
 
+  test('claims batchSize rows per round-trip but caps handlers at concurrency', async function () {
+    const t = makeFakeTransport();
+    t.seed([job('a', 1), job('b', 2), job('c', 3), job('d', 4), job('e', 5)]);
+
+    let active = 0;
+    let maxActive = 0;
+    const consumer = consume(
+      'test',
+      async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 5));
+        active -= 1;
+      },
+      { pollIntervalMs: 5, concurrency: 2, batchSize: 5 },
+      t
+    );
+    await consumer.start();
+    await waitFor(() => t.completed.length === 5);
+    await consumer.stop();
+
+    // One DB round-trip claimed all five rows...
+    expect(t.claimCalls[0]!.limit).toBe(5);
+    // ...but no more than two handlers ever ran at once.
+    expect(maxActive).toBe(2);
+    expect(t.completed.sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  test('refilling keeps the pool saturated across batches', async function () {
+    const t = makeFakeTransport();
+    t.seed(Array.from({ length: 10 }, (_, i) => job(`j${i}`, i)));
+
+    let active = 0;
+    let maxActive = 0;
+    const consumer = consume(
+      'test',
+      async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 3));
+        active -= 1;
+      },
+      { pollIntervalMs: 5, concurrency: 3, batchSize: 3 },
+      t
+    );
+    await consumer.start();
+    await waitFor(() => t.completed.length === 10);
+    await consumer.stop();
+
+    expect(maxActive).toBe(3);
+    expect(t.completed).toHaveLength(10);
+  });
+
   test('a failing handler reschedules until attempts exhaust, then dead-letters (and warns)', async function () {
     const t = makeFakeTransport();
     // attempts starts at 1 (this delivery), maxAttempts 3: expect reschedule at
@@ -222,6 +275,22 @@ describe('consume', function () {
     await stopping;
     expect(handlerDone).toBe(true);
     expect(stopResolved).toBe(true);
+  });
+
+  test('stop() ends a consumer idling mid-backoff without waiting the full interval', async function () {
+    const t = makeFakeTransport(); // empty queue → the source backs off immediately
+    const consumer = consume(
+      'test',
+      async () => {},
+      { pollIntervalMs: 100_000, concurrency: 1 }, // a backoff far longer than the test
+      t
+    );
+    await consumer.start();
+    await waitFor(() => t.claimCalls.length > 0); // it claimed once, got nothing, is now sleeping
+
+    const start = Date.now();
+    await consumer.stop(); // must not wait out the 100s backoff
+    expect(Date.now() - start).toBeLessThan(1000);
   });
 });
 

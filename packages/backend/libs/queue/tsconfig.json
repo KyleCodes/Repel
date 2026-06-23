@@ -9,6 +9,9 @@
       "path": "../../../shared/errors"
     },
     {
+      "path": "../../../shared/concurrency"
+    },
+    {
       "path": "../db"
     }
   ],

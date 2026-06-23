@@ -12,7 +12,10 @@
       "path": "../../../shared/enums"
     },
     {
-      "path": "../accounts"
+      "path": "../../../shared/concurrency"
+    },
+    {
+      "path": "../db"
     },
     {
       "path": "../crypto"
@@ -21,7 +24,7 @@
       "path": "../adapters"
     },
     {
-      "path": "../db"
+      "path": "../accounts"
     }
   ],
   "include": ["src"]

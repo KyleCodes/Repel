@@ -17,6 +17,7 @@
   "dependencies": {
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
+    "@repel/concurrency": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
     "@repel/http": "workspace:*",

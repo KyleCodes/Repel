@@ -26,6 +26,9 @@
       "path": "./packages/shared/http"
     },
     {
+      "path": "./packages/shared/concurrency"
+    },
+    {
       "path": "./packages/backend/apps/api"
     },
     {
