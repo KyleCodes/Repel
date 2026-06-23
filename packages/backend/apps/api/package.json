@@ -3,11 +3,15 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./start": "./src/main.ts"
+  },
   "scripts": {
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
     "@repel/backend-env": "workspace:*",
+    "@repel/backend-runtime": "workspace:*",
     "express": "^4.19.2"
   },
   "devDependencies": {

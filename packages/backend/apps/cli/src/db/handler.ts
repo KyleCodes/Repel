@@ -156,8 +156,8 @@ export async function runClone(input: CloneInput): Promise<void> {
   mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(envPath, `DATABASE_URL=${databaseUrl}\n`, { mode: 0o600 });
 
-  console.error(`db clone: created ${dbName} from ${input.template}`);
-  console.error(`db clone: wrote ${envPath}`);
+  console.log(`db clone: created ${dbName} from ${input.template}`);
+  console.log(`db clone: wrote ${envPath}`);
 }
 
 export async function runDrop(input: DropInput): Promise<void> {
@@ -167,9 +167,9 @@ export async function runDrop(input: DropInput): Promise<void> {
     branch: input.branch,
   });
   if (dropped) {
-    console.error(`db drop: dropped ${dbName}`);
+    console.log(`db drop: dropped ${dbName}`);
   } else {
-    console.error(`db drop: ${dbName} did not exist`);
+    console.log(`db drop: ${dbName} did not exist`);
   }
 }
 
@@ -178,8 +178,8 @@ export async function runRefreshTemplate(
 ): Promise<void> {
   const adminUrl = readAdminUrlFromEnv();
   await refreshTemplate({ adminUrl, template: input.template });
-  console.error(`db refresh-template: recreated ${input.template} (empty)`);
-  console.error(
+  console.log(`db refresh-template: recreated ${input.template} (empty)`);
+  console.log(
     `db refresh-template: next steps — run migrations and bootstrap against ${input.template}`
   );
 }
@@ -197,13 +197,13 @@ export async function runNuke(
       stdin
     );
     if (!ok) {
-      console.error('db nuke: cancelled');
+      console.log('db nuke: cancelled');
       return;
     }
   }
   const databaseUrl = readDatabaseUrlFromEnvLocal();
   await nukeDatabase({ databaseUrl });
-  console.error(
+  console.log(
     'db nuke: dropped and recreated the public schema — run `repel db migrations up` to re-apply migrations from zero'
   );
   // Regenerate types to reflect the now-empty schema.

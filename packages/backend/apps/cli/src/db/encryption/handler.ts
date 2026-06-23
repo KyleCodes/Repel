@@ -36,7 +36,7 @@ export async function runGenerateKey(
   stdin: NodeJS.ReadableStream = process.stdin
 ): Promise<void> {
   if (!input.yes) {
-    console.error(
+    console.warn(
       'db encryption generate-key: WARNING — this prints a NEW key. It does ' +
         'NOT re-encrypt existing data; anything already encrypted under the ' +
         'current key becomes unrecoverable if you switch to this one. Store it ' +
@@ -47,7 +47,7 @@ export async function runGenerateKey(
       stdin
     );
     if (!ok) {
-      console.error('db encryption generate-key: cancelled');
+      console.log('db encryption generate-key: cancelled');
       return;
     }
   }

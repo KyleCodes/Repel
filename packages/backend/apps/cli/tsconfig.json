@@ -6,6 +6,12 @@
   },
   "references": [
     {
+      "path": "../api"
+    },
+    {
+      "path": "../../libs/runtime"
+    },
+    {
       "path": "../../../shared/slug"
     },
     {
