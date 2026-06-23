@@ -27,6 +27,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@repel/backend-env": "workspace:*",
+        "@repel/backend-runtime": "workspace:*",
         "express": "^4.19.2",
       },
       "devDependencies": {
@@ -39,9 +40,11 @@
       "dependencies": {
         "@repel/backend-accounts": "workspace:*",
         "@repel/backend-adapters": "workspace:*",
+        "@repel/backend-api": "workspace:*",
         "@repel/backend-crypto": "workspace:*",
         "@repel/backend-db": "workspace:*",
         "@repel/backend-env": "workspace:*",
+        "@repel/backend-runtime": "workspace:*",
         "@repel/backend-sync": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
@@ -113,6 +116,10 @@
         "@repel/errors": "workspace:*",
       },
     },
+    "packages/backend/libs/runtime": {
+      "name": "@repel/backend-runtime",
+      "version": "0.0.1",
+    },
     "packages/backend/libs/sync": {
       "name": "@repel/backend-sync",
       "version": "0.0.1",
@@ -129,10 +136,6 @@
         "@types/pg": "^8.11.6",
         "pg": "^8.12.0",
       },
-    },
-    "packages/backend/libs/transport": {
-      "name": "@repel/backend-transport",
-      "version": "0.0.1",
     },
     "packages/frontend/apps/web": {
       "name": "@repel/web",
@@ -512,9 +515,9 @@
 
     "@repel/backend-env": ["@repel/backend-env@workspace:packages/backend/libs/env"],
 
-    "@repel/backend-sync": ["@repel/backend-sync@workspace:packages/backend/libs/sync"],
+    "@repel/backend-runtime": ["@repel/backend-runtime@workspace:packages/backend/libs/runtime"],
 
-    "@repel/backend-transport": ["@repel/backend-transport@workspace:packages/backend/libs/transport"],
+    "@repel/backend-sync": ["@repel/backend-sync@workspace:packages/backend/libs/sync"],
 
     "@repel/enums": ["@repel/enums@workspace:packages/shared/enums"],
 

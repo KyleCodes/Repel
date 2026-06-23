@@ -53,7 +53,24 @@ export default [
           allow: [],
           depConstraints: [
             { sourceTag: 'type:app', onlyDependOnLibsWithTags: ['type:lib'] },
-            { sourceTag: 'type:lib', notDependOnLibsWithTags: ['type:app'] },
+            // The cli is the privileged launcher (ADR-016): the only package
+            // permitted to import an app's ./start (type:cli → type:app) so
+            // `services run` can boot it. It may also import any lib.
+            {
+              sourceTag: 'type:cli',
+              onlyDependOnLibsWithTags: ['type:lib', 'type:app'],
+            },
+            // A lib imports neither an app nor the cli, and never the
+            // app-runtime contract (boundary:app-runtime) — RunnableApp is for
+            // apps + the cli only, so a lib can't reach it.
+            {
+              sourceTag: 'type:lib',
+              notDependOnLibsWithTags: [
+                'type:app',
+                'type:cli',
+                'boundary:app-runtime',
+              ],
+            },
             {
               sourceTag: 'scope:shared',
               onlyDependOnLibsWithTags: ['scope:shared'],

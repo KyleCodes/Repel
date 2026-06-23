@@ -50,10 +50,10 @@
       "path": "./packages/backend/libs/sync"
     },
     {
-      "path": "./packages/backend/libs/transport"
+      "path": "./packages/frontend/apps/web"
     },
     {
-      "path": "./packages/frontend/apps/web"
+      "path": "./packages/backend/libs/runtime"
     }
   ]
 }

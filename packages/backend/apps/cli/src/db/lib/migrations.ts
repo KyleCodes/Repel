@@ -226,7 +226,7 @@ export function buildRunnerOptions(
     migrationsTable: 'pgmigrations',
     direction,
     log: function (msg: string): void {
-      console.error(msg);
+      console.log(msg);
     },
   };
   if ('file' in resolved) {

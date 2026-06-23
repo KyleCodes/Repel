@@ -11,9 +11,11 @@
   "dependencies": {
     "@repel/backend-accounts": "workspace:*",
     "@repel/backend-adapters": "workspace:*",
+    "@repel/backend-api": "workspace:*",
     "@repel/backend-crypto": "workspace:*",
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
+    "@repel/backend-runtime": "workspace:*",
     "@repel/backend-sync": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
@@ -29,7 +31,7 @@
   },
   "nx": {
     "tags": [
-      "type:app",
+      "type:cli",
       "scope:backend"
     ]
   }

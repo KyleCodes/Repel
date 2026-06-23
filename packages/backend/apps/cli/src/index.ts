@@ -4,6 +4,7 @@ import { registerAccountsCommands } from './accounts/handler';
 import { registerDbCommands } from './db/handler';
 import { handleCliError } from './lib/handle-cli-error';
 import { registerOrgsCommands } from './orgs/handler';
+import { registerServicesCommands } from './services/handler';
 import { registerSyncCommands } from './sync/handler';
 
 const program = new Command();
@@ -20,6 +21,7 @@ registerOrgsCommands(program);
 registerAccountsCommands(program);
 registerDbCommands(program);
 registerSyncCommands(program);
+registerServicesCommands(program);
 
 // Commander signals "displayed help / version" via these codes — that is the
 // command succeeding, so exit 0. Everything else is a real error: exit 1.
@@ -39,6 +41,9 @@ program
     handleCliError(err);
     process.exitCode = 1;
   })
+  // Close the shared pool when the command resolves. `services run` blocks on a
+  // shutdown promise, so this only fires for it on boot failure (it owns its own
+  // shutdown otherwise).
   .finally(function () {
     return closeDb();
   });

@@ -1,10 +1,10 @@
 {
-  "name": "@repel/backend-transport",
+  "name": "@repel/backend-runtime",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    "./application": "./src/application.ts"
   },
   "scripts": {
     "test": "bun test --pass-with-no-tests"
@@ -12,7 +12,8 @@
   "nx": {
     "tags": [
       "type:lib",
-      "scope:backend"
+      "scope:backend",
+      "boundary:app-runtime"
     ]
   }
 }

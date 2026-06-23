@@ -22,23 +22,32 @@ describe('registerEncryptionCommands', function () {
 });
 
 describe('runGenerateKey', function () {
-  // Capture console.error so warnings/cancellation don't leak into runner output.
-  let errorCalls: unknown[][];
-  let originalConsoleError: typeof console.error;
+  // Capture console.log (status) + console.warn (the key warning) so neither
+  // leaks into runner output, and both can be asserted on.
+  let logCalls: unknown[][];
+  let warnCalls: unknown[][];
+  let originalConsoleLog: typeof console.log;
+  let originalConsoleWarn: typeof console.warn;
 
   beforeEach(function () {
-    errorCalls = [];
-    originalConsoleError = console.error;
-    console.error = function (...args: unknown[]): void {
-      errorCalls.push(args);
+    logCalls = [];
+    warnCalls = [];
+    originalConsoleLog = console.log;
+    originalConsoleWarn = console.warn;
+    console.log = function (...args: unknown[]): void {
+      logCalls.push(args);
+    };
+    console.warn = function (...args: unknown[]): void {
+      warnCalls.push(args);
     };
   });
 
   afterEach(function () {
-    console.error = originalConsoleError;
+    console.log = originalConsoleLog;
+    console.warn = originalConsoleWarn;
   });
 
-  test('a declined prompt prints no key and reports cancellation', async function () {
+  test('a declined prompt warns, prints no key, and reports cancellation', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
     try {
       // Closed stream = non-TTY stdin: confirm() sees EOF and returns false.
@@ -47,7 +56,8 @@ describe('runGenerateKey', function () {
       writeSpy.mockRestore();
     }
     expect(writeSpy).not.toHaveBeenCalled();
-    expect(errorCalls.at(-1)![0]).toBe('db encryption generate-key: cancelled');
+    expect(String(warnCalls[0]![0])).toContain('WARNING');
+    expect(logCalls.at(-1)![0]).toBe('db encryption generate-key: cancelled');
   });
 
   test('a confirmed prompt prints a 32-byte hex ENCRYPTION_KEY line', async function () {
@@ -77,6 +87,6 @@ describe('runGenerateKey', function () {
     const match = printed.match(/^ENCRYPTION_KEY=([0-9a-f]{64})\n$/);
     expect(match).not.toBeNull();
     // No prompt/warning emitted when --yes is passed.
-    expect(errorCalls).toHaveLength(0);
+    expect(logCalls).toHaveLength(0);
   });
 });

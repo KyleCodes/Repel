@@ -35,21 +35,21 @@ describe('registerDbCommands', function () {
 });
 
 describe('runNuke', function () {
-  // A captured/restored console.error so the cancellation message does not
+  // A captured/restored console.log so the cancellation message does not
   // leak into the test runner's output, and can be asserted on.
-  let errorCalls: unknown[][];
-  let originalConsoleError: typeof console.error;
+  let logCalls: unknown[][];
+  let originalConsoleLog: typeof console.log;
 
   beforeEach(function () {
-    errorCalls = [];
-    originalConsoleError = console.error;
-    console.error = function (...args: unknown[]): void {
-      errorCalls.push(args);
+    logCalls = [];
+    originalConsoleLog = console.log;
+    console.log = function (...args: unknown[]): void {
+      logCalls.push(args);
     };
   });
 
   afterEach(function () {
-    console.error = originalConsoleError;
+    console.log = originalConsoleLog;
   });
 
   test('without --yes, a declined prompt cancels without touching the db', async function () {
@@ -57,7 +57,7 @@ describe('runNuke', function () {
     // returns false, so runNuke must cancel before any db connection.
     const declinedStdin = Readable.from([]);
     await runNuke({ yes: false }, declinedStdin);
-    expect(errorCalls).toHaveLength(1);
-    expect(errorCalls[0]![0]).toBe('db nuke: cancelled');
+    expect(logCalls).toHaveLength(1);
+    expect(logCalls[0]![0]).toBe('db nuke: cancelled');
   });
 });

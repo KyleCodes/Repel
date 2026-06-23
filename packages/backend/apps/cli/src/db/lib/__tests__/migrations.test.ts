@@ -328,7 +328,7 @@ describe('buildRunnerOptions', function () {
     expect(o.count).toBeUndefined();
   });
 
-  test('log option routes to console.error', function () {
+  test('log option routes to console.log', function () {
     const o = buildRunnerOptions('up', { count: Infinity }, env);
     expect(typeof o.log).toBe('function');
   });

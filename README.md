@@ -50,8 +50,9 @@ bun run cli db migrations up
 # Bootstrap the first org and user
 bun run cli bootstrap --org-name "My Org" --email you@example.com
 
-# Start the API (each backend app is launched directly via its main.ts)
-bun run packages/backend/apps/api/src/main.ts
+# Start the API. The cli launches apps via their ./start export; each app's
+# main.ts is also a direct entrypoint (`bun run .../api/src/main.ts`).
+bun run cli services run api
 ```
 
 ## Architecture decisions
