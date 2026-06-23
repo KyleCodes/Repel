@@ -11,6 +11,14 @@ import type {
 // types; this file imports those it exposes and re-exports them upward.
 export type { GetSyncTaskResultInput } from './views/get-sync-task-results';
 export type { GetSyncJobResultInput } from './views/get-sync-job-result';
+export type { ListTaskEventsInput } from './views/list-task-events';
+
+// One task by id, scoped to its parent job — the job id validates membership
+// (a task id not under the job is treated as not-found). Distinct from
+// GetSyncTaskResultInput, which scopes a whole job's task list.
+export type GetSyncTaskInput = {
+  syncTask: { jobId: string; id: string };
+};
 
 // The executor's in-memory working model, derived from the generated row types
 // so the columns track the schema. spec is opaque Json in the table; the
