@@ -32,6 +32,9 @@
       "path": "./packages/backend/apps/cli"
     },
     {
+      "path": "./packages/backend/apps/sync/worker/sync-worker"
+    },
+    {
       "path": "./packages/backend/libs/accounts"
     },
     {

@@ -31,19 +31,16 @@ export interface SyncDeps {
   handler?: SyncEventHandler;
 }
 
-// Run a sync job: persist the job/task skeleton, then drive every task's ingest
-// stream concurrently and roll the per-task outcomes up into a job result.
+// Run a sync job: drive every task's ingest stream concurrently and roll the
+// per-task outcomes up into a job result. The job/task skeleton (sync_job +
+// sync_task + the per-task `enqueued` event) must already be persisted by the
+// caller — the in-process `sync run` verb calls createSyncJob before this, and
+// the async path writes it in the enqueuer (REP-57) so the worker doesn't write
+// it twice (a second insert on the same sync_job.id is a duplicate-PK failure).
 export async function runSyncJob(
   job: SyncJob,
   deps: SyncDeps = {}
 ): Promise<SyncJobResult> {
-  const syncService = deps.syncService ?? defaultSyncService;
-
-  // The skeleton must exist before ingest streams: message_raw.sync_task_id and
-  // sync_task_event.task_id are NOT NULL FKs to sync_task. The service maps the
-  // in-memory job to the kysely write shape.
-  await syncService.createSyncJob(job);
-
   const settled = await Promise.allSettled(
     job.tasks.map(function (task) {
       return runSyncTask(job, task, deps);

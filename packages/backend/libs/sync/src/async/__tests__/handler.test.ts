@@ -8,8 +8,11 @@ import { syncService } from '../../persistence/service';
 import type { SyncContext, SyncEventHandler, SyncJob } from '../../types';
 import { type SyncDeps, runSyncJob } from '../handler';
 
-// A no-op syncService seam so the executor's up-front skeleton write (and any
-// persistence the default handler would do) touches no DB in these unit tests.
+// A no-op syncService seam so any persistence the default handler would do
+// touches no DB in these unit tests. (The executor no longer writes the skeleton
+// itself — the caller does — but the seam still carries createSyncJob so a test
+// can assert the executor leaves it alone; see the "does not write the skeleton"
+// test below.)
 const noopSyncService = {
   createSyncJob: async () => ({}) as never,
   persistMessage: async () => ({}) as never,
@@ -151,6 +154,26 @@ describe('runSyncJob — happy path', function () {
     expect(result.tasks[0]!.processed).toBe(1);
     expect(result.tasks[0]!.cursor).toEqual({ historyId: '99' });
     expect(result.tasks[0]!.taskId).toBe('task-1');
+  });
+
+  test('does not write the skeleton (the caller owns createSyncJob)', async function () {
+    // REP-57 relocated the skeleton write out of the executor: the enqueuer (or
+    // the in-process verb) calls createSyncJob before runSyncJob, so the executor
+    // must never call it (a second insert on the same sync_job.id is a dup-PK).
+    const createSyncJob = spyOn(
+      { createSyncJob: noopSyncService.createSyncJob },
+      'createSyncJob'
+    );
+    const adapter = makeAdapter([
+      { type: 'completed', cursor: null, processed: 0 },
+    ]);
+    await runSyncJob(
+      job(oneTask),
+      makeDeps(adapter, {
+        syncService: { ...noopSyncService, createSyncJob },
+      })
+    );
+    expect(createSyncJob).not.toHaveBeenCalled();
   });
 
   test('every event reaches the handler in order with the right context', async function () {
