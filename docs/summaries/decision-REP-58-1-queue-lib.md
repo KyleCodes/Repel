@@ -42,7 +42,7 @@ On retry exhaustion (or a `PermanentHandlerError`) the row transitions to `statu
 
 The lib is one package, `@repel/backend-queue`, with two folders mirroring the domain-lib precedent (`persistence/` + the worker-facing layer):
 
-- `persistence/` — the transport: the only code that touches `job_queue`. Five `buildX`+`InferResult` mutation builders (`enqueue`, `claim`, `complete`, `reschedule`, `dead-letter`) behind a `Transport` interface; `pgTransport` implements it (each op a `runInTx`).
+- `persistence/service.ts` — the transport: the only code that touches `job_queue`. Six `buildX`+`InferResult` mutation builders (`enqueue`, `claim`, `complete`, `reschedule`, `dead-letter`, `reap`) behind a `Transport` interface; `pgTransport` implements it (each op a `runInTx`). The file is named `service.ts` (the persistence-lib convention; PR review) but the interface keeps the name `Transport` — the manifesto/ADR-004 word for the Postgres-hiding swap seam.
 - `client/` — `enqueue()` + `consume()`. **The poll loop lives inside `consume()`**, not a separate `runtime/` dir — it's just what the consumer client does.
 
 The runtime depends only on the `Transport` interface, so it is unit-tested against a `FakeTransport` with zero Postgres, and a future non-Postgres backend swaps the impl without touching the runtime or any handler. (The two-package split — `queue-transport` + `queue-client` — was a ticket non-goal; one lib with an in-package interface is the start.)
@@ -57,6 +57,18 @@ Retry-vs-dead-letter: a claimed row's `attempts` already counts the current deli
 
 REP-64's launcher closed the pool on SIGINT/SIGTERM but never called `app.stop()`, so consumer drain would never run. `cli/services/handler.ts` now collects booted `RunnableApp`s and a new `drainAndClose(apps, closeDb)` helper awaits `app.stop?.()` on each _before_ `closeDb()`. `stop?()` is optional (ADR-015) — a no-op for the api today, forward-looking for REP-57's sync-worker, which is the first app to implement it.
 
+### D9 — Completed-job retention: an in-runtime reaper (PR review)
+
+A `job_queue` that only inserts and marks terminal grows without bound. The consumer runs a second, slower timer (the reaper) alongside its poll loop: every `reapIntervalMs` (default 1h) it deletes `completed` rows older than `completedTtlMs` (default 7 days) via `transport.reap(ttlMs)` and `console.log`s a line when any were reaped. Decisions: **completed-only** — `dead` rows are left for failure inspection (the dead-letter "queue" is a query over them); **first sweep after one interval**, not at boot, to keep startup light; **in-runtime**, not `pg_cron` (no new infra/extension) — and not partitioning, which ADR-004 lists as a later opt-in. The reaper is idempotent and side-effect-free, so `stop()` clears its timer without draining it. This is the simplest correct retention that needs no schema change; partitioning / a `dead`-row TTL / a redrive remain future seams.
+
+### D10 — `console.warn` on dead-letter and duplicate enqueue (PR review)
+
+No structured logger exists in the repo; `console.warn` is the precedent (`adapters/gmail/ingress/ingest.ts`, `cli/db/encryption/handler.ts`). The consumer `console.warn`s when it dead-letters a job (id, topic, attempts, error) and `enqueue` `console.warn`s on a dedup no-op (topic, dedupKey) — operationally visible signals that were previously silent. A real logger lib is a future cross-cutting concern (noted in REP-55's open items already).
+
+### D11 — No classes; the consumer is a closure (PR review)
+
+The first cut shipped the consumer as a `Consumer` class — the only non-error class in the backend. Rewritten as a `consume()` closure that captures its mutable state (`running`, the two timers, the in-flight set) and returns a `{ start, stop }` struct satisfying `ConsumerHandle`, matching the codebase's "typed struct adhering to an interface" idiom (e.g. `syncEventHandler`). The `consume()` signature is unchanged, so the behavior and all existing tests are untouched. The test `FakeTransport` was likewise converted from a class to a factory struct.
+
 ## Implementation notes
 
 - `claim-jobs.ts`: `.where('scheduledFor', '<=', sql<Date>\`now()\`)`— the raw needs an explicit type arg or`tsc --build`rejects the operand (Bun runs it untyped, so only the build caught it).`FOR UPDATE SKIP LOCKED`attaches to the inner select via`.modifyEnd(sql\`for update skip locked\`)`; the compiled SQL places it inside the subselect (verified by the compile-only test).
@@ -66,7 +78,7 @@ REP-64's launcher closed the pool on SIGINT/SIGTERM but never called `app.stop()
 ## Verification
 
 - Full workspace `nx run-many -t build lint test` green (15 projects); `nx sync:check` clean.
-- 13 queue-lib tests: 5 compile-only SQL-shape (claim `FOR UPDATE SKIP LOCKED` in-subselect, enqueue `ON CONFLICT DO NOTHING`, dead-letter `status='dead'`, reschedule backoff interval); 3 backoff bounds; 5 consumer (FIFO claim, concurrency, retry-then-dead-letter, `PermanentHandlerError` fast-path, `stop()` drains a gated in-flight handler). 2 new cli `drainAndClose` tests (stop-before-close ordering; no-op without `stop()`).
+- 18 queue-lib tests: 6 compile-only SQL-shape (claim `FOR UPDATE SKIP LOCKED` in-subselect, enqueue `ON CONFLICT DO NOTHING`, dead-letter `status='dead'`, reschedule backoff interval, reap `DELETE`-completed-only); 3 backoff bounds; 7 consumer (FIFO claim, concurrency, retry-then-dead-letter + warn, `PermanentHandlerError` fast-path, `stop()` drains a gated in-flight handler, reaper fires with the configured TTL + logs, `stop()` halts the reaper); 2 enqueue (fresh insert, dedup no-op + warn). Plus 2 cli `drainAndClose` tests (stop-before-close ordering; no-op without `stop()`).
 - Migration applied live and round-tripped (`up → down → up`); `generated.ts` regenerated with `topic` + `status: Generated<JobStatus>`.
 
 ## Deferred (future seams, not tickets yet)
@@ -74,6 +86,8 @@ REP-64's launcher closed the pool on SIGINT/SIGTERM but never called `app.stop()
 - **AC6 real-DB integration test** (enqueue N vs a 50%-failing handler): no integration harness exists in the repo (all tests are compile-only / fake-injected, as in REP-56). The `FakeTransport` unit layer covers the retry/dead-letter/drain logic; a real-DB harness is a follow-up.
 - **`-dlq` redrive topic + replay verb** (D4): add when a live dead-letter consumer is actually needed.
 - **Batch delivery** (D7): raise `concurrency`; the claim/`allSettled` path already supports it.
+- **`dead`-row retention / partitioning** (D9): the reaper is completed-only and in-process; a `dead`-row TTL, table partitioning, or a `pg_cron`-scheduled sweep are later opt-ins (ADR-004 lists partitioning as such).
+- **A structured logger** (D10): `console.warn`/`console.log` are placeholders; a logger lib is a cross-cutting follow-up (already flagged in REP-55).
 
 ## Complies with
 

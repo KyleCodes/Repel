@@ -47,6 +47,10 @@ export interface ConsumerConfig {
   // Max envelopes claimed (and processed concurrently) per poll. v0 default 1;
   // raising it is the batch seam.
   concurrency?: number;
+  // How often the consumer sweeps old completed jobs from the table. Default 1h.
+  reapIntervalMs?: number;
+  // Age after which a completed job is deleted by the sweep. Default 7 days.
+  completedTtlMs?: number;
 }
 
 // The control surface consume() returns. start() resolves once the poll loop is

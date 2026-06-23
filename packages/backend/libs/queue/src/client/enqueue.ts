@@ -28,7 +28,11 @@ export async function enqueue<T>(
     ? await enqueueJob(opts.tx, input)
     : await runInTx((trx) => enqueueJob(trx, input))({});
 
-  return row
-    ? { enqueued: true, id: row.id }
-    : { enqueued: false, reason: 'dedup' };
+  if (!row) {
+    console.warn(
+      `queue: duplicate enqueue ignored for "${topic}" (dedupKey=${opts.dedupKey})`
+    );
+    return { enqueued: false, reason: 'dedup' };
+  }
+  return { enqueued: true, id: row.id };
 }

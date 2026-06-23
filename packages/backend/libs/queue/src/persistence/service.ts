@@ -4,7 +4,14 @@ import { type ClaimJobsRow, claimJobs } from './mutations/claim-jobs';
 import { completeJob } from './mutations/complete-job';
 import { deadLetterJob } from './mutations/dead-letter-job';
 import { type EnqueueJobInput, enqueueJob } from './mutations/enqueue-job';
+import { reapCompletedJobs } from './mutations/reap-completed-jobs';
 import { rescheduleJob } from './mutations/reschedule-job';
+
+// The queue's persistence service. `Transport` is the swap seam (the manifesto's
+// term, ADR-004 §7): the one interface that knows the queue is Postgres, so the
+// runtime and every handler stay storage-agnostic and a future backend swap is
+// contained here. The file follows the persistence/service.ts convention; the
+// symbol keeps the architectural vocabulary.
 
 // A claimed job as the consumer runtime sees it: the reconstructed envelope plus
 // the lifecycle counters that decide retry vs. dead-letter.
@@ -29,6 +36,8 @@ export interface Transport {
   complete(id: string): Promise<void>;
   reschedule(id: string, backoffMs: number, lastError: string): Promise<void>;
   deadLetter(id: string, lastError: string): Promise<void>;
+  // Delete completed jobs older than ttlMs; returns the number reaped.
+  reap(ttlMs: number): Promise<number>;
 }
 
 // Reconstruct the envelope from a claimed row: orgId comes out of the stored
@@ -71,5 +80,8 @@ export const pgTransport: Transport = {
   },
   deadLetter(id, lastError) {
     return runInTx((trx) => deadLetterJob(trx, { id, lastError }))({});
+  },
+  reap(ttlMs) {
+    return runInTx((trx) => reapCompletedJobs(trx, { ttlMs }))({});
   },
 };

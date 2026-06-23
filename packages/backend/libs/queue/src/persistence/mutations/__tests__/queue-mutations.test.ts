@@ -7,6 +7,7 @@ import { buildClaimJobs } from '../claim-jobs';
 import { buildCompleteJob } from '../complete-job';
 import { buildDeadLetterJob } from '../dead-letter-job';
 import { buildEnqueueJob } from '../enqueue-job';
+import { buildReapCompletedJobs } from '../reap-completed-jobs';
 import { buildRescheduleJob } from '../reschedule-job';
 
 // Compile-only: a Kysely over a never-connected Pool so .compile() yields SQL +
@@ -102,5 +103,22 @@ describe('buildDeadLetterJob', function () {
     expect(compiled.parameters).toContain('dead');
     expect(compiled.parameters).toContain('fatal');
     expect(compiled.sql.toLowerCase()).toContain('set "status" =');
+  });
+});
+
+describe('buildReapCompletedJobs', function () {
+  test('deletes completed jobs older than the TTL, leaving dead rows', function () {
+    const compiled = buildReapCompletedJobs(trx, {
+      ttlMs: 604_800_000,
+    }).compile();
+    const sql = compiled.sql.toLowerCase();
+    expect(sql).toContain('delete from "job_queue"');
+    expect(sql).toContain('"status" =');
+    expect(sql).toContain("interval '1 millisecond'");
+    expect(sql).toContain('now() -');
+    // Only completed rows — not dead.
+    expect(compiled.parameters).toContain('completed');
+    expect(compiled.parameters).not.toContain('dead');
+    expect(compiled.parameters).toContain(604_800_000);
   });
 });
