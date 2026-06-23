@@ -28,3 +28,19 @@ services:
     ports:
       - '3000:3000'
     profiles: [full]
+
+  sync-worker:
+    build: .
+    command:
+      [
+        'bun',
+        'run',
+        'packages/backend/apps/sync/worker/sync-worker/src/main.ts',
+      ]
+    environment:
+      DATABASE_URL: postgres://repel:dev@postgres:5432/repel
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: [full]

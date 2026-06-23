@@ -1,0 +1,23 @@
+{
+  "name": "@repel/backend-sync-worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./start": "./src/main.ts"
+  },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@repel/backend-queue": "workspace:*",
+    "@repel/backend-runtime": "workspace:*",
+    "@repel/backend-sync": "workspace:*"
+  },
+  "nx": {
+    "tags": [
+      "type:app",
+      "scope:backend"
+    ]
+  }
+}

@@ -22,6 +22,7 @@ describe('registerSyncCommands', function () {
     });
     expect(optionNames).toContain('--full');
     expect(optionNames).toContain('--limit');
+    expect(optionNames).toContain('--enqueue');
   });
 });
 
@@ -90,27 +91,37 @@ describe('runSyncRun', function () {
   test('throws SyncRunFullRequiredError when --full is absent', async function () {
     let caught: unknown;
     try {
-      await runSyncRun({ account: 'work', full: false });
+      await runSyncRun({ account: 'work', full: false, enqueue: false });
     } catch (e) {
       caught = e;
     }
     expect(caught).toBeInstanceOf(SyncRunFullRequiredError);
   });
 
-  test('builds a one-task full-sync job and prints the summary', async function () {
+  test('builds a one-task full-sync job, writes the skeleton, and prints the summary', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
     let receivedJob: SyncJob | undefined;
+    let skeletonJob: SyncJob | undefined;
+    let enqueueCalled = false;
     let printed = '';
     try {
       await runSyncRun(
-        { account: 'work', full: true, limit: 20 },
+        { account: 'work', full: true, limit: 20, enqueue: false },
         {
           resolveAccount: async function () {
             return { id: 'pa-1' } as never;
           },
+          createSyncJob: async function (job) {
+            skeletonJob = job;
+            return job as never;
+          },
           runSyncJob: async function (job) {
             receivedJob = job;
             return jobResult;
+          },
+          enqueue: async function () {
+            enqueueCalled = true;
+            return { enqueued: true, id: 'x' };
           },
         }
       );
@@ -125,6 +136,10 @@ describe('runSyncRun', function () {
     expect(receivedJob!.tasks).toHaveLength(1);
     expect(receivedJob!.tasks[0]!.providerAccountId).toBe('pa-1');
     expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full', limit: 20 });
+    // The skeleton is written before the run, for the same job the executor gets.
+    expect(skeletonJob).toBe(receivedJob!);
+    // The default path runs in-process — it does not enqueue.
+    expect(enqueueCalled).toBe(false);
     expect(JSON.parse(printed)).toEqual(jobResult as never);
   });
 
@@ -133,10 +148,13 @@ describe('runSyncRun', function () {
     let receivedJob: SyncJob | undefined;
     try {
       await runSyncRun(
-        { account: 'work', full: true },
+        { account: 'work', full: true, enqueue: false },
         {
           resolveAccount: async function () {
             return { id: 'pa-2' } as never;
+          },
+          createSyncJob: async function (job) {
+            return job as never;
           },
           runSyncJob: async function (job) {
             receivedJob = job;
@@ -148,5 +166,68 @@ describe('runSyncRun', function () {
       writeSpy.mockRestore();
     }
     expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full' });
+  });
+
+  test('--enqueue writes the skeleton, enqueues, and prints { enqueued, jobId } without running', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    let skeletonJob: SyncJob | undefined;
+    let ranSync = false;
+    let enqueued:
+      | {
+          topic: string;
+          payload: unknown;
+          opts: { orgId: string; dedupKey?: string };
+        }
+      | undefined;
+    let printed = '';
+    try {
+      await runSyncRun(
+        { account: 'work', full: true, limit: 5, enqueue: true },
+        {
+          resolveAccount: async function () {
+            return { id: 'pa-1' } as never;
+          },
+          createSyncJob: async function (job) {
+            skeletonJob = job;
+            return job as never;
+          },
+          runSyncJob: async function () {
+            ranSync = true;
+            return jobResult;
+          },
+          enqueue: async function (topic, payload, opts) {
+            enqueued = { topic, payload, opts };
+            return { enqueued: true, id: 'ignored' };
+          },
+        }
+      );
+      printed = String(writeSpy.mock.calls[0]![0]);
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    // Skeleton written; sync NOT run in-process; one envelope on the sync topic.
+    expect(skeletonJob).toBeDefined();
+    expect(ranSync).toBe(false);
+    expect(enqueued).toBeDefined();
+    expect(enqueued!.topic).toBe('sync');
+    // orgId rides the envelope wrapper, not the payload.
+    expect(enqueued!.opts.orgId).toBe('org-1');
+    expect(enqueued!.opts.dedupKey).toBe(skeletonJob!.id);
+    const payload = enqueued!.payload as {
+      id: string;
+      userId: string;
+      orgId?: string;
+      tasks: unknown[];
+    };
+    expect(payload.id).toBe(skeletonJob!.id);
+    expect(payload.userId).toBe('user-1');
+    expect('orgId' in payload).toBe(false);
+    expect(payload.tasks).toHaveLength(1);
+    // Output is the enqueue receipt, not a SyncJobResult.
+    expect(JSON.parse(printed)).toEqual({
+      enqueued: true,
+      jobId: skeletonJob!.id,
+    });
   });
 });

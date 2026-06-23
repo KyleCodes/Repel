@@ -6,12 +6,6 @@
   },
   "references": [
     {
-      "path": "../api"
-    },
-    {
-      "path": "../../libs/runtime"
-    },
-    {
       "path": "../../../shared/slug"
     },
     {
@@ -21,7 +15,16 @@
       "path": "../../../shared/enums"
     },
     {
+      "path": "../sync/worker/sync-worker"
+    },
+    {
       "path": "../../libs/sync"
+    },
+    {
+      "path": "../../libs/runtime"
+    },
+    {
+      "path": "../../libs/queue"
     },
     {
       "path": "../../libs/env"
@@ -31,6 +34,9 @@
     },
     {
       "path": "../../libs/crypto"
+    },
+    {
+      "path": "../api"
     },
     {
       "path": "../../libs/adapters"

@@ -4,6 +4,7 @@
   "workspaces": [
     "packages/shared/*",
     "packages/backend/apps/*",
+    "packages/backend/apps/*/*/*",
     "packages/backend/libs/*",
     "packages/frontend/apps/*"
   ],
