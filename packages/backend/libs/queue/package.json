@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@repel/backend-db": "workspace:*",
+    "@repel/concurrency": "workspace:*",
     "@repel/errors": "workspace:*",
     "kysely": "^0.27.3"
   },

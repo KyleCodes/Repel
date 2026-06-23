@@ -44,9 +44,12 @@ export interface ConsumerConfig {
   // Identifies the claiming process in locked_by. Defaults to a per-run id.
   consumerId?: string;
   pollIntervalMs?: number;
-  // Max envelopes claimed (and processed concurrently) per poll. v0 default 1;
-  // raising it is the batch seam.
+  // Max handler invocations in flight at once (the pool size). Default 1.
   concurrency?: number;
+  // Rows claimed per DB round-trip, decoupled from concurrency: a poll claims a
+  // batch this size and feeds the pool, which refills as slots free. Default =
+  // concurrency.
+  batchSize?: number;
   // How often the consumer sweeps old completed jobs from the table. Default 1h.
   reapIntervalMs?: number;
   // Age after which a completed job is deleted by the sweep. Default 7 days.

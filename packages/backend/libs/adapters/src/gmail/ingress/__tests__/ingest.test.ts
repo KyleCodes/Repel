@@ -414,3 +414,128 @@ describe('ingest — empty mailbox', function () {
     }
   });
 });
+
+describe('ingest — concurrent fetch', function () {
+  // A list of N ids on one page; each messages.get can be delayed individually.
+  function fanoutFetch(opts: {
+    ids: string[];
+    delayMs?: (id: string) => number;
+    onGetActive?: (active: number) => void;
+  }) {
+    let active = 0;
+    return async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (url.includes('/profile'))
+        return json({ emailAddress: 'u@g.com', historyId: '1' });
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        active += 1;
+        opts.onGetActive?.(active);
+        await new Promise((r) => setTimeout(r, opts.delayMs?.(id) ?? 1));
+        active -= 1;
+        return json(message(id, 't1'));
+      }
+      return json({ messages: opts.ids.map((id) => ({ id, threadId: 't1' })) });
+    };
+  }
+
+  test('fetches messages concurrently up to fetchConcurrency, never more', async function () {
+    const ids = Array.from({ length: 12 }, (_, i) => `m${i + 1}`);
+    let max = 0;
+    const fetchImpl = fanoutFetch({
+      ids,
+      delayMs: () => 10,
+      onGetActive: (a) => {
+        max = Math.max(max, a);
+      },
+    });
+    const events = await collect(
+      ingest(input({ spec: { type: 'full', limit: 12 } }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchConcurrency: 3,
+      })
+    );
+    expect(events.filter((e) => e.type === 'message')).toHaveLength(12);
+    expect(max).toBe(3);
+  });
+
+  test('emits in completion order (a slow message yields after a fast sibling)', async function () {
+    // m1 is slow; m2/m3 are fast — so the slow one is not first.
+    const fetchImpl = fanoutFetch({
+      ids: ['m1', 'm2', 'm3'],
+      delayMs: (id) => (id === 'm1' ? 30 : 1),
+    });
+    const events = await collect(
+      ingest(input({ spec: { type: 'full', limit: 3 } }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchConcurrency: 3,
+      })
+    );
+    const msgIds = events
+      .filter((e) => e.type === 'message')
+      .map((e) => (e.type === 'message' ? e.raw.externalMessageId : ''));
+    // All three arrive (order is completion-based, so assert on the set), and the
+    // slow m1 is not the first to land.
+    expect(new Set(msgIds)).toEqual(new Set(['m1', 'm2', 'm3']));
+    expect(msgIds[0]).not.toBe('m1');
+  });
+
+  test('respects the cap exactly under concurrency, across pages', async function () {
+    let listCalls = 0;
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (url.includes('/profile'))
+        return json({ emailAddress: 'u@g.com', historyId: '1' });
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        return json(message(id, 't1'));
+      }
+      listCalls += 1;
+      return json({
+        messages: [
+          { id: 'm1', threadId: 't1' },
+          { id: 'm2', threadId: 't1' },
+          { id: 'm3', threadId: 't1' },
+        ],
+        nextPageToken: 'p2',
+      });
+    };
+    const events = await collect(
+      ingest(input({ spec: { type: 'full', limit: 2 } }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        fetchConcurrency: 5,
+      })
+    );
+    const messages = events.filter((e) => e.type === 'message');
+    expect(messages).toHaveLength(2); // capped at 2 even though the page had 3
+    expect(listCalls).toBe(1); // did not follow nextPageToken past the cap
+    const completed = events.find((e) => e.type === 'completed');
+    if (completed?.type === 'completed') expect(completed.processed).toBe(2);
+  });
+
+  test('one failed get fails the whole sync, no completed event', async function () {
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (url.includes('/profile'))
+        return json({ emailAddress: 'u@g.com', historyId: '1' });
+      if (/\/messages\/m2/.test(url))
+        return json({ error: 'boom' }, { status: 500 });
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        return json(message(id, 't1'));
+      }
+      return json({
+        messages: [
+          { id: 'm1', threadId: 't1' },
+          { id: 'm2', threadId: 't1' },
+          { id: 'm3', threadId: 't1' },
+        ],
+      });
+    };
+    const it = ingest(input({ spec: { type: 'full', limit: 3 } }), {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchConcurrency: 3,
+    });
+    await expect(collect(it)).rejects.toBeInstanceOf(GmailMessageFetchError);
+  });
+});

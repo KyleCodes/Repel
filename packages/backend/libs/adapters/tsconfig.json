@@ -5,11 +5,24 @@
     "rootDir": "./src"
   },
   "references": [
-    { "path": "../../../shared/enums" },
-    { "path": "../../../shared/errors" },
-    { "path": "../../../shared/http" },
-    { "path": "../db" },
-    { "path": "../env" }
+    {
+      "path": "../../../shared/http"
+    },
+    {
+      "path": "../../../shared/errors"
+    },
+    {
+      "path": "../../../shared/enums"
+    },
+    {
+      "path": "../../../shared/concurrency"
+    },
+    {
+      "path": "../env"
+    },
+    {
+      "path": "../db"
+    }
   ],
   "include": ["src"]
 }

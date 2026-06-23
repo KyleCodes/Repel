@@ -8,6 +8,7 @@ import {
   decrypt as defaultDecrypt,
   loadEncryptionKey as defaultLoadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
+import { runPool } from '@repel/concurrency';
 import { SyncIncompleteStreamError, SyncTaskFailedError } from '../error';
 import type { SyncJob, SyncTask } from '../persistence/contract';
 import { createFailedEvent } from '../persistence/lib/events';
@@ -21,6 +22,10 @@ import type {
 } from '../types';
 import { syncEventHandler } from './sync-event-handler';
 
+// Max tasks driven concurrently within a job. A handful of accounts per job, so
+// a small default; size 1 runs them sequentially for step-debugging.
+const DEFAULT_TASK_CONCURRENCY = 4;
+
 // Injectable seams so the executor is unit-testable without a real DB or network.
 export interface SyncDeps {
   accountsService?: typeof defaultAccountsService;
@@ -29,6 +34,7 @@ export interface SyncDeps {
   decrypt?: typeof defaultDecrypt;
   loadEncryptionKey?: typeof defaultLoadEncryptionKey;
   handler?: SyncEventHandler;
+  taskConcurrency?: number;
 }
 
 // Run a sync job: drive every task's ingest stream concurrently and roll the
@@ -41,10 +47,12 @@ export async function runSyncJob(
   job: SyncJob,
   deps: SyncDeps = {}
 ): Promise<SyncJobResult> {
-  const settled = await Promise.allSettled(
-    job.tasks.map(function (task) {
+  const settled = await runPool(
+    job.tasks,
+    deps.taskConcurrency ?? DEFAULT_TASK_CONCURRENCY,
+    function (task) {
       return runSyncTask(job, task, deps);
-    })
+    }
   );
 
   const tasks: SyncTaskResult[] = settled.map(function (outcome, index) {

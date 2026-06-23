@@ -348,3 +348,91 @@ describe('runSyncJob — failure isolation', function () {
     expect(b.error).toContain('no stored credentials');
   });
 });
+
+describe('runSyncJob — task concurrency', function () {
+  // An adapter whose ingest() tracks how many streams run at once, so a test can
+  // assert the executor never drives more than `taskConcurrency` tasks together.
+  function makeCountingAdapter(state: {
+    active: number;
+    max: number;
+  }): IProviderAdapter {
+    return {
+      ...makeAdapter([]),
+      ingest: async function* () {
+        state.active += 1;
+        state.max = Math.max(state.max, state.active);
+        try {
+          yield { type: 'started' };
+          await new Promise((r) => setTimeout(r, 5));
+          yield { type: 'completed', cursor: null, processed: 0 };
+        } finally {
+          state.active -= 1;
+        }
+      },
+    };
+  }
+
+  function tasks(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `task-${i}`,
+      providerAccountId: `pa-${i}`,
+      spec: { type: 'full' as const },
+    }));
+  }
+
+  test('drives at most taskConcurrency tasks at once', async function () {
+    const state = { active: 0, max: 0 };
+    const adapter = makeCountingAdapter(state);
+    const result = await runSyncJob(
+      job(tasks(6)),
+      makeDeps(adapter, { taskConcurrency: 2 })
+    );
+    expect(state.max).toBe(2);
+    expect(result.tasks).toHaveLength(6);
+    expect(result.status).toBe('completed');
+  });
+
+  test('taskConcurrency 1 drives tasks strictly one at a time', async function () {
+    const state = { active: 0, max: 0 };
+    const adapter = makeCountingAdapter(state);
+    await runSyncJob(job(tasks(3)), makeDeps(adapter, { taskConcurrency: 1 }));
+    expect(state.max).toBe(1);
+  });
+
+  test('rollup stays correct under pooling: failed iff any task failed', async function () {
+    // task-1 fails (no stored credentials); the other two complete. Pool size 2
+    // forces interleaving, so this also guards the position-indexed rollup.
+    const good = makeAdapter([
+      { type: 'completed', cursor: null, processed: 3 },
+    ]);
+    const result = await runSyncJob(
+      job(tasks(3)),
+      makeDeps(good, {
+        taskConcurrency: 2,
+        accountsService: makeAccountsServiceStub({
+          getProviderAccount: async function (input: {
+            providerAccount: { id: string };
+          }) {
+            const id = input.providerAccount.id;
+            return makeAccount({
+              id,
+              credentialsEncrypted:
+                id === 'pa-1' ? null : Buffer.from('cipher'),
+            });
+          },
+        }),
+      })
+    );
+
+    expect(result.status).toBe('failed');
+    // Results are input-ordered, so each entry maps to its task by position.
+    expect(result.tasks.map((t) => t.taskId)).toEqual([
+      'task-0',
+      'task-1',
+      'task-2',
+    ]);
+    expect(result.tasks[0]!.status).toBe('completed');
+    expect(result.tasks[1]!.status).toBe('failed');
+    expect(result.tasks[2]!.status).toBe('completed');
+  });
+});
