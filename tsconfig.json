@@ -47,6 +47,9 @@
       "path": "./packages/backend/libs/env"
     },
     {
+      "path": "./packages/backend/libs/queue"
+    },
+    {
       "path": "./packages/backend/libs/sync"
     },
     {

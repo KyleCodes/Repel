@@ -19,6 +19,13 @@ export type Int8 = ColumnType<
   bigint | number | string
 >;
 
+export type JobStatus =
+  | 'completed'
+  | 'dead'
+  | 'failed'
+  | 'pending'
+  | 'processing';
+
 export type Json = JsonValue;
 
 export type JsonArray = JsonValue[];
@@ -91,9 +98,9 @@ export interface JobQueue {
   lockedBy: string | null;
   maxAttempts: Generated<number>;
   payload: Json;
-  queue: Generated<string>;
   scheduledFor: Generated<Timestamp>;
-  status: Generated<string>;
+  status: Generated<JobStatus>;
+  topic: Generated<string>;
 }
 
 export interface Message {

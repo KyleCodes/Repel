@@ -116,6 +116,19 @@
         "@repel/errors": "workspace:*",
       },
     },
+    "packages/backend/libs/queue": {
+      "name": "@repel/backend-queue",
+      "version": "0.0.1",
+      "dependencies": {
+        "@repel/backend-db": "workspace:*",
+        "@repel/errors": "workspace:*",
+        "kysely": "^0.27.3",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.11.6",
+        "pg": "^8.12.0",
+      },
+    },
     "packages/backend/libs/runtime": {
       "name": "@repel/backend-runtime",
       "version": "0.0.1",
@@ -514,6 +527,8 @@
     "@repel/backend-db": ["@repel/backend-db@workspace:packages/backend/libs/db"],
 
     "@repel/backend-env": ["@repel/backend-env@workspace:packages/backend/libs/env"],
+
+    "@repel/backend-queue": ["@repel/backend-queue@workspace:packages/backend/libs/queue"],
 
     "@repel/backend-runtime": ["@repel/backend-runtime@workspace:packages/backend/libs/runtime"],
 

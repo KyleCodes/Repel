@@ -2,7 +2,11 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import type { RunnableApp } from '@repel/backend-runtime/application';
 import { UnknownServiceError } from '../error';
-import { registerServicesCommands, runServicesRun } from '../handler';
+import {
+  drainAndClose,
+  registerServicesCommands,
+  runServicesRun,
+} from '../handler';
 
 describe('registerServicesCommands', function () {
   test('registers the services namespace with a run subcommand and --all', function () {
@@ -61,8 +65,8 @@ describe('runServicesRun', function () {
             shutdownClosedDb = true;
           },
           // resolve immediately so the call returns instead of waiting for a signal
-          waitForShutdown: async function (closeDb) {
-            await closeDb();
+          waitForShutdown: async function (apps, closeDb) {
+            await drainAndClose(apps, closeDb);
           },
         }
       );
@@ -138,5 +142,33 @@ describe('runServicesRun', function () {
       caught = e;
     }
     expect(caught).toBeInstanceOf(UnknownServiceError);
+  });
+});
+
+describe('drainAndClose', function () {
+  test('stops each app before closing the pool, in order', async function () {
+    const order: string[] = [];
+    const appWithStop = {
+      start: async function () {},
+      stop: async function () {
+        order.push('stop');
+      },
+    } as RunnableApp;
+    let closed = false;
+    await drainAndClose([appWithStop], async function () {
+      order.push('close');
+      closed = true;
+    });
+    expect(order).toEqual(['stop', 'close']);
+    expect(closed).toBe(true);
+  });
+
+  test('an app without stop() is a no-op (the api today)', async function () {
+    const appNoStop = { start: async function () {} } as RunnableApp;
+    let closed = false;
+    await drainAndClose([appNoStop], async function () {
+      closed = true;
+    });
+    expect(closed).toBe(true);
   });
 });

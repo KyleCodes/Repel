@@ -109,3 +109,14 @@ export const SyncJobStatus = {
 } as const;
 export type SyncJobStatusSlug =
   (typeof SyncJobStatus)[keyof typeof SyncJobStatus];
+
+// Queue job lifecycle status, stored as the job_status pg enum. The migration
+// creates the type from these values; the union reaches generated.ts.
+export const JobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed',
+  dead: 'dead',
+} as const;
+export type JobStatusSlug = (typeof JobStatus)[keyof typeof JobStatus];

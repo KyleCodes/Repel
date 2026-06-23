@@ -36,17 +36,38 @@ export interface ServicesRunDeps {
   resolveService?: typeof defaultResolveService;
   serviceNames?: typeof defaultServiceNames;
   closeDb?: typeof defaultCloseDb;
-  waitForShutdown?: (closeDb: typeof defaultCloseDb) => Promise<void>;
+  waitForShutdown?: (
+    apps: RunnableApp[],
+    closeDb: typeof defaultCloseDb
+  ) => Promise<void>;
+}
+
+// Drain every booted app, then close the shared pool — the shutdown order a
+// signal handler runs. stop() is optional (ADR-015 reserves it); an app without
+// one (e.g. the api) is a no-op, an app with one (a queue consumer) drains its
+// in-flight work before the pool closes out from under it.
+export async function drainAndClose(
+  apps: RunnableApp[],
+  closeDb: typeof defaultCloseDb
+): Promise<void> {
+  for (const app of apps) {
+    await app.stop?.();
+  }
+  await closeDb();
 }
 
 // Keep the process alive (the service handles do that) until a signal, then
-// close the shared pool and exit. The launcher owns this close, not index's
-// .finally — start() resolved at ready, so closing there would kill a live pool.
-function waitForSignalShutdown(closeDb: typeof defaultCloseDb): Promise<void> {
+// drain the apps and close the shared pool and exit. The launcher owns this, not
+// index's .finally — start() resolved at ready, so closing there would kill a
+// live pool mid-drain.
+function waitForSignalShutdown(
+  apps: RunnableApp[],
+  closeDb: typeof defaultCloseDb
+): Promise<void> {
   return new Promise<void>(function (resolve) {
     async function shutdown(signal: NodeJS.Signals): Promise<void> {
       console.log(`services run: ${signal} received, shutting down`);
-      await closeDb();
+      await drainAndClose(apps, closeDb);
       resolve();
       process.exit(0);
     }
@@ -75,18 +96,23 @@ function selectServices(
   return [name];
 }
 
-// Boot one service: load its RunnableApp, call start(), report elapsed boot time.
+// Boot one service: load its RunnableApp, call start(), report elapsed boot
+// time. The app is returned alongside the summary row so the shutdown path can
+// drain it.
 async function bootService(
   name: string,
   load: () => Promise<RunnableApp>
-): Promise<{ service: string; status: 'ready'; elapsedMs: number }> {
+): Promise<{
+  app: RunnableApp;
+  summary: { service: string; status: 'ready'; elapsedMs: number };
+}> {
   console.log(`services run: ${name} starting`);
   const startedAt = performance.now();
   const app = await load();
   await app.start();
   const elapsedMs = Math.round(performance.now() - startedAt);
   console.log(`services run: ${name} ready (${elapsedMs}ms)`);
-  return { service: name, status: 'ready', elapsedMs };
+  return { app, summary: { service: name, status: 'ready', elapsedMs } };
 }
 
 export async function runServicesRun(
@@ -102,7 +128,7 @@ export async function runServicesRun(
 
   // Boot all selected services on the one event loop; Promise.all settles once
   // every one is ready, and they keep running on their own handles.
-  const summary = await Promise.all(
+  const booted = await Promise.all(
     names.map(function (name) {
       const load = resolveService(name);
       if (!load) {
@@ -114,10 +140,14 @@ export async function runServicesRun(
     })
   );
 
+  const apps = booted.map((b) => b.app);
+  const summary = booted.map((b) => b.summary);
+
   console.log(`services run: all ready (${summary.length})`);
   process.stdout.write(JSON.stringify(summary) + '\n');
 
   // Block until a shutdown signal; keeps the process alive and parseAsync pending
-  // (so index's .finally(closeDb) doesn't fire while services run).
-  await waitForShutdown(closeDb);
+  // (so index's .finally(closeDb) doesn't fire while services run). On the signal,
+  // booted apps are drained before the pool closes.
+  await waitForShutdown(apps, closeDb);
 }
