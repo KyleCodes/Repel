@@ -33,6 +33,10 @@ EXTRA_SKIP_DIRS=(
 EXTRA_SKIP_FILES=(
   ".env.local"
   "tsconfig.tsbuildinfo"
+  # Each worktree owns a COPIED seed snapshot (on_start dumps root's DB into it),
+  # not a symlink to root's live dump — a symlink would change under the worktree
+  # whenever root's dump is regenerated.
+  "data/seed.dump"
 )
 
 # Ensure the Docker daemon is up (launch Docker Desktop and wait if not), so the
@@ -117,14 +121,25 @@ on_start() {
   ( cd "$DEVCTL_WORKTREE_DIR/packages/backend/apps/cli" && \
     bun run src/index.ts env provision "$DEVCTL_BRANCH" --env-file "$DEVCTL_WORKTREE_DIR/packages/backend/.env.local" )
 
-  # 5.1 The seed dump bind mount (docker-compose.yml) requires the file to exist;
-  #     `devctl workon` copies it in from the source worktree, but ensure it's
-  #     present so a no-seed worktree still boots (empty file → empty DB).
-  touch "$DEVCTL_WORKTREE_DIR/data/seed.dump"
-
-  # 5.2 Ensure Docker is running, so the tmux `bun run dev:docker` pane can start
-  #     this worktree's stack (the script exports the per-worktree vars itself).
+  # 5.1 Ensure Docker is running — needed both for the seed dump below and for the
+  #     tmux `bun run dev:docker` pane that starts this worktree's stack.
   ensure_docker
+
+  # 5.2 Seed snapshot: dump ROOT's DB into this worktree's data/seed.dump (a
+  #     copied point-in-time snapshot, NOT a symlink — see EXTRA_SKIP_FILES). The
+  #     postgres init hook restores it on first boot. compose.sh run from the root
+  #     repo resolves root's stack from its own .env.local. If root's stack isn't
+  #     up (or the dump fails), fall back to an empty file so the worktree still
+  #     boots (empty DB; run migrations + seed manually).
+  mkdir -p "$DEVCTL_WORKTREE_DIR/data"
+  if ( cd "$REPO_PATH" && ops/dev/compose.sh exec -T postgres pg_dump -U repel -Fc repel ) \
+       > "$DEVCTL_WORKTREE_DIR/data/seed.dump" 2>/dev/null \
+     && [[ -s "$DEVCTL_WORKTREE_DIR/data/seed.dump" ]]; then
+    echo "devctl: seeded $DEVCTL_BRANCH from root DB ($(wc -c < "$DEVCTL_WORKTREE_DIR/data/seed.dump") bytes)"
+  else
+    echo "devctl: could not dump root DB (stack down?) — worktree starts empty" >&2
+    : > "$DEVCTL_WORKTREE_DIR/data/seed.dump"
+  fi
 
   # 6. tmux layout (the middle right pane runs `bun run dev:docker`)
   _tmux_setup
