@@ -46,35 +46,37 @@ ensure_docker() {
   fi
 }
 
-# Layout:
-#   Left column (80% wide): nvim (top 75% h, opened on .env.local) + a bare shell
-#     beneath it (25% h) for ad-hoc commands.
-#   Right column (20% wide): 3 stacked panes — clauded (50% h) /
-#     `bun run dev:docker` (25% h) / `bun run cli:debug services run --all` (25% h).
+# Layout (panes created in this order; engine targets stable pane ids, so the two
+# splits off nvim — pane 0 — route correctly):
+#   Left column (80% w): nvim on .env.local (top 75% h); beneath it (25% h) a row
+#     split into a bare shell (left) and `db connect` (right).
+#   Right column (20% w): clauded (50% h) / `bun run dev:docker` (25% h) /
+#     `cli:debug services run --all` (25% h).
 #
-# `--from 0` splits the right column AND the left shell both off nvim (pane 0),
-# which the engine's default split-from-previous can't express. The middle-right
-# pane runs the containerized stack (db + grafana) via ops/dev/compose.sh; the
-# bottom-right STAGES (types, no Enter) the apps ON THE HOST (not in docker) under
-# Bun's inspector (cli:debug → --inspect) so a step debugger can attach. Staged
-# rather than run because the apps need Postgres healthy first — hit Enter once the
-# dev:docker pane reports ready. clauded = claude --dangerously-skip-permissions.
+# The middle-right pane runs the containerized stack (db + grafana, foreground so
+# Ctrl-C stops it — no phantom containers). The apps (services) and `db connect`
+# both need Postgres healthy, so they run through ops/dev/wait-pg.sh, which blocks
+# on the compose healthcheck then execs — auto-run, no manual Enter. Services run
+# ON THE HOST under Bun's inspector (cli:debug → --inspect) for step-debugging.
+# clauded = claude --dangerously-skip-permissions.
 _tmux_setup() {
   ensure_root_window \
     --focus 0 \
     --split h:80 --exec "nvim packages/backend/.env.local" \
+    --split v:25 --from 0 --exec shell \
+    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --stage "bun run cli:debug services run --all" \
-    --split v:25 --from 0 --exec shell
+    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all"
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
     --focus 0 \
     --split h:80 --exec "nvim packages/backend/.env.local" \
+    --split v:25 --from 0 --exec shell \
+    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --stage "bun run cli:debug services run --all" \
-    --split v:25 --from 0 --exec shell
+    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all"
 }
 
 on_start() {
