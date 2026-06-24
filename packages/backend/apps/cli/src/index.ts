@@ -2,6 +2,7 @@ import { Command, CommanderError } from 'commander';
 import { closeDb } from '@repel/backend-db/runtime';
 import { registerAccountsCommands } from './accounts/handler';
 import { registerDbCommands } from './db/handler';
+import { registerEnvCommands } from './env/handler';
 import { handleCliError } from './lib/handle-cli-error';
 import { registerOrgsCommands } from './orgs/handler';
 import { registerServicesCommands } from './services/handler';
@@ -20,6 +21,7 @@ program.name('repel').description('Repel CLI').version('0.0.1');
 registerOrgsCommands(program);
 registerAccountsCommands(program);
 registerDbCommands(program);
+registerEnvCommands(program);
 registerSyncsCommands(program);
 registerServicesCommands(program);
 

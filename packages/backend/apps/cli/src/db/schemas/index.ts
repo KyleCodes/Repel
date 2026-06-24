@@ -1,23 +1,28 @@
 import { z } from 'zod';
 
 // Convention: zod schemas are exported as `*InputSchema`; the inferred TS type
-// drops `Schema` and is exported as `*Input`. `CloneInputSchema` (the validator)
-// → `CloneInput` (the type).
+// drops `Schema` and is exported as `*Input`. `DumpInputSchema` (the validator)
+// → `DumpInput` (the type).
 
 const DEFAULT_TEMPLATE = 'repel_dev';
 
-export const CloneInputSchema = z.object({
-  branch: z.string().min(1, 'branch is required'),
-  template: z.string().min(1).default(DEFAULT_TEMPLATE),
-  envFile: z.string().min(1).default('.env.local'),
-  force: z.boolean().default(false),
+// `db dump` execs pg_dump inside the source stack's postgres container and writes
+// the archive to --out. Run from the source worktree dir so `docker compose`
+// resolves that worktree's project. --database defaults to the stack DB (repel).
+export const DumpInputSchema = z.object({
+  out: z.string().min(1, 'out file path is required'),
+  database: z.string().min(1).default('repel'),
 });
-export type CloneInput = z.infer<typeof CloneInputSchema>;
+export type DumpInput = z.infer<typeof DumpInputSchema>;
 
-export const DropInputSchema = z.object({
-  branch: z.string().min(1, 'branch is required'),
+// `db restore` execs pg_restore inside THIS worktree's postgres container, reading
+// the archive from --from-file. Manual escape hatch — the postgres init hook is
+// the automatic path on a fresh worktree.
+export const RestoreInputSchema = z.object({
+  fromFile: z.string().min(1, 'from-file path is required'),
+  database: z.string().min(1).default('repel'),
 });
-export type DropInput = z.infer<typeof DropInputSchema>;
+export type RestoreInput = z.infer<typeof RestoreInputSchema>;
 
 export const RefreshTemplateInputSchema = z.object({
   template: z.string().min(1).default(DEFAULT_TEMPLATE),

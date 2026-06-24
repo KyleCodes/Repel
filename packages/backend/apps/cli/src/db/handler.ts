@@ -1,12 +1,5 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import type { Command } from 'commander';
-import {
-  cloneDatabase,
-  dropDatabase,
-  nukeDatabase,
-  refreshTemplate,
-} from '@repel/backend-db/admin-ops';
+import { nukeDatabase, refreshTemplate } from '@repel/backend-db/admin-ops';
 import { resolveAdminUrl } from '@repel/backend-db/lib/admin-url';
 import { migrationsService } from '@repel/backend-db/migrations-tracking/service';
 import { getOptionalEnvVar } from '@repel/backend-env/accessors';
@@ -15,6 +8,7 @@ import { parseOrExit } from '../lib/parse-or-exit';
 import { registerEncryptionCommands } from './encryption/handler';
 import { runCodegen } from './lib/codegen';
 import { runConnect } from './lib/connect';
+import { runDump, runRestore } from './lib/dump-restore';
 import { readDatabaseUrlFromEnvLocal } from './lib/env-local';
 import {
   listFsMigrations,
@@ -24,19 +18,19 @@ import {
 import { runQuery } from './lib/query';
 import { registerMigrationsCommands } from './migrations/handler';
 import {
-  type CloneInput,
-  CloneInputSchema,
   type CodegenInput,
   CodegenInputSchema,
   ConnectInputSchema,
-  type DropInput,
-  DropInputSchema,
+  type DumpInput,
+  DumpInputSchema,
   type NukeInput,
   NukeInputSchema,
   type QueryInput,
   QueryInputSchema,
   type RefreshTemplateInput,
   RefreshTemplateInputSchema,
+  type RestoreInput,
+  RestoreInputSchema,
   type StatusInput,
   StatusInputSchema,
 } from './schemas/index';
@@ -53,34 +47,32 @@ export function registerDbCommands(program: Command): void {
     .command('db')
     .description('Local development database lifecycle');
 
-  db.command('clone <branch>')
+  db.command('dump')
     .description(
-      'Clone the template database into a per-branch database and write .env.local'
+      "Dump this stack's database to a seed archive via the postgres container (run from the source worktree)"
     )
-    .option('--template <name>', 'source template database')
-    .option('--env-file <path>', 'path to the .env file to write')
-    .option(
-      '--force',
-      'drop and recreate if the per-branch database already exists'
-    )
-    .action(async function (
-      branch: string,
-      opts: { template?: string; envFile?: string; force?: boolean }
-    ) {
-      const input = parseOrExit(CloneInputSchema, {
-        branch,
-        template: opts.template,
-        envFile: opts.envFile,
-        force: opts.force,
+    .requiredOption('--out <file>', 'archive file to write')
+    .option('--database <name>', 'database to dump (default: repel)')
+    .action(async function (opts: { out: string; database?: string }) {
+      const input = parseOrExit(DumpInputSchema, {
+        out: opts.out,
+        database: opts.database,
       });
-      await runClone(input);
+      await runDumpCommand(input);
     });
 
-  db.command('drop <branch>')
-    .description('Drop the per-branch database')
-    .action(async function (branch: string) {
-      const input = parseOrExit(DropInputSchema, { branch });
-      await runDrop(input);
+  db.command('restore')
+    .description(
+      "Restore a seed archive into this stack's database via the postgres container (manual re-seed)"
+    )
+    .requiredOption('--from-file <file>', 'archive file to restore')
+    .option('--database <name>', 'database to restore into (default: repel)')
+    .action(async function (opts: { fromFile: string; database?: string }) {
+      const input = parseOrExit(RestoreInputSchema, {
+        fromFile: opts.fromFile,
+        database: opts.database,
+      });
+      await runRestoreCommand(input);
     });
 
   db.command('refresh-template')
@@ -143,34 +135,31 @@ export function registerDbCommands(program: Command): void {
     });
 }
 
-export async function runClone(input: CloneInput): Promise<void> {
-  const adminUrl = readAdminUrlFromEnv();
-  const { dbName, databaseUrl } = await cloneDatabase({
-    adminUrl,
-    branch: input.branch,
-    template: input.template,
-    force: input.force,
+// The compose stack always names its service `postgres` and its DB user `repel`
+// (docker-compose.yml). dump/restore exec inside that container, so they need no
+// host postgres tooling and no DATABASE_URL — just the compose project resolved
+// from the cwd (the worktree the command is run in).
+const PG_SERVICE = 'postgres';
+const PG_USER = 'repel';
+
+export async function runDumpCommand(input: DumpInput): Promise<void> {
+  runDump({
+    service: PG_SERVICE,
+    user: PG_USER,
+    database: input.database,
+    outFile: input.out,
   });
-
-  const envPath = resolve(process.cwd(), input.envFile);
-  mkdirSync(dirname(envPath), { recursive: true });
-  writeFileSync(envPath, `DATABASE_URL=${databaseUrl}\n`, { mode: 0o600 });
-
-  console.log(`db clone: created ${dbName} from ${input.template}`);
-  console.log(`db clone: wrote ${envPath}`);
+  console.log(`db dump: wrote ${input.out}`);
 }
 
-export async function runDrop(input: DropInput): Promise<void> {
-  const adminUrl = readAdminUrlFromEnv();
-  const { dbName, dropped } = await dropDatabase({
-    adminUrl,
-    branch: input.branch,
+export async function runRestoreCommand(input: RestoreInput): Promise<void> {
+  runRestore({
+    service: PG_SERVICE,
+    user: PG_USER,
+    database: input.database,
+    inFile: input.fromFile,
   });
-  if (dropped) {
-    console.log(`db drop: dropped ${dbName}`);
-  } else {
-    console.log(`db drop: ${dbName} did not exist`);
-  }
+  console.log(`db restore: restored ${input.fromFile}`);
 }
 
 export async function runRefreshTemplate(

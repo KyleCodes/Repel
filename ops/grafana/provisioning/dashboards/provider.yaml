@@ -1,0 +1,14 @@
+apiVersion: 1
+
+# Loads dashboard JSON models from this directory as code (REP-69). UI edits are
+# disabled so the committed JSON is the single source of truth.
+providers:
+  - name: Repel Operational
+    orgId: 1
+    folder: Repel
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

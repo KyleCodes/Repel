@@ -1,65 +1,50 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  CloneInputSchema,
   CodegenInputSchema,
-  DropInputSchema,
+  DumpInputSchema,
   NukeInputSchema,
   RefreshTemplateInputSchema,
+  RestoreInputSchema,
   StatusInputSchema,
 } from '../index';
 
-describe('CloneInputSchema', function () {
-  test('applies defaults when only branch is provided', function () {
-    const result = CloneInputSchema.parse({ branch: 'rep-38' });
-    expect(result).toEqual({
-      branch: 'rep-38',
-      template: 'repel_dev',
-      envFile: '.env.local',
-      force: false,
+describe('DumpInputSchema', function () {
+  test('defaults database to repel when only out is given', function () {
+    expect(DumpInputSchema.parse({ out: 'data/seed.dump' })).toEqual({
+      out: 'data/seed.dump',
+      database: 'repel',
     });
   });
 
-  test('accepts all fields explicitly', function () {
-    const result = CloneInputSchema.parse({
-      branch: 'rep-38',
-      template: 'custom_template',
-      envFile: '.env.test',
-      force: true,
-    });
-    expect(result).toEqual({
-      branch: 'rep-38',
-      template: 'custom_template',
-      envFile: '.env.test',
-      force: true,
-    });
+  test('accepts an explicit database', function () {
+    expect(
+      DumpInputSchema.parse({ out: 'data/seed.dump', database: 'repel_dev' })
+    ).toEqual({ out: 'data/seed.dump', database: 'repel_dev' });
   });
 
-  test('rejects empty branch', function () {
-    expect(CloneInputSchema.safeParse({ branch: '' }).success).toBe(false);
+  test('rejects missing out', function () {
+    expect(DumpInputSchema.safeParse({}).success).toBe(false);
   });
 
-  test('rejects missing branch', function () {
-    expect(CloneInputSchema.safeParse({}).success).toBe(false);
-  });
-
-  test('rejects non-string branch', function () {
-    expect(CloneInputSchema.safeParse({ branch: 123 }).success).toBe(false);
+  test('rejects empty out', function () {
+    expect(DumpInputSchema.safeParse({ out: '' }).success).toBe(false);
   });
 });
 
-describe('DropInputSchema', function () {
-  test('accepts a branch', function () {
-    expect(DropInputSchema.parse({ branch: 'rep-38' })).toEqual({
-      branch: 'rep-38',
+describe('RestoreInputSchema', function () {
+  test('accepts a fromFile, defaults database to repel', function () {
+    expect(RestoreInputSchema.parse({ fromFile: 'data/seed.dump' })).toEqual({
+      fromFile: 'data/seed.dump',
+      database: 'repel',
     });
   });
 
-  test('rejects empty branch', function () {
-    expect(DropInputSchema.safeParse({ branch: '' }).success).toBe(false);
+  test('rejects missing fromFile', function () {
+    expect(RestoreInputSchema.safeParse({}).success).toBe(false);
   });
 
-  test('rejects missing branch', function () {
-    expect(DropInputSchema.safeParse({}).success).toBe(false);
+  test('rejects empty fromFile', function () {
+    expect(RestoreInputSchema.safeParse({ fromFile: '' }).success).toBe(false);
   });
 });
 

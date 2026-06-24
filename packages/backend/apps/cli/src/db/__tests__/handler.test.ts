@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import { registerDbCommands, runNuke } from '../handler';
 
 describe('registerDbCommands', function () {
-  test('registers db clone|drop|refresh-template|status|nuke|codegen and the migrate subgroup', function () {
+  test('registers db dump|restore|refresh-template|status|nuke|codegen and the migrate subgroup', function () {
     const program = new Command();
     registerDbCommands(program);
     const db = program.commands.find(function (c) {
@@ -14,8 +14,10 @@ describe('registerDbCommands', function () {
     const subNames = db!.commands.map(function (c) {
       return c.name();
     });
-    expect(subNames).toContain('clone');
-    expect(subNames).toContain('drop');
+    expect(subNames).toContain('dump');
+    expect(subNames).toContain('restore');
+    expect(subNames).not.toContain('clone');
+    expect(subNames).not.toContain('drop');
     expect(subNames).toContain('refresh-template');
     expect(subNames).toContain('status');
     expect(subNames).toContain('nuke');
