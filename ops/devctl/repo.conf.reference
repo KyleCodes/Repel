@@ -46,12 +46,16 @@ ensure_docker() {
   fi
 }
 
-# Layout (panes created in this order; engine targets stable pane ids, so the two
-# splits off nvim — pane 0 — route correctly):
+# Layout:
 #   Left column (80% w): nvim on .env.local (top 75% h); beneath it (25% h) a row
 #     split into a bare shell (left) and `db connect` (right).
 #   Right column (20% w): clauded (50% h) / `bun run dev:docker` (25% h) /
 #     `cli:debug services run --all` (25% h).
+#
+# Order matters: the right column is created FIRST so it shrinks nvim to 80% width;
+# only then is nvim split for the bottom row, so that row stays within nvim's 80%
+# (not full width). Engine targets stable pane ids, so the two splits off nvim
+# (pane 0 — right column and the bottom shell) route send-keys correctly.
 #
 # The middle-right pane runs the containerized stack (db + grafana, foreground so
 # Ctrl-C stops it — no phantom containers). The apps (services) and `db connect`
@@ -63,20 +67,20 @@ _tmux_setup() {
   ensure_root_window \
     --focus 0 \
     --split h:80 --exec "nvim packages/backend/.env.local" \
-    --split v:25 --from 0 --exec shell \
-    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all"
+    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all" \
+    --split v:25 --from 0 --exec shell \
+    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect"
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
     --focus 0 \
     --split h:80 --exec "nvim packages/backend/.env.local" \
-    --split v:25 --from 0 --exec shell \
-    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all"
+    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all" \
+    --split v:25 --from 0 --exec shell \
+    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect"
 }
 
 on_start() {
