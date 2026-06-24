@@ -47,34 +47,34 @@ ensure_docker() {
 }
 
 # Layout:
-#   Left column (80% wide): nvim (top 80% h) + a bare shell beneath it (20% h)
-#     for ad-hoc commands.
+#   Left column (80% wide): nvim (top 75% h, opened on .env.local) + a bare shell
+#     beneath it (25% h) for ad-hoc commands.
 #   Right column (20% wide): 3 stacked panes — clauded (50% h) /
-#     `bun run dev:docker` (25% h) / `bun run cli services run --all` (25% h).
+#     `bun run dev:docker` (25% h) / `bun run cli:debug services run --all` (25% h).
 #
 # `--from 0` splits the right column AND the left shell both off nvim (pane 0),
 # which the engine's default split-from-previous can't express. The middle-right
 # pane runs the containerized stack (db + grafana) via ops/dev/compose.sh; the
-# bottom-right STAGES (types, no Enter) the apps ON THE HOST (not in docker) so a
-# step debugger can attach — staged rather than run because the apps need Postgres
-# healthy first, so you hit Enter once the dev:docker pane reports ready.
-# clauded = claude --dangerously-skip-permissions.
+# bottom-right STAGES (types, no Enter) the apps ON THE HOST (not in docker) under
+# Bun's inspector (cli:debug → --inspect) so a step debugger can attach. Staged
+# rather than run because the apps need Postgres healthy first — hit Enter once the
+# dev:docker pane reports ready. clauded = claude --dangerously-skip-permissions.
 _tmux_setup() {
   ensure_root_window \
     --focus 0 \
-    --split h:80 --exec "nvim ." \
+    --split h:80 --exec "nvim packages/backend/.env.local" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --stage "bun run cli services run --all" \
-    --split v:20 --from 0 --exec shell
+    --split v:50 --stage "bun run cli:debug services run --all" \
+    --split v:25 --from 0 --exec shell
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
     --focus 0 \
-    --split h:80 --exec "nvim ." \
+    --split h:80 --exec "nvim packages/backend/.env.local" \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --stage "bun run cli services run --all" \
-    --split v:20 --from 0 --exec shell
+    --split v:50 --stage "bun run cli:debug services run --all" \
+    --split v:25 --from 0 --exec shell
 }
 
 on_start() {

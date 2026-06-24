@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
-// Wrapper for `cli:debug`: launch the CLI under Bun's inspector (--inspect-brk),
+// Wrapper for `cli:debug`: launch the CLI under Bun's inspector (--inspect),
 // then auto-open the printed debug.bun.sh URL in a browser so you don't have to
 // copy/paste it. Bun prints the inspector banner to STDERR; we tee stderr
 // through to the terminal unchanged while watching for the URL, open it once,
 // and otherwise stay out of the way. stdout (the CLI's JSON output) is inherited
 // untouched. Exits with the child's exit code.
+//
+// Uses --inspect (not --inspect-brk): the inspector attaches and your own
+// breakpoints fire, but execution does NOT halt on the entry module's first
+// line (--inspect-brk injects a synthetic line-1 break, unwanted noise here).
 //
 // Usage: bun run cli:debug <cli args…>   e.g. `bun run cli:debug accounts show personal`
 import { spawn } from 'node:child_process';
@@ -44,7 +48,7 @@ const args = process.argv.slice(2);
 const child = spawn(
   'bun',
   [
-    '--inspect-brk',
+    '--inspect',
     '--env-file=.env.development',
     '--env-file=.env.local',
     'run',
