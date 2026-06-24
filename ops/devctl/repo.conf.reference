@@ -46,26 +46,33 @@ ensure_docker() {
   fi
 }
 
-# Right column (20% wide) is 3 stacked panes: Claude (50% h) / docker stack
-# (25% h) / bare shell (25% h). The split-from-previous chain yields 50/25/25.
-# Claude runs `clauded` (claude --dangerously-skip-permissions); the middle pane
-# runs `bun run dev:docker` (→ ops/dev/compose.sh, which exports this worktree's
-# COMPOSE_PROJECT_NAME + ports from .env.local before `docker compose up`) — on a
-# fresh worktree it triggers the postgres init-hook seed, on resume it attaches.
+# Layout:
+#   Left column (80% wide): nvim (top 80% h) + a bare shell beneath it (20% h)
+#     for ad-hoc commands.
+#   Right column (20% wide): 3 stacked panes — clauded (50% h) /
+#     `bun run dev:docker` (25% h) / `bun run cli services run --all` (25% h).
+#
+# `--from 0` splits the right column AND the left shell both off nvim (pane 0),
+# which the engine's default split-from-previous can't express. The middle-right
+# pane runs the containerized stack (db + grafana) via ops/dev/compose.sh; the
+# bottom-right runs the apps ON THE HOST (not in docker) so a step debugger can
+# attach. clauded = claude --dangerously-skip-permissions.
 _tmux_setup() {
   ensure_root_window \
     --focus 0 \
     --split h:80 --exec "nvim ." \
-    --split h:20 --exec "clauded" \
+    --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec shell
+    --split v:50 --exec "bun run cli services run --all" \
+    --split v:20 --from 0 --exec shell
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
     --focus 0 \
     --split h:80 --exec "nvim ." \
-    --split h:20 --exec "clauded" \
+    --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec shell
+    --split v:50 --exec "bun run cli services run --all" \
+    --split v:20 --from 0 --exec shell
 }
 
 on_start() {
