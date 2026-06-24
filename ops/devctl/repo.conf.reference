@@ -55,15 +55,17 @@ ensure_docker() {
 # `--from 0` splits the right column AND the left shell both off nvim (pane 0),
 # which the engine's default split-from-previous can't express. The middle-right
 # pane runs the containerized stack (db + grafana) via ops/dev/compose.sh; the
-# bottom-right runs the apps ON THE HOST (not in docker) so a step debugger can
-# attach. clauded = claude --dangerously-skip-permissions.
+# bottom-right STAGES (types, no Enter) the apps ON THE HOST (not in docker) so a
+# step debugger can attach — staged rather than run because the apps need Postgres
+# healthy first, so you hit Enter once the dev:docker pane reports ready.
+# clauded = claude --dangerously-skip-permissions.
 _tmux_setup() {
   ensure_root_window \
     --focus 0 \
     --split h:80 --exec "nvim ." \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "bun run cli services run --all" \
+    --split v:50 --stage "bun run cli services run --all" \
     --split v:20 --from 0 --exec shell
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
@@ -71,7 +73,7 @@ _tmux_setup() {
     --split h:80 --exec "nvim ." \
     --split h:20 --from 0 --exec "clauded" \
     --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "bun run cli services run --all" \
+    --split v:50 --stage "bun run cli services run --all" \
     --split v:20 --from 0 --exec shell
 }
 
