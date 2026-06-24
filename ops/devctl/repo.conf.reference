@@ -64,23 +64,22 @@ ensure_docker() {
 # ON THE HOST under Bun's inspector (cli:debug → --inspect) for step-debugging.
 # clauded = claude --dangerously-skip-permissions.
 _tmux_setup() {
-  ensure_root_window \
-    --focus 0 \
-    --split h:80 --exec "nvim packages/backend/.env.local" \
-    --split h:20 --from 0 --exec "clauded" \
-    --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all" \
-    --split v:25 --from 0 --exec shell \
+  # Same pane layout, applied to two windows: the root-repo window
+  # (ensure_root_window, a noop once the session exists) and this worktree's
+  # window (tmux-worktree.sh, window=$WINDOW root=$PWD). Defined once here.
+  local layout=(
+    --focus 0
+    --split h:80 --exec "nvim packages/backend/.env.local"
+    --split h:20 --from 0 --exec "clauded"
+    --split v:50 --exec "bun run dev:docker"
+    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all"
+    --split v:25 --from 0 --exec shell
     --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect"
+  )
+  ensure_root_window "${layout[@]}"
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
-    --focus 0 \
-    --split h:80 --exec "nvim packages/backend/.env.local" \
-    --split h:20 --from 0 --exec "clauded" \
-    --split v:50 --exec "bun run dev:docker" \
-    --split v:50 --exec "ops/dev/wait-pg.sh bun run cli:debug services run --all" \
-    --split v:25 --from 0 --exec shell \
-    --split h:50 --exec "ops/dev/wait-pg.sh bun run cli db connect"
+    "${layout[@]}"
 }
 
 on_start() {
