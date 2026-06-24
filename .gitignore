@@ -26,6 +26,8 @@ packages/frontend/apps/web/vite.config.d.ts.map
 # Data
 data/pg/
 data/blobs/
+data/grafana/
+data/seed.dump
 
 # OS
 .DS_Store

@@ -1,0 +1,148 @@
+# REFERENCE COPY — NOT SOURCED.
+#
+# The live devctl config is ~/.devctl-config/repos/Repel/repo.conf (outside this
+# repo). This is a verbatim copy committed so the per-worktree stack lifecycle
+# (REP-69 + follow-on) is reviewable in-repo. Edit the real file; keep this synced.
+#
+# =============================================================================
+
+REPO_PATH="/Users/kylemuldoon/Developer/Repel"
+
+# data/ holds the Postgres container's bind-mounted volume. Symlinking it into
+# worktrees would pool two working dirs onto the same data files — don't.
+#
+# .nx/ is Nx's per-workspace cache + project-graph state. workspace-data/ holds a
+# SQLite graph DB (*-v3.db) and content-hash files that are workspace-specific and
+# Nx-version-sensitive; symlinking it would point every worktree at the root's
+# live DB (concurrent SQLite writers → lock contention / corruption) and break on
+# any Nx-version skew between worktrees. Copying it buys little — the task cache is
+# keyed by input hashes, so a branch that touches anything misses anyway, and the
+# graph DB rebuilds in ms on first `nx` call. Each worktree owns a fresh .nx/,
+# same rationale as tsconfig.tsbuildinfo below.
+EXTRA_SKIP_DIRS=(
+  "data/pg/"
+  "data/blobs/"
+  "data/grafana/"
+  ".nx/"
+)
+# .env.local is worktree-specific (per-branch DB URL) — never push it back.
+# tsconfig.tsbuildinfo is a TS incremental-build cache; sharing it across
+# worktrees causes tsc to believe outputs exist when they don't (dist/ is
+# per-worktree), producing cascading TS6305 / overload-resolution errors.
+# Each worktree must own its own build cache — rebuild from scratch.
+EXTRA_SKIP_FILES=(
+  ".env.local"
+  "tsconfig.tsbuildinfo"
+)
+
+# Ensure the Docker daemon is up (launch Docker Desktop and wait if not), so the
+# worktree's compose stack can start. Idempotent — a no-op when already running.
+ensure_docker() {
+  if ! docker info >/dev/null 2>&1; then
+    echo "ensure_docker: starting Docker Desktop…"
+    open -a Docker
+    until docker info >/dev/null 2>&1; do sleep 1; done
+    echo "ensure_docker: Docker is ready"
+  fi
+}
+
+# Export the compose-facing vars (per-worktree ports + project name) that
+# `env provision` wrote to .env.local, so `docker compose` namespaces this
+# worktree's stack and publishes its unique ports.
+_export_stack_env() {
+  local env_local="$DEVCTL_WORKTREE_DIR/packages/backend/.env.local"
+  [[ -f "$env_local" ]] || return 0
+  set -a
+  # shellcheck disable=SC2046
+  export $(grep -E '^(COMPOSE_PROJECT_NAME|PG_PORT|GRAFANA_PORT|API_PORT)=' "$env_local" | xargs)
+  set +a
+}
+
+# Right column (20% wide) is 3 stacked panes: Claude (50% h) / docker compose up
+# (25% h) / bare shell (25% h). The split-from-previous chain yields 50/25/25.
+# Claude runs `clauded` (claude --dangerously-skip-permissions); the middle pane
+# runs the stack foreground — on a fresh worktree it triggers the postgres
+# init-hook seed, on resume it attaches to the already-up stack.
+_tmux_setup() {
+  ensure_root_window \
+    --focus 0 \
+    --split h:80 --exec "nvim ." \
+    --split h:20 --exec "clauded" \
+    --split v:50 --exec "docker compose --profile dev up" \
+    --split v:50 --exec shell
+  "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
+    --session "$SESSION" --window "$WINDOW" --root "$PWD" \
+    --focus 0 \
+    --split h:80 --exec "nvim ." \
+    --split h:20 --exec "clauded" \
+    --split v:50 --exec "docker compose --profile dev up" \
+    --split v:50 --exec shell
+}
+
+on_start() {
+  # 1. Pin node version. fnm reads .nvmrc / .node-version if present; otherwise
+  #    "fnm use 24" is a no-op-friendly request to select node 24.
+  fnm use 24 || true
+
+  # 2. Generic devctl file sync — pulls .env and any other gitignored/untracked
+  #    files from the root repo into the worktree.
+  "$HOME/.devctl/bin/repos/sync/symlink-untracked.sh" "$REPO_PATH"
+
+  # 3. Generate devctl sync-pull / sync-push closures into .devctl/ for
+  #    mid-session use. Harmless if unused.
+  "$HOME/.devctl/bin/repos/worktree/gen-sync-closures.sh" Repel
+
+  # 4. Install JS deps. Bun is fast; blocking here keeps subsequent steps sane.
+  bun install
+
+  # 4.1 Reset build state — worktree should start clean. Stale dist/ or
+  #     tsbuildinfo from prior tsc runs can produce TS6305 cascades after a
+  #     branch that moved source paths. Runs after install so tsc is on PATH.
+  bun run clean || true
+
+  # 4.2 Build the workspace so this worktree owns a fresh, warm Nx cache + an
+  #     up-to-date project graph (.nx/ is NOT synced from root — see
+  #     EXTRA_SKIP_DIRS — so it must be built here). Cold build is a few seconds;
+  #     afterward every `nx` command in the worktree is a cache hit. Tolerate
+  #     failure so a broken branch still finishes bootstrapping.
+  bun run build || true
+
+  # 5. Provision this worktree's stack env (per-worktree ports +
+  #    COMPOSE_PROJECT_NAME + DATABASE_URL → .env.local). Daemon-free; the actual
+  #    stack is brought up by the tmux `docker compose up` pane, and the postgres
+  #    init hook seeds the DB on first boot from data/seed.dump.
+  ( cd "$DEVCTL_WORKTREE_DIR/packages/backend/apps/cli" && \
+    bun run src/index.ts env provision "$DEVCTL_BRANCH" --env-file "$DEVCTL_WORKTREE_DIR/packages/backend/.env.local" )
+
+  # 5.1 The seed dump bind mount (docker-compose.yml) requires the file to exist;
+  #     `devctl workon` copies it in from the source worktree, but ensure it's
+  #     present so a no-seed worktree still boots (empty file → empty DB).
+  touch "$DEVCTL_WORKTREE_DIR/data/seed.dump"
+
+  # 5.2 Ensure Docker is running and export the compose-facing vars, so the tmux
+  #     `docker compose up` pane starts this worktree's stack on its own ports.
+  ensure_docker
+  _export_stack_env
+
+  # 6. tmux layout (the middle right pane runs `docker compose up`)
+  _tmux_setup
+}
+
+on_resume() {
+  # Re-attaching a worktree: make sure Docker is up and the stack vars are
+  # exported so the `docker compose up` pane restores this worktree's stack.
+  # No re-provision, no re-seed — data/pg persists.
+  ensure_docker
+  _export_stack_env
+  _tmux_setup
+}
+
+on_teardown() {
+  # Tear down this worktree's stack — removes its containers, network, and named
+  # volumes, freeing the host ports + project name. The data/ bind mounts (pg,
+  # grafana, seed.dump) go away with the worktree directory itself.
+  _export_stack_env
+  ( cd "$DEVCTL_WORKTREE_DIR" && docker compose --profile dev down -v ) || true
+  "$HOME/.devctl/bin/repos/sync/push-untracked.sh" "$REPO_PATH" || true
+  tmux kill-window -t "$SESSION:$WINDOW" 2>/dev/null || true
+}

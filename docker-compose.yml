@@ -3,12 +3,20 @@ services:
     image: postgres:16
     volumes:
       - ./data/pg:/var/lib/postgresql/data
+      # Conditional seed on first boot (REP-69): the init hook restores the
+      # persisted worktree dump if present. data/seed.dump must exist as a file
+      # (on_start touches it); a missing/empty file → empty DB. Init scripts run
+      # only when data/pg is fresh, so resume never re-seeds.
+      - ./data/seed.dump:/seed/seed.dump:ro
+      - ./ops/postgres/initdb/10-restore-seed.sh:/docker-entrypoint-initdb.d/10-restore-seed.sh:ro
     environment:
       POSTGRES_DB: repel
       POSTGRES_USER: repel
       POSTGRES_PASSWORD: dev
     ports:
-      - '5432:5432'
+      # Per-worktree host port (PG_PORT, from .env.local via `repel env provision`)
+      # so worktree stacks don't collide on 5432. Falls back to 5432.
+      - '${PG_PORT:-5432}:5432'
     profiles: [dev, full]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U repel -d repel']
@@ -26,7 +34,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - '3000:3000'
+      - '${API_PORT:-3000}:3000'
     profiles: [full]
 
   sync-worker:
@@ -44,3 +52,35 @@ services:
       postgres:
         condition: service_healthy
     profiles: [full]
+
+  # Operational dashboard (REP-69). Per-worktree: reaches THIS stack's own
+  # Postgres over the compose network (postgres:5432, database `repel`).
+  # GRAFANA_PORT (host port) and GF_SECURITY_ADMIN_PASSWORD come from the
+  # process env / .env.development. Config is provisioned-as-code from ./ops/grafana.
+  grafana:
+    image: grafana/grafana:11.4.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '${GRAFANA_PORT:-3001}:3000'
+    env_file:
+      - packages/backend/.env.development
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      # Dev convenience: no login prompt — anonymous access as Admin, login form
+      # hidden. The admin account still exists (GF_SECURITY_ADMIN_PASSWORD) for
+      # /login if needed. This is a local-only dashboard; do not carry to prod.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+    profiles: [dev, full]
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'wget -qO- http://localhost:3000/api/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5

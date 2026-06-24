@@ -1,0 +1,23 @@
+apiVersion: 1
+
+# Postgres datasource for the Repel operational dashboard (REP-69).
+# Each worktree runs its own stack, so Grafana targets THIS stack's own Postgres
+# over the compose network (postgres:5432, database `repel`) — there is exactly
+# one database per stack, so no per-worktree DB selection is needed. The `dev`
+# password matches the compose POSTGRES_PASSWORD; a local dev credential, not a
+# real secret.
+datasources:
+  - name: Repel Postgres
+    uid: repel-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: repel
+    isDefault: true
+    editable: false
+    secureJsonData:
+      password: dev
+    jsonData:
+      database: repel
+      sslmode: disable
+      postgresVersion: 1600

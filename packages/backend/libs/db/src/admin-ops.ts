@@ -42,62 +42,6 @@ function ident(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-export interface CloneDatabaseInput {
-  adminUrl: string;
-  branch: string;
-  template: string;
-  force: boolean;
-}
-
-export interface CloneDatabaseResult {
-  dbName: string;
-  databaseUrl: string;
-}
-
-export async function cloneDatabase(
-  input: CloneDatabaseInput
-): Promise<CloneDatabaseResult> {
-  const dbName = sanitizeBranchToDbName(input.branch);
-
-  await withAdmin(input.adminUrl, async function (client) {
-    const exists = await dbExists(client, dbName);
-    if (exists) {
-      if (!input.force) {
-        throw new Error(
-          `database ${dbName} already exists — pass --force to replace it`
-        );
-      }
-      await client.query(`DROP DATABASE ${ident(dbName)} WITH (FORCE)`);
-    }
-
-    // CREATE DATABASE cannot run inside a transaction block, and pg's default
-    // auto-commit mode handles that for us. TEMPLATE copies schema + data.
-    await client.query(
-      `CREATE DATABASE ${ident(dbName)} TEMPLATE ${ident(input.template)}`
-    );
-  });
-
-  return { dbName, databaseUrl: buildDatabaseUrl(input.adminUrl, dbName) };
-}
-
-export interface DropDatabaseInput {
-  adminUrl: string;
-  branch: string;
-}
-
-export async function dropDatabase(
-  input: DropDatabaseInput
-): Promise<{ dbName: string; dropped: boolean }> {
-  const dbName = sanitizeBranchToDbName(input.branch);
-
-  return withAdmin(input.adminUrl, async function (client) {
-    const exists = await dbExists(client, dbName);
-    if (!exists) return { dbName, dropped: false };
-    await client.query(`DROP DATABASE ${ident(dbName)} WITH (FORCE)`);
-    return { dbName, dropped: true };
-  });
-}
-
 export interface NukeDatabaseInput {
   databaseUrl: string;
 }
@@ -108,9 +52,9 @@ export interface NukeDatabaseInput {
 // The database itself is preserved; only its contents are reset. With
 // `pgmigrations` gone, the next `migrations up` runs from zero.
 //
-// Unlike clone/drop/refresh-template this connects to the target database
-// directly (DATABASE_URL), not the admin/maintenance database, because
-// DROP SCHEMA operates inside the connected database.
+// Unlike refresh-template this connects to the target database directly
+// (DATABASE_URL), not the admin/maintenance database, because DROP SCHEMA
+// operates inside the connected database.
 export async function nukeDatabase(input: NukeDatabaseInput): Promise<void> {
   const client = new Client({ connectionString: input.databaseUrl });
   await client.connect();
