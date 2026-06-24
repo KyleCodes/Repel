@@ -46,36 +46,25 @@ ensure_docker() {
   fi
 }
 
-# Export the compose-facing vars (per-worktree ports + project name) that
-# `env provision` wrote to .env.local, so `docker compose` namespaces this
-# worktree's stack and publishes its unique ports.
-_export_stack_env() {
-  local env_local="$DEVCTL_WORKTREE_DIR/packages/backend/.env.local"
-  [[ -f "$env_local" ]] || return 0
-  set -a
-  # shellcheck disable=SC2046
-  export $(grep -E '^(COMPOSE_PROJECT_NAME|PG_PORT|GRAFANA_PORT|API_PORT)=' "$env_local" | xargs)
-  set +a
-}
-
-# Right column (20% wide) is 3 stacked panes: Claude (50% h) / docker compose up
+# Right column (20% wide) is 3 stacked panes: Claude (50% h) / docker stack
 # (25% h) / bare shell (25% h). The split-from-previous chain yields 50/25/25.
 # Claude runs `clauded` (claude --dangerously-skip-permissions); the middle pane
-# runs the stack foreground — on a fresh worktree it triggers the postgres
-# init-hook seed, on resume it attaches to the already-up stack.
+# runs `bun run dev:docker` (→ ops/dev/compose.sh, which exports this worktree's
+# COMPOSE_PROJECT_NAME + ports from .env.local before `docker compose up`) — on a
+# fresh worktree it triggers the postgres init-hook seed, on resume it attaches.
 _tmux_setup() {
   ensure_root_window \
     --focus 0 \
     --split h:80 --exec "nvim ." \
     --split h:20 --exec "clauded" \
-    --split v:50 --exec "docker compose --profile dev up" \
+    --split v:50 --exec "bun run dev:docker" \
     --split v:50 --exec shell
   "$HOME/.devctl/bin/repos/worktree/tmux-worktree.sh" \
     --session "$SESSION" --window "$WINDOW" --root "$PWD" \
     --focus 0 \
     --split h:80 --exec "nvim ." \
     --split h:20 --exec "clauded" \
-    --split v:50 --exec "docker compose --profile dev up" \
+    --split v:50 --exec "bun run dev:docker" \
     --split v:50 --exec shell
 }
 
@@ -119,30 +108,28 @@ on_start() {
   #     present so a no-seed worktree still boots (empty file → empty DB).
   touch "$DEVCTL_WORKTREE_DIR/data/seed.dump"
 
-  # 5.2 Ensure Docker is running and export the compose-facing vars, so the tmux
-  #     `docker compose up` pane starts this worktree's stack on its own ports.
+  # 5.2 Ensure Docker is running, so the tmux `bun run dev:docker` pane can start
+  #     this worktree's stack (the script exports the per-worktree vars itself).
   ensure_docker
-  _export_stack_env
 
-  # 6. tmux layout (the middle right pane runs `docker compose up`)
+  # 6. tmux layout (the middle right pane runs `bun run dev:docker`)
   _tmux_setup
 }
 
 on_resume() {
-  # Re-attaching a worktree: make sure Docker is up and the stack vars are
-  # exported so the `docker compose up` pane restores this worktree's stack.
-  # No re-provision, no re-seed — data/pg persists.
+  # Re-attaching a worktree: make sure Docker is up so the `bun run dev:docker`
+  # pane restores this worktree's stack. No re-provision, no re-seed — data/pg
+  # persists.
   ensure_docker
-  _export_stack_env
   _tmux_setup
 }
 
 on_teardown() {
   # Tear down this worktree's stack — removes its containers, network, and named
   # volumes, freeing the host ports + project name. The data/ bind mounts (pg,
-  # grafana, seed.dump) go away with the worktree directory itself.
-  _export_stack_env
-  ( cd "$DEVCTL_WORKTREE_DIR" && docker compose --profile dev down -v ) || true
+  # grafana, seed.dump) go away with the worktree directory itself. Routed through
+  # ops/dev/compose.sh so the right project name is resolved.
+  ( cd "$DEVCTL_WORKTREE_DIR" && ops/dev/compose.sh down -v ) || true
   "$HOME/.devctl/bin/repos/sync/push-untracked.sh" "$REPO_PATH" || true
   tmux kill-window -t "$SESSION:$WINDOW" 2>/dev/null || true
 }
