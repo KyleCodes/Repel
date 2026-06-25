@@ -28,6 +28,7 @@
       "dependencies": {
         "@repel/backend-env": "workspace:*",
         "@repel/backend-runtime": "workspace:*",
+        "@repel/logger": "workspace:*",
         "express": "^4.19.2",
       },
       "devDependencies": {
@@ -50,6 +51,7 @@
         "@repel/backend-sync-worker": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
+        "@repel/logger": "workspace:*",
         "@repel/slug": "workspace:*",
         "commander": "^12.1.0",
         "node-pg-migrate": "^7.7.0",
@@ -68,6 +70,7 @@
         "@repel/backend-queue": "workspace:*",
         "@repel/backend-runtime": "workspace:*",
         "@repel/backend-sync": "workspace:*",
+        "@repel/logger": "workspace:*",
       },
     },
     "packages/backend/libs/accounts": {
@@ -93,6 +96,7 @@
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
         "@repel/http": "workspace:*",
+        "@repel/logger": "workspace:*",
         "kysely": "^0.27.3",
         "zod": "4.4.3",
       },
@@ -135,6 +139,7 @@
         "@repel/backend-db": "workspace:*",
         "@repel/concurrency": "workspace:*",
         "@repel/errors": "workspace:*",
+        "@repel/logger": "workspace:*",
         "kysely": "^0.27.3",
       },
       "devDependencies": {
@@ -157,6 +162,7 @@
         "@repel/concurrency": "workspace:*",
         "@repel/enums": "workspace:*",
         "@repel/errors": "workspace:*",
+        "@repel/logger": "workspace:*",
         "kysely": "^0.27.3",
       },
       "devDependencies": {
@@ -198,6 +204,10 @@
         "@repel/errors": "workspace:*",
         "zod": "4.4.3",
       },
+    },
+    "packages/shared/logger": {
+      "name": "@repel/logger",
+      "version": "0.0.1",
     },
     "packages/shared/slug": {
       "name": "@repel/slug",
@@ -561,6 +571,8 @@
     "@repel/errors": ["@repel/errors@workspace:packages/shared/errors"],
 
     "@repel/http": ["@repel/http@workspace:packages/shared/http"],
+
+    "@repel/logger": ["@repel/logger@workspace:packages/shared/logger"],
 
     "@repel/slug": ["@repel/slug@workspace:packages/shared/slug"],
 

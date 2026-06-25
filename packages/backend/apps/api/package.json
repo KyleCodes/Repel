@@ -12,6 +12,7 @@
   "dependencies": {
     "@repel/backend-env": "workspace:*",
     "@repel/backend-runtime": "workspace:*",
+    "@repel/logger": "workspace:*",
     "express": "^4.19.2"
   },
   "devDependencies": {

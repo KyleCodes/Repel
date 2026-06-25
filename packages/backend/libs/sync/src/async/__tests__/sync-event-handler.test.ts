@@ -5,6 +5,7 @@ import type {
   NormalizedMessage,
   RawMessage,
 } from '@repel/backend-adapters/types';
+import { runWithLogContext } from '@repel/logger/context';
 import { SyncMissingNormalizedError } from '../../error';
 import { syncService } from '../../persistence/service';
 import type { SyncContext } from '../../types';
@@ -155,15 +156,24 @@ describe('syncEventHandler — message events route to persistMessage', function
 });
 
 describe('syncEventHandler — logging', function () {
-  test('still emits a human log line per event', async function () {
+  test('still emits a log line per event with the structured fields', async function () {
     stubService();
-    const log = spyOn(console, 'log').mockReturnValue(undefined);
+    const write = spyOn(process.stderr, 'write').mockReturnValue(true);
+    let lines: string[] = [];
     try {
-      await syncEventHandler.handle({ type: 'auth', refreshed: true }, ctx);
-      expect(log).toHaveBeenCalledTimes(1);
-      expect(String(log.mock.calls[0]![0])).toContain('auth refreshed=true');
+      // The per-task scope is the caller's job (runSyncTask); establish it here
+      // so the asserted taskId/syncJobId fields land on the line.
+      await runWithLogContext(
+        { taskId: ctx.syncTask.id, syncJobId: ctx.syncJob.id },
+        () => syncEventHandler.handle({ type: 'auth', refreshed: true }, ctx)
+      );
+      lines = write.mock.calls.map((c) => String(c[0]));
     } finally {
-      log.mockRestore();
+      write.mockRestore();
     }
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('auth');
+    expect(lines[0]).toContain('"refreshed":true');
+    expect(lines[0]).toContain('"taskId"');
   });
 });

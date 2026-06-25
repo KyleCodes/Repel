@@ -88,6 +88,22 @@ export default [
       ],
     },
   },
+  // no-console — all diagnostic + result output goes through @repel/logger, not
+  // raw console. Test files keep console for spies/fixtures, and the logger
+  // package itself legitimately uses console / process.stdout in its console
+  // transport and output().
+  {
+    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+    ignores: [
+      '**/__tests__/**',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      'packages/shared/logger/**',
+    ],
+    rules: {
+      'no-console': 'error',
+    },
+  },
   // Dependency declaration — every imported package must be declared in the
   // project's own package.json. Lints the package.json files themselves.
   {

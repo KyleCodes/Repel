@@ -1,4 +1,5 @@
 import type { Tx } from '@repel/backend-db/types';
+import type { LogContext } from '@repel/logger/context';
 
 // The unit of async work moved through the queue. `topic` selects the logical
 // queue (and the consumer bound to it); `orgId` scopes the handler's tenant
@@ -9,15 +10,21 @@ export interface Envelope<T = unknown> {
   orgId: string;
   payload: T;
   idempotencyKey?: string;
+  // Correlation id of the trace that enqueued this job; the consumer adopts it
+  // so one trace spans enqueue→consume.
+  traceId?: string;
 }
 
 // What lands in the job_queue.payload JSONB column. orgId rides as a top-level
 // wrapper key — not merged into the user payload — so the user payload shape is
 // untouched and orgId extraction on the read side is unambiguous. topic and
 // idempotencyKey live in their own columns (topic, dedup_key), not here.
+// traceId rides the wrapper too — correlation metadata, never merged into the
+// user payload.
 export interface StoredPayload {
   orgId: string;
   payload: unknown;
+  traceId?: string;
 }
 
 export interface EnqueueOptions {
@@ -27,6 +34,9 @@ export interface EnqueueOptions {
   // Join a caller's ambient transaction so the enqueue commits atomically with
   // the triggering write. Omitted, enqueue opens its own short transaction.
   tx?: Tx;
+  // Explicit trace to stamp on the job. Normally omitted — enqueue inherits the
+  // ambient log context's traceId so the trace propagates with no call-site work.
+  traceId?: string;
 }
 
 // Discriminated so a deduplicated enqueue is an explicit outcome, never a
@@ -54,6 +64,9 @@ export interface ConsumerConfig {
   reapIntervalMs?: number;
   // Age after which a completed job is deleted by the sweep. Default 7 days.
   completedTtlMs?: number;
+  // Diagnostic fields seeded into the per-job context (e.g. the owning
+  // service). Merged under traceId/jobId, which the consumer always sets.
+  contextFields?: Partial<LogContext>;
 }
 
 // The control surface consume() returns. start() resolves once the poll loop is

@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { logger } from '@repel/logger/logger';
 
 // Commander `.action()` parse boundary per ADR-012. Build a raw input object
 // from positional args + options, hand it here, and the caller receives a
@@ -12,7 +13,7 @@ export function parseOrExit<S extends z.ZodTypeAny>(
   if (!result.success) {
     for (const issue of result.error.issues) {
       const path = issue.path.length ? issue.path.join('.') + ': ' : '';
-      console.error(`error: ${path}${issue.message}`);
+      logger.error(`${path}${issue.message}`);
     }
     process.exit(1);
   }

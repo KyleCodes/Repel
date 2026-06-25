@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { RunnerOption } from 'node-pg-migrate';
+import { logger } from '@repel/logger/logger';
 import { sanitizeSlug } from '@repel/slug';
 import { extractTicketSlug } from './branch';
 
@@ -226,7 +227,7 @@ export function buildRunnerOptions(
     migrationsTable: 'pgmigrations',
     direction,
     log: function (msg: string): void {
-      console.log(msg);
+      logger.info(msg);
     },
   };
   if ('file' in resolved) {

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Command } from 'commander';
+import { logger } from '@repel/logger/logger';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { renderEnvLocal } from './lib/env-file';
 import { deriveWorktreeEnv } from './lib/worktree-env';
@@ -37,9 +38,14 @@ export async function runProvision(input: ProvisionInput): Promise<void> {
   mkdirSync(dirname(envPath), { recursive: true });
   writeFileSync(envPath, renderEnvLocal(env), { mode: 0o600 });
 
-  console.log(`env provision: ${input.branch} → ${env.projectName}`);
-  console.log(
-    `env provision: pg ${env.pgPort}, grafana ${env.grafanaPort}, api ${env.apiPort}`
-  );
-  console.log(`env provision: wrote ${envPath}`);
+  logger.info('provision: resolved stack', {
+    branch: input.branch,
+    projectName: env.projectName,
+  });
+  logger.info('provision: ports', {
+    pg: env.pgPort,
+    grafana: env.grafanaPort,
+    api: env.apiPort,
+  });
+  logger.info('provision: wrote', { envPath });
 }

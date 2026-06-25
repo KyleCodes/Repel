@@ -3,6 +3,7 @@ import { nukeDatabase, refreshTemplate } from '@repel/backend-db/admin-ops';
 import { resolveAdminUrl } from '@repel/backend-db/lib/admin-url';
 import { migrationsService } from '@repel/backend-db/migrations-tracking/service';
 import { getOptionalEnvVar } from '@repel/backend-env/accessors';
+import { logger } from '@repel/logger/logger';
 import { confirm } from '../lib/confirm';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { registerEncryptionCommands } from './encryption/handler';
@@ -149,7 +150,7 @@ export async function runDumpCommand(input: DumpInput): Promise<void> {
     database: input.database,
     outFile: input.out,
   });
-  console.log(`db dump: wrote ${input.out}`);
+  logger.info('dump: wrote', { out: input.out });
 }
 
 export async function runRestoreCommand(input: RestoreInput): Promise<void> {
@@ -159,7 +160,7 @@ export async function runRestoreCommand(input: RestoreInput): Promise<void> {
     database: input.database,
     inFile: input.fromFile,
   });
-  console.log(`db restore: restored ${input.fromFile}`);
+  logger.info('restore: restored', { fromFile: input.fromFile });
 }
 
 export async function runRefreshTemplate(
@@ -167,10 +168,12 @@ export async function runRefreshTemplate(
 ): Promise<void> {
   const adminUrl = readAdminUrlFromEnv();
   await refreshTemplate({ adminUrl, template: input.template });
-  console.log(`db refresh-template: recreated ${input.template} (empty)`);
-  console.log(
-    `db refresh-template: next steps — run migrations and bootstrap against ${input.template}`
-  );
+  logger.info('refresh-template: recreated (empty)', {
+    template: input.template,
+  });
+  logger.info('refresh-template: next steps — run migrations and bootstrap', {
+    template: input.template,
+  });
 }
 
 export async function runNuke(
@@ -186,14 +189,14 @@ export async function runNuke(
       stdin
     );
     if (!ok) {
-      console.log('db nuke: cancelled');
+      logger.info('nuke: cancelled');
       return;
     }
   }
   const databaseUrl = readDatabaseUrlFromEnvLocal();
   await nukeDatabase({ databaseUrl });
-  console.log(
-    'db nuke: dropped and recreated the public schema — run `repel db migrations up` to re-apply migrations from zero'
+  logger.info(
+    'nuke: dropped and recreated the public schema — run `repel db migrations up` to re-apply migrations from zero'
   );
   // Regenerate types to reflect the now-empty schema.
   await runCodegen();
@@ -206,7 +209,7 @@ export async function runCodegenCommand(_input: CodegenInput): Promise<void> {
 export async function runStatus(_input: StatusInput): Promise<void> {
   const applied = await migrationsService.listApplied();
   const fs = listFsMigrations();
-  console.log(
+  logger.output(
     renderStatusTable(
       partitionStatus({
         fs,
@@ -214,6 +217,6 @@ export async function runStatus(_input: StatusInput): Promise<void> {
           return a.name;
         }),
       })
-    )
+    ) + '\n'
   );
 }

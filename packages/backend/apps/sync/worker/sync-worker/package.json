@@ -12,7 +12,8 @@
   "dependencies": {
     "@repel/backend-queue": "workspace:*",
     "@repel/backend-runtime": "workspace:*",
-    "@repel/backend-sync": "workspace:*"
+    "@repel/backend-sync": "workspace:*",
+    "@repel/logger": "workspace:*"
   },
   "nx": {
     "tags": [

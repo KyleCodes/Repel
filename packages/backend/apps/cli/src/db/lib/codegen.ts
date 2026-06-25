@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import { logger } from '@repel/logger/logger';
 import { readDatabaseUrlFromEnvLocal } from './env-local';
 import { MIGRATIONS_DIR } from './migrations';
 
@@ -50,5 +51,5 @@ export async function runCodegen(): Promise<void> {
     ['--bun', 'x', 'prettier', '--write', GENERATED_TYPES_FILE],
     { encoding: 'utf8', stdio: 'inherit' }
   );
-  console.log(`db codegen: regenerated ${GENERATED_TYPES_FILE}`);
+  logger.info('codegen: regenerated', { file: GENERATED_TYPES_FILE });
 }

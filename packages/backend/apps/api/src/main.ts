@@ -1,4 +1,5 @@
 import type { RunnableApp } from '@repel/backend-runtime/application';
+import { logger } from '@repel/logger/logger';
 import { startApi } from './router';
 
 // The api's launch contract — the cli's `services run` imports this to boot it.
@@ -9,7 +10,7 @@ export const apiApp: RunnableApp = { start: startApi };
 // is true only when this file is the process entrypoint, false when imported).
 if (import.meta.main) {
   apiApp.start().catch((err) => {
-    console.error(err);
+    logger.error('api failed to start', err);
     process.exit(1);
   });
 }

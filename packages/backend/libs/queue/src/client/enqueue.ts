@@ -1,4 +1,6 @@
 import { runInTx } from '@repel/backend-db/tx';
+import { currentLogContext } from '@repel/logger/context';
+import { logger } from '@repel/logger/logger';
 import {
   type EnqueueJobInput,
   enqueueJob,
@@ -17,11 +19,13 @@ export async function enqueue<T>(
   payload: T,
   opts: EnqueueOptions
 ): Promise<EnqueueResult> {
+  // Inherit the enqueuer's trace so it spans into the worker; opts.traceId wins.
+  const traceId = opts.traceId ?? currentLogContext()?.traceId;
   const input: EnqueueJobInput = {
     topic,
     dedupKey: opts.dedupKey ?? null,
     maxAttempts: opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
-    stored: { orgId: opts.orgId, payload },
+    stored: { orgId: opts.orgId, payload, ...(traceId && { traceId }) },
   };
 
   const row = opts.tx
@@ -29,9 +33,10 @@ export async function enqueue<T>(
     : await runInTx((trx) => enqueueJob(trx, input))({});
 
   if (!row) {
-    console.warn(
-      `queue: duplicate enqueue ignored for "${topic}" (dedupKey=${opts.dedupKey})`
-    );
+    logger.warn('duplicate enqueue ignored', {
+      topic,
+      dedupKey: opts.dedupKey,
+    });
     return { enqueued: false, reason: 'dedup' };
   }
   return { enqueued: true, id: row.id };

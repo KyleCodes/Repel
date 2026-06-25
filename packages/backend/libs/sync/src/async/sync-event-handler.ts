@@ -1,4 +1,5 @@
 import type { AdapterEvent } from '@repel/backend-adapters/types';
+import { logger } from '@repel/logger/logger';
 import { SyncMissingNormalizedError } from '../error';
 import {
   type EventScope,
@@ -12,43 +13,41 @@ import { type PersistMessageInput, syncService } from '../persistence/service';
 import type { SyncContext, SyncEventHandler } from '../types';
 
 export const syncEventHandler: SyncEventHandler = {
+  // The per-task log scope (service, traceId, syncJobId, taskId) is established
+  // by the caller (runSyncTask), so this just routes the event.
   async handle(event: AdapterEvent, ctx: SyncContext): Promise<void> {
     const { orgId, userId } = ctx.syncJob;
     const taskId = ctx.syncTask.id;
     const scope: EventScope = { orgId, userId, taskId };
-    const tag = `[sync ${taskId}]`;
 
     switch (event.type) {
       case 'started': {
         const { estimatedTotal } = event;
-        console.log(
-          `${tag} started${estimatedTotal === undefined ? '' : ` estimatedTotal=${estimatedTotal}`}`
-        );
+        logger.info('started', { estimatedTotal });
         await createStartedEvent(scope, event);
         break;
       }
       case 'auth': {
-        console.log(`${tag} auth refreshed=${event.refreshed}`);
+        logger.info('auth', { refreshed: event.refreshed });
         await createAuthEvent(scope, event);
         break;
       }
       case 'progress': {
         const { processed, estimatedTotal } = event;
-        console.log(
-          `${tag} progress processed=${processed}${estimatedTotal === undefined ? '' : `/${estimatedTotal}`}`
-        );
+        logger.info('progress', { processed, estimatedTotal });
         await createProgressEvent(scope, event);
         break;
       }
       case 'completed': {
-        console.log(
-          `${tag} completed processed=${event.processed} cursor=${JSON.stringify(event.cursor)}`
-        );
+        logger.info('completed', {
+          processed: event.processed,
+          cursor: event.cursor,
+        });
         await createCompletedEvent(scope, event);
         break;
       }
       case 'failed': {
-        console.log(`${tag} failed error=${event.error.message}`);
+        logger.info('failed', { error: event.error.message });
         await createFailedEvent(scope, event);
         break;
       }
@@ -69,9 +68,11 @@ export const syncEventHandler: SyncEventHandler = {
         const bytesByExternalId = new Map(
           event.attachments.map((a) => [a.externalAttachmentId, a.bytes])
         );
-        console.log(
-          `${tag} message participants=${participants.length} attachments=${attachments.length} subject="${message.subject ?? '(no subject)'}"`
-        );
+        logger.info('message', {
+          participants: participants.length,
+          attachments: attachments.length,
+          subject: message.subject ?? '(no subject)',
+        });
         const input: PersistMessageInput = {
           orgId,
           userId,

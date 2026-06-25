@@ -9,6 +9,9 @@
       "path": "../../../shared/slug"
     },
     {
+      "path": "../../../shared/logger"
+    },
+    {
       "path": "../../../shared/errors"
     },
     {

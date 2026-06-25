@@ -1,5 +1,6 @@
 import { boundedConcurrencyPoolStream } from '@repel/concurrency';
 import { type HttpDeps } from '@repel/http/client';
+import { logger } from '@repel/logger/logger';
 import { refreshIfExpired } from '../../lib/oauth2/flow';
 import type {
   AdapterEvent,
@@ -179,9 +180,10 @@ async function fetchAttachments(
   for (const att of attachments) {
     const attachmentId = att.externalAttachmentId;
     if (attachmentId === null || attachmentId === undefined) {
-      console.warn(
-        `Gmail attachment on message ${messageId} has no attachmentId; skipping bytes (filename: ${att.filename})`
-      );
+      logger.warn('attachment has no attachmentId; skipping bytes', {
+        messageId,
+        filename: att.filename,
+      });
       continue;
     }
     try {

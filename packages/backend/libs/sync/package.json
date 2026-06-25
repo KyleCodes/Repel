@@ -22,6 +22,7 @@
     "@repel/concurrency": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
+    "@repel/logger": "workspace:*",
     "kysely": "^0.27.3"
   },
   "devDependencies": {

@@ -1,12 +1,21 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { currentLogContext } from '@repel/logger/context';
 import { PermanentHandlerError } from '../../error';
 import type { ClaimedJob, Transport } from '../../persistence/service';
 import type { Envelope } from '../../types';
 import { consume } from '../consume';
 
-function envelope(payload: unknown): Envelope {
-  return { topic: 'test', orgId: 'org-1', payload };
+function envelope(payload: unknown, traceId?: string): Envelope {
+  return {
+    topic: 'test',
+    orgId: 'org-1',
+    payload,
+    ...(traceId && { traceId }),
+  };
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // An in-memory transport (a struct adhering to Transport, no class). claim()
 // hands out queued jobs oldest-first up to the limit; complete/reschedule/
@@ -188,7 +197,7 @@ describe('consume', function () {
     // attempts starts at 1 (this delivery), maxAttempts 3: expect reschedule at
     // attempts 1 and 2, dead-letter at attempts 3.
     t.seed([job('x', 'boom', 1, 3)]);
-    const warn = spyOn(console, 'warn').mockReturnValue(undefined);
+    const write = spyOn(process.stderr, 'write').mockReturnValue(true);
     let warned: string[] = [];
 
     try {
@@ -204,17 +213,18 @@ describe('consume', function () {
       await waitFor(() => t.deadLettered.length === 1);
       await consumer.stop();
       // Capture before restore — mockRestore() clears the recorded calls.
-      warned = warn.mock.calls.map((c) => String(c[0]));
+      warned = write.mock.calls.map((c) => String(c[0]));
     } finally {
-      warn.mockRestore();
+      write.mockRestore();
     }
 
     expect(t.rescheduled.map((r) => r.id)).toEqual(['x', 'x']);
     expect(t.rescheduled[0]!.error).toBe('handler failed');
     expect(t.deadLettered[0]).toEqual({ id: 'x', error: 'handler failed' });
     expect(t.completed).toHaveLength(0);
-    // The dead-letter path warns with the job id and the error.
-    expect(warned.some((line) => line.includes('dead-lettered x'))).toBe(true);
+    // The dead-letter path warns with the job id and the error in its fields.
+    expect(warned.some((line) => line.includes('dead-lettered'))).toBe(true);
+    expect(warned.some((line) => line.includes('"jobId":"x"'))).toBe(true);
     expect(warned.some((line) => line.includes('handler failed'))).toBe(true);
   });
 
@@ -298,7 +308,7 @@ describe('consume — reaper', function () {
   test('sweeps completed jobs on its own timer with the configured TTL, and logs when rows are reaped', async function () {
     const t = makeFakeTransport();
     t.reapReturns = 3;
-    const log = spyOn(console, 'log').mockReturnValue(undefined);
+    const write = spyOn(process.stderr, 'write').mockReturnValue(true);
     let logged: string[] = [];
 
     try {
@@ -316,17 +326,18 @@ describe('consume — reaper', function () {
       await waitFor(() => t.reapCalls.length > 0);
       await consumer.stop();
       // Capture before restore — mockRestore() clears the recorded calls.
-      logged = log.mock.calls.map((c) => String(c[0]));
+      logged = write.mock.calls.map((c) => String(c[0]));
     } finally {
-      log.mockRestore();
+      write.mockRestore();
     }
 
     // The sweep ran with the configured TTL.
     expect(t.reapCalls[0]).toBe(1234);
-    // A non-zero reap is logged.
-    expect(logged.some((line) => line.includes('reaped 3 completed'))).toBe(
+    // A non-zero reap is logged with the count in its fields.
+    expect(logged.some((line) => line.includes('reaped completed jobs'))).toBe(
       true
     );
+    expect(logged.some((line) => line.includes('"reaped":3'))).toBe(true);
   });
 
   test('stop() halts the reaper (no sweep after stop)', async function () {
@@ -346,5 +357,54 @@ describe('consume — reaper', function () {
     // Wait several reap intervals; the count must not grow after stop().
     await new Promise((r) => setTimeout(r, 30));
     expect(t.reapCalls.length).toBe(countAtStop);
+  });
+});
+
+describe('consume — traceId propagation', function () {
+  test('adopts the enqueuer traceId from the envelope for the handler scope', async function () {
+    const t = makeFakeTransport();
+    t.seed([
+      {
+        id: 'j1',
+        envelope: envelope(1, 'trace-xyz'),
+        attempts: 1,
+        maxAttempts: 3,
+      },
+    ]);
+    let seenTraceId: string | undefined;
+
+    const consumer = consume(
+      'test',
+      async () => {
+        seenTraceId = currentLogContext()?.traceId;
+      },
+      { pollIntervalMs: 5, concurrency: 1 },
+      t
+    );
+    await consumer.start();
+    await waitFor(() => t.completed.length === 1);
+    await consumer.stop();
+
+    expect(seenTraceId).toBe('trace-xyz');
+  });
+
+  test('mints a fresh uuid traceId for a job enqueued outside any trace', async function () {
+    const t = makeFakeTransport();
+    t.seed([job('j2', 1)]);
+    let seenTraceId: string | undefined;
+
+    const consumer = consume(
+      'test',
+      async () => {
+        seenTraceId = currentLogContext()?.traceId;
+      },
+      { pollIntervalMs: 5, concurrency: 1 },
+      t
+    );
+    await consumer.start();
+    await waitFor(() => t.completed.length === 1);
+    await consumer.stop();
+
+    expect(seenTraceId).toMatch(UUID_RE);
   });
 });
