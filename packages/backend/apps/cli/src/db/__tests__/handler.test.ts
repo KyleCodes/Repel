@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import { registerDbCommands, runNuke } from '../handler';
 
@@ -37,21 +37,16 @@ describe('registerDbCommands', function () {
 });
 
 describe('runNuke', function () {
-  // A captured/restored console.log so the cancellation message does not
-  // leak into the test runner's output, and can be asserted on.
-  let logCalls: unknown[][];
-  let originalConsoleLog: typeof console.log;
+  // The cancellation message routes through the logger to stderr; spy on the
+  // write so it does not leak into runner output and can be asserted.
+  let writeSpy: ReturnType<typeof spyOn>;
 
   beforeEach(function () {
-    logCalls = [];
-    originalConsoleLog = console.log;
-    console.log = function (...args: unknown[]): void {
-      logCalls.push(args);
-    };
+    writeSpy = spyOn(process.stderr, 'write').mockReturnValue(true);
   });
 
   afterEach(function () {
-    console.log = originalConsoleLog;
+    writeSpy.mockRestore();
   });
 
   test('without --yes, a declined prompt cancels without touching the db', async function () {
@@ -59,7 +54,8 @@ describe('runNuke', function () {
     // returns false, so runNuke must cancel before any db connection.
     const declinedStdin = Readable.from([]);
     await runNuke({ yes: false }, declinedStdin);
-    expect(logCalls).toHaveLength(1);
-    expect(logCalls[0]![0]).toBe('db nuke: cancelled');
+    // stderr carries both the confirm() prompt and the cancellation diagnostic.
+    const lines = writeSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(lines.some((l: string) => l.includes('nuke: cancelled'))).toBe(true);
   });
 });

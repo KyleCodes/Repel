@@ -6,6 +6,9 @@
   },
   "references": [
     {
+      "path": "../../../shared/logger"
+    },
+    {
       "path": "../../../shared/errors"
     },
     {

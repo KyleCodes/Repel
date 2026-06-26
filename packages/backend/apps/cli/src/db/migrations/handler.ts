@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import type { Command } from 'commander';
 import runner from 'node-pg-migrate';
+import { logger } from '@repel/logger/logger';
 import { parseOrExit } from '../../lib/parse-or-exit';
 import { extractTicketSlug, getCurrentBranch } from '../lib/branch';
 import { runCodegen } from '../lib/codegen';
@@ -98,7 +99,7 @@ export async function runMigrateCreate(
     createdAt: new Date(),
   });
   applyHeaderToFile(filePath, header);
-  console.log(`db migrations create: wrote ${filePath}`);
+  logger.info('migrations create: wrote', { filePath });
 }
 
 export async function runMigrateUp(input: MigrateUpInput): Promise<void> {

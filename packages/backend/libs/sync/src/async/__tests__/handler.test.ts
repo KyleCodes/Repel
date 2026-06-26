@@ -4,6 +4,7 @@ import type {
   AdapterEvent,
   IProviderAdapter,
 } from '@repel/backend-adapters/types';
+import { type LogContext, currentLogContext } from '@repel/logger/context';
 import { syncService } from '../../persistence/service';
 import type { SyncContext, SyncEventHandler, SyncJob } from '../../types';
 import { type SyncDeps, runSyncJob } from '../handler';
@@ -434,5 +435,32 @@ describe('runSyncJob — task concurrency', function () {
     expect(result.tasks[0]!.status).toBe('completed');
     expect(result.tasks[1]!.status).toBe('failed');
     expect(result.tasks[2]!.status).toBe('completed');
+  });
+});
+
+describe('runSyncJob — per-task log scope', function () {
+  test('each task runs under a log context carrying its syncJobId and taskId', async function () {
+    const seen: LogContext[] = [];
+    const capturingHandler: SyncEventHandler = {
+      handle() {
+        const ctx = currentLogContext();
+        if (ctx) seen.push(ctx);
+      },
+    };
+    const adapter = makeAdapter([
+      { type: 'completed', cursor: null, processed: 0 },
+    ]);
+    await runSyncJob(
+      job([
+        { id: 'task-0', providerAccountId: 'pa-0', spec: { type: 'full' } },
+        { id: 'task-1', providerAccountId: 'pa-1', spec: { type: 'full' } },
+      ]),
+      makeDeps(adapter, { handler: capturingHandler })
+    );
+
+    expect(seen).toHaveLength(2);
+    expect(seen.map((c) => c.taskId).sort()).toEqual(['task-0', 'task-1']);
+    // Both tasks belong to the same job, and the scope isolates taskId per task.
+    expect(seen.every((c) => c.syncJobId === 'job-1')).toBe(true);
   });
 });

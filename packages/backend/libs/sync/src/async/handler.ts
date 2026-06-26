@@ -9,6 +9,7 @@ import {
   loadEncryptionKey as defaultLoadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
 import { runPool } from '@repel/concurrency';
+import { runWithLogContext } from '@repel/logger/context';
 import { SyncIncompleteStreamError, SyncTaskFailedError } from '../error';
 import type { SyncJob, SyncTask } from '../persistence/contract';
 import { createFailedEvent } from '../persistence/lib/events';
@@ -50,8 +51,13 @@ export async function runSyncJob(
   const settled = await runPool(
     job.tasks,
     deps.taskConcurrency ?? DEFAULT_TASK_CONCURRENCY,
+    // One log scope per task (syncJobId + taskId), established at the dispatch
+    // seam so runSyncTask stays a plain function. Per-task, not per-job, because
+    // runPool interleaves tasks on one event loop.
     function (task) {
-      return runSyncTask(job, task, deps);
+      return runWithLogContext({ syncJobId: job.id, taskId: task.id }, () =>
+        runSyncTask(job, task, deps)
+      );
     }
   );
 
@@ -174,9 +180,10 @@ async function runSyncTask(
       cursor,
     };
   } catch (e) {
-    // The adapter emitted no `failed` event for the handler to persist (it threw,
-    // or the stream had no terminal event), so write the terminal failed event
-    // here — otherwise the derived status would stay `running`. Best-effort.
+    // The adapter emitted no `failed` event for the handler to persist (it
+    // threw, or the stream had no terminal event), so write the terminal failed
+    // event here — otherwise the derived status would stay `running`.
+    // Best-effort.
     const err = e instanceof Error ? e : new Error(String(e));
     try {
       await createFailedEvent(

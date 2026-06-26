@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Command } from 'commander';
+import { logger } from '@repel/logger/logger';
 import { confirm } from '../../lib/confirm';
 import { parseOrExit } from '../../lib/parse-or-exit';
 import { type GenerateKeyInput, GenerateKeyInputSchema } from './schemas/index';
@@ -36,9 +37,9 @@ export async function runGenerateKey(
   stdin: NodeJS.ReadableStream = process.stdin
 ): Promise<void> {
   if (!input.yes) {
-    console.warn(
-      'db encryption generate-key: WARNING — this prints a NEW key. It does ' +
-        'NOT re-encrypt existing data; anything already encrypted under the ' +
+    logger.warn(
+      'encryption generate-key: this prints a NEW key. It does NOT ' +
+        're-encrypt existing data; anything already encrypted under the ' +
         'current key becomes unrecoverable if you switch to this one. Store it ' +
         'in .env.development and never commit it.'
     );
@@ -47,7 +48,7 @@ export async function runGenerateKey(
       stdin
     );
     if (!ok) {
-      console.log('db encryption generate-key: cancelled');
+      logger.info('encryption generate-key: cancelled');
       return;
     }
   }

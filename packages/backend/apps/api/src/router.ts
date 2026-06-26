@@ -1,5 +1,7 @@
 import express, { Application, NextFunction, Request, Response } from 'express';
 import { getOptionalEnvVar } from '@repel/backend-env/accessors';
+import { runWithLogContext } from '@repel/logger/context';
+import { logger } from '@repel/logger/logger';
 
 // Augment Express Request with the org id resolved by middleware.
 // Route handlers call decorated service singletons directly (e.g.
@@ -15,6 +17,13 @@ declare global {
 
 export function createRouter(): Application {
   const app = express();
+
+  // Establish the per-request diagnostic context first, so every downstream
+  // handler and the error handler log under service:'api' with a shared
+  // traceId. Express invokes next() synchronously, so ALS spans the chain.
+  app.use(function (_req, _res, next) {
+    runWithLogContext({ service: 'api', traceId: crypto.randomUUID() }, next);
+  });
 
   app.use(express.json());
 
@@ -41,7 +50,7 @@ export function createRouter(): Application {
     res: Response,
     _next: NextFunction
   ) {
-    console.error(err);
+    logger.error('request failed', err);
     res.status(500).json({ error: err.message });
   });
 
@@ -53,7 +62,7 @@ export function startApi(): Promise<void> {
     const app = createRouter();
     const port = getOptionalEnvVar('PORT', '3000');
     app.listen(port, function () {
-      console.log(`API listening on port ${port}`);
+      logger.info('listening', { port });
       resolve();
     });
   });

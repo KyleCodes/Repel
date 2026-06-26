@@ -22,71 +22,63 @@ describe('registerEncryptionCommands', function () {
 });
 
 describe('runGenerateKey', function () {
-  // Capture console.log (status) + console.warn (the key warning) so neither
-  // leaks into runner output, and both can be asserted on.
-  let logCalls: unknown[][];
-  let warnCalls: unknown[][];
-  let originalConsoleLog: typeof console.log;
-  let originalConsoleWarn: typeof console.warn;
+  // The raw key line goes to stdout (the data channel). The warning/cancellation
+  // diagnostics go through the logger to stderr. Spy on both streams separately.
+  let stdoutSpy: ReturnType<typeof spyOn>;
+  let stderrSpy: ReturnType<typeof spyOn>;
+
+  function stdoutLines(): string[] {
+    return stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+  }
+  function stderrLines(): string[] {
+    return stderrSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+  }
+  function keyLines(): string[] {
+    return stdoutLines().filter((l) => l.startsWith('ENCRYPTION_KEY='));
+  }
 
   beforeEach(function () {
-    logCalls = [];
-    warnCalls = [];
-    originalConsoleLog = console.log;
-    originalConsoleWarn = console.warn;
-    console.log = function (...args: unknown[]): void {
-      logCalls.push(args);
-    };
-    console.warn = function (...args: unknown[]): void {
-      warnCalls.push(args);
-    };
+    stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    stderrSpy = spyOn(process.stderr, 'write').mockReturnValue(true);
   });
 
   afterEach(function () {
-    console.log = originalConsoleLog;
-    console.warn = originalConsoleWarn;
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 
   test('a declined prompt warns, prints no key, and reports cancellation', async function () {
-    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
-    try {
-      // Closed stream = non-TTY stdin: confirm() sees EOF and returns false.
-      await runGenerateKey({ yes: false }, Readable.from([]));
-    } finally {
-      writeSpy.mockRestore();
-    }
-    expect(writeSpy).not.toHaveBeenCalled();
-    expect(String(warnCalls[0]![0])).toContain('WARNING');
-    expect(logCalls.at(-1)![0]).toBe('db encryption generate-key: cancelled');
+    // Closed stream = non-TTY stdin: confirm() sees EOF and returns false.
+    await runGenerateKey({ yes: false }, Readable.from([]));
+    // No key was emitted to the data channel.
+    expect(keyLines()).toHaveLength(0);
+    // The warning and the cancellation diagnostic were both emitted to stderr.
+    const diagnostics = stderrLines();
+    expect(
+      diagnostics.some((l) => l.includes('re-encrypt existing data'))
+    ).toBe(true);
+    expect(diagnostics.some((l) => l.includes('generate-key: cancelled'))).toBe(
+      true
+    );
   });
 
   test('a confirmed prompt prints a 32-byte hex ENCRYPTION_KEY line', async function () {
-    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
-    let printed = '';
-    try {
-      await runGenerateKey({ yes: false }, Readable.from(['y\n']));
-      printed = String(writeSpy.mock.calls[0][0]);
-    } finally {
-      writeSpy.mockRestore();
-    }
-    const match = printed.match(/^ENCRYPTION_KEY=([0-9a-f]+)\n$/);
+    await runGenerateKey({ yes: false }, Readable.from(['y\n']));
+    const keys = keyLines();
+    expect(keys).toHaveLength(1);
+    const match = keys[0]!.match(/^ENCRYPTION_KEY=([0-9a-f]+)\n$/);
     expect(match).not.toBeNull();
     expect(Buffer.from(match![1], 'hex').length).toBe(32);
   });
 
   test('--yes skips the prompt and prints the key directly', async function () {
-    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
-    let printed = '';
-    try {
-      // No stdin needed — --yes bypasses confirm entirely.
-      await runGenerateKey({ yes: true });
-      printed = String(writeSpy.mock.calls[0][0]);
-    } finally {
-      writeSpy.mockRestore();
-    }
-    const match = printed.match(/^ENCRYPTION_KEY=([0-9a-f]{64})\n$/);
+    // No stdin needed — --yes bypasses confirm entirely.
+    await runGenerateKey({ yes: true });
+    const keys = keyLines();
+    expect(keys).toHaveLength(1);
+    const match = keys[0]!.match(/^ENCRYPTION_KEY=([0-9a-f]{64})\n$/);
     expect(match).not.toBeNull();
-    // No prompt/warning emitted when --yes is passed.
-    expect(logCalls).toHaveLength(0);
+    // No prompt/warning emitted when --yes is passed: the only stdout write is the key.
+    expect(stdoutLines()).toHaveLength(1);
   });
 });

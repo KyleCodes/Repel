@@ -21,6 +21,7 @@
     "@repel/backend-sync-worker": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
+    "@repel/logger": "workspace:*",
     "@repel/slug": "workspace:*",
     "commander": "^12.1.0",
     "node-pg-migrate": "^7.7.0",

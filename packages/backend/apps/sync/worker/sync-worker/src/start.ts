@@ -1,5 +1,6 @@
 import { consume as defaultConsume } from '@repel/backend-queue/client';
 import type { RunnableApp } from '@repel/backend-runtime/application';
+import { logger } from '@repel/logger/logger';
 import { syncHandler } from './handler';
 
 // The topic this worker consumes. The CLI enqueuer writes to the same topic
@@ -16,7 +17,9 @@ export interface SyncWorkerDeps {
 // in-flight handlers before resolving.
 export function createSyncWorkerApp(deps: SyncWorkerDeps = {}): RunnableApp {
   const consume = deps.consume ?? defaultConsume;
-  const consumer = consume(SYNC_TOPIC, syncHandler);
+  const consumer = consume(SYNC_TOPIC, syncHandler, {
+    contextFields: { service: 'sync-worker' },
+  });
 
   return {
     start: () => consumer.start(),
@@ -33,7 +36,7 @@ export const syncWorkerApp: RunnableApp = createSyncWorkerApp();
 // is true only when this file is the process entrypoint, false when imported).
 if (import.meta.main) {
   syncWorkerApp.start().catch((err) => {
-    console.error(err);
+    logger.error('sync-worker failed to start', err);
     process.exit(1);
   });
 }

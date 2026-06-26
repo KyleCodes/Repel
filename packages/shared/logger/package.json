@@ -1,0 +1,28 @@
+{
+  "name": "@repel/logger",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./logger": "./src/logger.ts",
+    "./context": {
+      "browser": "./src/context/browser.ts",
+      "default": "./src/context/node.ts"
+    },
+    "./console-transport": "./src/transports/console.ts",
+    "./format": "./src/format.ts",
+    "./levels": "./src/levels.ts",
+    "./runtime": "./src/runtime.ts",
+    "./types": "./src/types.ts",
+    "./env": "./src/env.ts"
+  },
+  "scripts": {
+    "test": "bun test --pass-with-no-tests"
+  },
+  "nx": {
+    "tags": [
+      "type:lib",
+      "scope:shared"
+    ]
+  }
+}

@@ -40,8 +40,8 @@ export interface Transport {
   reap(ttlMs: number): Promise<number>;
 }
 
-// Reconstruct the envelope from a claimed row: orgId comes out of the stored
-// payload wrapper, dedup_key maps back to idempotencyKey.
+// Reconstruct the envelope from a claimed row: orgId and traceId come out of the
+// stored payload wrapper, dedup_key maps back to idempotencyKey.
 function fromRow(row: ClaimJobsRow): ClaimedJob {
   const stored = row.payload as unknown as StoredPayload;
   return {
@@ -53,6 +53,7 @@ function fromRow(row: ClaimJobsRow): ClaimedJob {
       orgId: stored.orgId,
       payload: stored.payload,
       ...(row.dedupKey !== null && { idempotencyKey: row.dedupKey }),
+      ...(stored.traceId !== undefined && { traceId: stored.traceId }),
     },
   };
 }

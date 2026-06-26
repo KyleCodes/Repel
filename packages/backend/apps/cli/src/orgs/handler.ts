@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { accountsService } from '@repel/backend-accounts/service';
+import { logger } from '@repel/logger/logger';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { type BootstrapInput, BootstrapInputSchema } from './schemas/index';
 
@@ -39,10 +40,10 @@ export function registerOrgsCommands(program: Command): void {
 
 export async function runBootstrap(input: BootstrapInput): Promise<void> {
   if (input.dryRun) {
-    console.log('Dry run — would create:');
-    console.log(`  org:  ${input.orgName}`);
-    console.log(
-      `  user: ${input.email}${input.name ? ` (${input.name})` : ''}`
+    logger.output('Dry run — would create:\n');
+    logger.output(`  org:  ${input.orgName}\n`);
+    logger.output(
+      `  user: ${input.email}${input.name ? ` (${input.name})` : ''}\n`
     );
     return;
   }
@@ -52,12 +53,14 @@ export async function runBootstrap(input: BootstrapInput): Promise<void> {
     user: { email: input.email, name: input.name ?? null },
   });
 
-  console.log('Created org:');
-  console.log(`  id:   ${org.id}`);
-  console.log(`  name: ${org.name}`);
-  console.log('Created user:');
-  console.log(`  id:    ${user.id}`);
-  console.log(`  email: ${user.email}`);
-  console.log('');
-  console.log('Save these IDs — you will need them for subsequent commands.');
+  logger.output('Created org:\n');
+  logger.output(`  id:   ${org.id}\n`);
+  logger.output(`  name: ${org.name}\n`);
+  logger.output('Created user:\n');
+  logger.output(`  id:    ${user.id}\n`);
+  logger.output(`  email: ${user.email}\n`);
+  logger.output('\n');
+  logger.output(
+    'Save these IDs — you will need them for subsequent commands.\n'
+  );
 }

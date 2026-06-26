@@ -41,12 +41,28 @@ function stubApp(): RunnableApp & { start: ReturnType<typeof spyOn> } {
   return app as never;
 }
 
+// The summary is the one raw write whose payload parses to a JSON array; the
+// other writes are the logger's JSON-object diagnostic lines.
+function findSummaryRow(
+  writeSpy: ReturnType<typeof spyOn>
+): Array<{ service: string; status: string; elapsedMs: number }> {
+  for (const call of writeSpy.mock.calls) {
+    try {
+      const parsed = JSON.parse(String(call[0]));
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // diagnostic lines are objects or non-JSON; skip
+    }
+  }
+  throw new Error('no summary array was written to stdout');
+}
+
 describe('runServicesRun', function () {
   test('boots a single named service and prints its summary row', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
     const app = stubApp();
     let shutdownClosedDb = false;
-    let printed = '';
+    let summary: ReturnType<typeof findSummaryRow>;
     try {
       await runServicesRun(
         { name: 'api', all: false },
@@ -70,18 +86,17 @@ describe('runServicesRun', function () {
           },
         }
       );
-      printed = String(writeSpy.mock.calls[0]![0]);
+      summary = findSummaryRow(writeSpy);
     } finally {
       writeSpy.mockRestore();
     }
 
     expect(app.start).toHaveBeenCalledTimes(1);
     expect(shutdownClosedDb).toBe(true);
-    const summary = JSON.parse(printed);
     expect(summary).toHaveLength(1);
-    expect(summary[0].service).toBe('api');
-    expect(summary[0].status).toBe('ready');
-    expect(typeof summary[0].elapsedMs).toBe('number');
+    expect(summary[0]!.service).toBe('api');
+    expect(summary[0]!.status).toBe('ready');
+    expect(typeof summary[0]!.elapsedMs).toBe('number');
   });
 
   test('--all boots every registered service in one call', async function () {
@@ -89,7 +104,7 @@ describe('runServicesRun', function () {
     const a = stubApp();
     const b = stubApp();
     const apps: Record<string, RunnableApp> = { api: a, worker: b };
-    let printed = '';
+    let summary: ReturnType<typeof findSummaryRow>;
     try {
       await runServicesRun(
         { all: true },
@@ -108,18 +123,14 @@ describe('runServicesRun', function () {
           waitForShutdown: async function () {},
         }
       );
-      printed = String(writeSpy.mock.calls[0]![0]);
+      summary = findSummaryRow(writeSpy);
     } finally {
       writeSpy.mockRestore();
     }
 
     expect(a.start).toHaveBeenCalledTimes(1);
     expect(b.start).toHaveBeenCalledTimes(1);
-    const summary = JSON.parse(printed);
-    expect(summary.map((r: { service: string }) => r.service)).toEqual([
-      'api',
-      'worker',
-    ]);
+    expect(summary.map((r) => r.service)).toEqual(['api', 'worker']);
   });
 
   test('throws UnknownServiceError for an unregistered name', async function () {

@@ -6,13 +6,16 @@
   },
   "references": [
     {
+      "path": "../../../../../shared/logger"
+    },
+    {
+      "path": "../../../../libs/sync"
+    },
+    {
       "path": "../../../../libs/runtime"
     },
     {
       "path": "../../../../libs/queue"
-    },
-    {
-      "path": "../../../../libs/sync"
     }
   ],
   "include": ["src"]

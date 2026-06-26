@@ -1,5 +1,6 @@
 import { Command, CommanderError } from 'commander';
 import { closeDb } from '@repel/backend-db/runtime';
+import { runWithLogContext } from '@repel/logger/context';
 import { registerAccountsCommands } from './accounts/handler';
 import { registerDbCommands } from './db/handler';
 import { registerEnvCommands } from './env/handler';
@@ -33,8 +34,9 @@ const HELP_OR_VERSION = new Set([
   'commander.version',
 ]);
 
-program
-  .parseAsync()
+runWithLogContext({ service: 'cli', traceId: crypto.randomUUID() }, () =>
+  program.parseAsync()
+)
   .catch(function (err: unknown) {
     if (err instanceof CommanderError) {
       process.exitCode = HELP_OR_VERSION.has(err.code) ? 0 : err.exitCode;

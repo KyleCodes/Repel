@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { closeDb as defaultCloseDb } from '@repel/backend-db/runtime';
 import type { RunnableApp } from '@repel/backend-runtime/application';
+import { logger } from '@repel/logger/logger';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { UnknownServiceError } from './error';
 import {
@@ -66,7 +67,7 @@ function waitForSignalShutdown(
 ): Promise<void> {
   return new Promise<void>(function (resolve) {
     async function shutdown(signal: NodeJS.Signals): Promise<void> {
-      console.log(`services run: ${signal} received, shutting down`);
+      logger.info('run: signal received, shutting down', { signal });
       await drainAndClose(apps, closeDb);
       resolve();
       process.exit(0);
@@ -106,12 +107,12 @@ async function bootService(
   app: RunnableApp;
   summary: { service: string; status: 'ready'; elapsedMs: number };
 }> {
-  console.log(`services run: ${name} starting`);
+  logger.info('run: starting', { name });
   const startedAt = performance.now();
   const app = await load();
   await app.start();
   const elapsedMs = Math.round(performance.now() - startedAt);
-  console.log(`services run: ${name} ready (${elapsedMs}ms)`);
+  logger.info('run: ready', { name, elapsedMs });
   return { app, summary: { service: name, status: 'ready', elapsedMs } };
 }
 
@@ -143,7 +144,7 @@ export async function runServicesRun(
   const apps = booted.map((b) => b.app);
   const summary = booted.map((b) => b.summary);
 
-  console.log(`services run: all ready (${summary.length})`);
+  logger.info('run: all ready', { count: summary.length });
   process.stdout.write(JSON.stringify(summary) + '\n');
 
   // Block until a shutdown signal; keeps the process alive and parseAsync pending

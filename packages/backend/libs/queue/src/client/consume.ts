@@ -1,4 +1,6 @@
 import { boundedConcurrencyPoolStream } from '@repel/concurrency';
+import { runWithLogContext } from '@repel/logger/context';
+import { logger } from '@repel/logger/logger';
 import { PermanentHandlerError } from '../error';
 import type { ClaimedJob, Transport } from '../persistence/service';
 import { pgTransport } from '../persistence/service';
@@ -59,7 +61,16 @@ export function consume(
 
   async function process(job: ClaimedJob): Promise<void> {
     try {
-      await handler(job.envelope);
+      await runWithLogContext(
+        {
+          ...config.contextFields,
+          // Adopt the enqueuer's trace so it spans enqueue→consume; mint a fresh
+          // one for a job enqueued outside any trace.
+          traceId: job.envelope.traceId ?? crypto.randomUUID(),
+          jobId: job.id,
+        },
+        () => handler(job.envelope)
+      );
       await transport.complete(job.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -67,9 +78,12 @@ export function consume(
       if (!permanent && job.attempts < job.maxAttempts) {
         await transport.reschedule(job.id, backoffMs(job.attempts), message);
       } else {
-        console.warn(
-          `queue: dead-lettered ${job.id} on "${topic}" after ${job.attempts} attempt(s): ${message}`
-        );
+        logger.warn('dead-lettered', {
+          jobId: job.id,
+          topic,
+          attempts: job.attempts,
+          error: message,
+        });
         await transport.deadLetter(job.id, message);
       }
     }
@@ -98,7 +112,7 @@ export function consume(
     try {
       const reaped = await transport.reap(completedTtlMs);
       if (reaped > 0) {
-        console.log(`queue: reaped ${reaped} completed job(s) from "${topic}"`);
+        logger.info('reaped completed jobs', { reaped, topic });
       }
     } finally {
       scheduleNextReap();

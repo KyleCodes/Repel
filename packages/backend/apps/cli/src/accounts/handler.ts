@@ -7,6 +7,7 @@ import {
   encrypt,
   loadEncryptionKey,
 } from '@repel/backend-crypto/encryption';
+import { logger } from '@repel/logger/logger';
 import { confirm } from '../lib/confirm';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { resolveAccount } from '../lib/resolve-account';
@@ -157,7 +158,7 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
   if (!input.yes) {
     const ok = await confirm(`Deactivate ${label}? [y/N] `);
     if (!ok) {
-      console.log('accounts rm: cancelled');
+      logger.info('rm: cancelled');
       return;
     }
   }
@@ -165,7 +166,7 @@ export async function runAccountsRm(input: AccountRmInput): Promise<void> {
     orgId,
     providerAccount: { id: account.id },
   });
-  console.log(`accounts rm: deactivated ${account.id}`);
+  logger.info('rm: deactivated', { id: account.id });
 }
 
 // Injectable seams so the OAuth + persistence path can be unit-tested without
