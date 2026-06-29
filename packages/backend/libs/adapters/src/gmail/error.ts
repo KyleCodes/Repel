@@ -3,9 +3,13 @@ import { AdapterError } from '../error';
 // Base for errors the Gmail adapter raises.
 export abstract class GmailAdapterError extends AdapterError {}
 
-// Thrown by adapter members that are declared but not yet implemented (send at
-// this stage; the incremental/range sync specs until REP-53).
+// Thrown by adapter members that are declared but not yet implemented — `send`
+// at this stage.
 export class GmailNotImplementedError extends GmailAdapterError {}
+
+// A `range` sync spec supplied neither `from` nor `to`. An unbounded range is a
+// caller bug (it would scan the whole mailbox); a full sync is the right tool.
+export class GmailRangeBoundsError extends GmailAdapterError {}
 
 // Base for failures raised while running a sync. v0 fails the whole sync on any
 // of these rather than skipping the message — the normalizer is unproven and we

@@ -18,12 +18,17 @@
     "@repel/backend-db": "workspace:*",
     "@repel/backend-env": "workspace:*",
     "@repel/concurrency": "workspace:*",
+    "@repel/datetime": "workspace:*",
     "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
     "@repel/http": "workspace:*",
     "@repel/logger": "workspace:*",
     "kysely": "^0.27.3",
+    "luxon": "3.7.2",
     "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/luxon": "3.7.2"
   },
   "nx": {
     "tags": [

@@ -10,6 +10,7 @@ import type {
   MessageRaw,
   Thread,
 } from '@repel/backend-db/generated';
+import type { Iso8601String } from '@repel/datetime/types';
 import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/enums';
 import type { HttpDeps } from '@repel/http/client';
 import type { AdapterError } from './error';
@@ -102,9 +103,18 @@ export interface ProviderAuthorization {
 // sync_kind column. `incremental` resumes from an opaque provider cursor;
 // `range` pulls a bounded window; `full` pulls everything. `full.limit` is a
 // dev/debug cap on messages fetched (a production full sync omits it).
+//
+// `range` bounds are Iso8601String, not Date: the spec is persisted to
+// sync_task.spec (JSONB) and rides a queue payload, so it is a serialized form —
+// a Date would not survive the round-trip anyway. The adapter deserializes to a
+// DateTime at its boundary.
 export type AdapterSyncSpec =
   | { readonly type: 'incremental'; readonly cursor: unknown }
-  | { readonly type: 'range'; readonly from?: Date; readonly to?: Date }
+  | {
+      readonly type: 'range';
+      readonly from?: Iso8601String;
+      readonly to?: Iso8601String;
+    }
   | { readonly type: 'full'; readonly limit?: number };
 
 // The decrypted credentials the runner hands an adapter. What's stored at rest
@@ -252,7 +262,9 @@ export interface AdapterMessageEvent {
 }
 
 // Terminal success. `cursor` is the resumption token to persist for the next
-// incremental sync.
+// incremental sync — opaque to the platform, shaped by the adapter. The Gmail
+// adapter emits `{ lastInternalDate: Iso8601String }` (see its GmailSyncCursor),
+// which feeds straight back as the next `incremental` spec's `cursor`.
 export interface AdapterCompletedEvent {
   readonly type: 'completed';
   readonly cursor: unknown;

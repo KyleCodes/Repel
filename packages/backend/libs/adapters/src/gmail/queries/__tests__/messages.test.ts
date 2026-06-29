@@ -51,6 +51,20 @@ describe('listGmailMessages', function () {
     expect(seenUrl).toContain('maxResults=17');
   });
 
+  test('passes q (the Gmail search query) as a query param', async function () {
+    let seenUrl: string | undefined;
+    const fetchImpl = async function (url: string) {
+      seenUrl = url;
+      return jsonResponse({ resultSizeEstimate: 0 });
+    };
+    await listGmailMessages(
+      { accessToken: 'tok', q: 'after:1700000000 before:1700086400' },
+      { fetchImpl: fetchImpl as unknown as typeof fetch }
+    );
+    // URLSearchParams encodes the space and colons.
+    expect(seenUrl).toContain('q=after%3A1700000000+before%3A1700086400');
+  });
+
   test('omits pageToken and maxResults when not given', async function () {
     let seenUrl: string | undefined;
     const fetchImpl = async function (url: string) {
