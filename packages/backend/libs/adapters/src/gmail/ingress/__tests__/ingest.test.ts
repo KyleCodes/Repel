@@ -478,8 +478,11 @@ describe('ingest — fetch failures fail the sync (v0 loud)', function () {
         return json({ error: 'boom' }, { status: 500 });
       return json({ messages: [{ id: 'm1', threadId: 't1' }] });
     };
+    // maxRetries: 0 — 500 is retryable; disable backoff so this asserts the
+    // terminal abort behavior without waiting on the retry loop.
     const it = ingest(input({ spec: { type: 'full', limit: 1 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailMessageFetchError);
   });
@@ -512,6 +515,7 @@ describe('ingest — fetch failures fail the sync (v0 loud)', function () {
     };
     const it = ingest(input({ spec: { type: 'full', limit: 1 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailAttachmentFetchError);
   });
@@ -698,6 +702,7 @@ describe('ingest — concurrent fetch', function () {
     const it = ingest(input({ spec: { type: 'full', limit: 3 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       fetchConcurrency: 3,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailMessageFetchError);
   });

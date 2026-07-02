@@ -8,6 +8,10 @@ export abstract class SyncCliError extends AppError {}
 // sync; incremental/range land with REP-53.
 export class SyncRunFullRequiredError extends SyncCliError {}
 
+// Raised when `syncs run` is given both `--limit` and `--unbounded`. A capped and
+// an uncapped full sync are contradictory; the caller must pick one.
+export class SyncRunLimitUnboundedError extends SyncCliError {}
+
 // Raised when a read verb is given a job id that no sync job in the org matches.
 export class SyncJobNotFoundError extends SyncCliError {}
 

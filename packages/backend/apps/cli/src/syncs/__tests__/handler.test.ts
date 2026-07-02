@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import type { SyncJob, SyncJobResult } from '@repel/backend-sync/types';
-import { SyncJobNotFoundError, SyncRunFullRequiredError } from '../error';
+import { logger } from '@repel/logger/logger';
+import {
+  SyncJobNotFoundError,
+  SyncRunFullRequiredError,
+  SyncRunLimitUnboundedError,
+} from '../error';
 import {
   registerSyncsCommands,
   runSyncRun,
@@ -37,6 +42,7 @@ describe('registerSyncsCommands', function () {
     expect(optionNames).toContain('--account');
     expect(optionNames).toContain('--full');
     expect(optionNames).toContain('--limit');
+    expect(optionNames).toContain('--unbounded');
     expect(optionNames).toContain('--enqueue');
   });
 });
@@ -106,7 +112,12 @@ describe('runSyncRun', function () {
   test('throws SyncRunFullRequiredError when --full is absent', async function () {
     let caught: unknown;
     try {
-      await runSyncRun({ account: 'work', full: false, enqueue: false });
+      await runSyncRun({
+        account: 'work',
+        full: false,
+        unbounded: false,
+        enqueue: false,
+      });
     } catch (e) {
       caught = e;
     }
@@ -121,7 +132,13 @@ describe('runSyncRun', function () {
     let printed = '';
     try {
       await runSyncRun(
-        { account: 'work', full: true, limit: 20, enqueue: false },
+        {
+          account: 'work',
+          full: true,
+          limit: 20,
+          unbounded: false,
+          enqueue: false,
+        },
         {
           resolveAccount: async function () {
             return { id: 'pa-1' } as never;
@@ -158,12 +175,66 @@ describe('runSyncRun', function () {
     expect(JSON.parse(printed)).toEqual(jobResult as never);
   });
 
-  test('omits limit from the spec when not provided', async function () {
+  test('a failed sync result sets a non-zero exit code and logs an error', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const errorLog = spyOn(logger, 'error').mockReturnValue(undefined);
+    const priorExit = process.exitCode;
+    try {
+      const failedResult: SyncJobResult = {
+        jobId: 'job-1',
+        status: 'failed',
+        tasks: [
+          {
+            taskId: 'task-1',
+            providerAccountId: 'pa-1',
+            status: 'failed',
+            processed: 0,
+            cursor: null,
+            error: 'HTTP 403 quota',
+          },
+        ],
+      };
+      await runSyncRun(
+        { account: 'work', full: true, unbounded: false, enqueue: false },
+        {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          createSyncJob: async (j) => j as never,
+          runSyncJob: async () => failedResult,
+        }
+      );
+      expect(process.exitCode).toBe(1);
+      expect(errorLog).toHaveBeenCalled();
+    } finally {
+      process.exitCode = priorExit; // don't leak a failing exit into the runner
+      errorLog.mockRestore();
+      writeSpy.mockRestore();
+    }
+  });
+
+  test('a completed sync result leaves the exit code unchanged', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const priorExit = process.exitCode;
+    try {
+      await runSyncRun(
+        { account: 'work', full: true, unbounded: false, enqueue: false },
+        {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          createSyncJob: async (j) => j as never,
+          runSyncJob: async () => jobResult, // status: 'completed'
+        }
+      );
+      expect(process.exitCode).toBe(priorExit);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  test('applies the default cap when neither --limit nor --unbounded is given', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
     let receivedJob: SyncJob | undefined;
     try {
       await runSyncRun(
-        { account: 'work', full: true, enqueue: false },
+        { account: 'work', full: true, unbounded: false, enqueue: false },
         {
           resolveAccount: async function () {
             return { id: 'pa-2' } as never;
@@ -180,7 +251,48 @@ describe('runSyncRun', function () {
     } finally {
       writeSpy.mockRestore();
     }
+    expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full', limit: 100 });
+  });
+
+  test('--unbounded omits the cap from the spec (whole-mailbox pull)', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    let receivedJob: SyncJob | undefined;
+    try {
+      await runSyncRun(
+        { account: 'work', full: true, unbounded: true, enqueue: false },
+        {
+          resolveAccount: async function () {
+            return { id: 'pa-3' } as never;
+          },
+          createSyncJob: async function (job) {
+            return job as never;
+          },
+          runSyncJob: async function (job) {
+            receivedJob = job;
+            return jobResult;
+          },
+        }
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
     expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full' });
+  });
+
+  test('--limit and --unbounded together throw SyncRunLimitUnboundedError', async function () {
+    let caught: unknown;
+    try {
+      await runSyncRun({
+        account: 'work',
+        full: true,
+        limit: 20,
+        unbounded: true,
+        enqueue: false,
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(SyncRunLimitUnboundedError);
   });
 
   test('--enqueue writes the skeleton, enqueues, and prints { enqueued, jobId } without running', async function () {
@@ -197,7 +309,13 @@ describe('runSyncRun', function () {
     let printed = '';
     try {
       await runSyncRun(
-        { account: 'work', full: true, limit: 5, enqueue: true },
+        {
+          account: 'work',
+          full: true,
+          limit: 5,
+          unbounded: false,
+          enqueue: true,
+        },
         {
           resolveAccount: async function () {
             return { id: 'pa-1' } as never;

@@ -5,12 +5,16 @@ import { enqueue as defaultEnqueue } from '@repel/backend-queue/client';
 import { runSyncJob as defaultRunSyncJob } from '@repel/backend-sync/handler';
 import { syncService as defaultSyncService } from '@repel/backend-sync/service';
 import type { SyncJob } from '@repel/backend-sync/types';
+import { logger } from '@repel/logger/logger';
 import { parseOrExit } from '../lib/parse-or-exit';
 import { resolveAccount as defaultResolveAccount } from '../lib/resolve-account';
 import { resolveOrgId } from '../lib/resolve-org';
 import { resolveUserId } from '../lib/resolve-user';
-import { SyncJobNotFoundError } from './error';
-import { SyncRunFullRequiredError } from './error';
+import {
+  SyncJobNotFoundError,
+  SyncRunFullRequiredError,
+  SyncRunLimitUnboundedError,
+} from './error';
 import {
   type SyncRunInput,
   SyncRunInputSchema,
@@ -39,6 +43,12 @@ import { registerTasksCommands } from './tasks/handler';
 // working model minus orgId (orgId rides the envelope wrapper).
 const SYNC_TOPIC = 'sync';
 
+// Default cap for a full sync when neither `--limit` nor `--unbounded` is given.
+// The cap lives here (the CLI owns the spec), not in the adapter: a bare
+// `--full` stays a safe dev-sized pull; `--unbounded` opts into the whole
+// mailbox by omitting the limit. Overridable via `--limit`.
+const DEFAULT_FULL_SYNC_CAP = 100;
+
 export function registerSyncsCommands(program: Command): void {
   const syncs = program
     .command('syncs')
@@ -56,7 +66,14 @@ export function registerSyncsCommands(program: Command): void {
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
     .option('--full', 'run a full sync (required in v0)')
-    .option('--limit <n>', 'dev cap on messages fetched')
+    .option(
+      '--limit <n>',
+      `dev cap on messages fetched (default ${DEFAULT_FULL_SYNC_CAP})`
+    )
+    .option(
+      '--unbounded',
+      'pull the whole mailbox (no cap); mutually exclusive with --limit'
+    )
     .option(
       '--enqueue',
       'enqueue the job on the sync topic for the worker to run, instead of running it in-process'
@@ -67,6 +84,7 @@ export function registerSyncsCommands(program: Command): void {
       user?: string;
       full?: boolean;
       limit?: string;
+      unbounded?: boolean;
       enqueue?: boolean;
     }) {
       const input = parseOrExit(SyncRunInputSchema, {
@@ -75,6 +93,7 @@ export function registerSyncsCommands(program: Command): void {
         account: opts.account,
         full: opts.full,
         limit: opts.limit,
+        unbounded: opts.unbounded,
         enqueue: opts.enqueue,
       });
       await runSyncRun(input);
@@ -130,13 +149,26 @@ export async function runSyncRun(
     throw new SyncRunFullRequiredError('sync run v0 requires --full');
   }
 
+  // A cap and an uncapped pull are contradictory — reject rather than silently
+  // pick one.
+  if (input.limit !== undefined && input.unbounded) {
+    throw new SyncRunLimitUnboundedError(
+      'sync run: --limit and --unbounded are mutually exclusive'
+    );
+  }
+
   const orgId = resolveOrgId(input.org);
   const userId = resolveUserId(input.user);
   const account = await resolveAccount(input.account, { orgId });
 
+  // --unbounded omits the cap (adapter paginates to exhaustion). Otherwise cap
+  // at --limit, or the default when neither is given.
+  const cap = input.unbounded
+    ? undefined
+    : (input.limit ?? DEFAULT_FULL_SYNC_CAP);
   const spec: AdapterSyncSpec = {
     type: 'full',
-    ...(input.limit !== undefined && { limit: input.limit }),
+    ...(cap !== undefined && { limit: cap }),
   };
 
   // Build a one-task job. The executor fans out across tasks, but the CLI drives
@@ -170,6 +202,21 @@ export async function runSyncRun(
 
   // Structured summary to stdout (matches the accounts handlers' convention).
   process.stdout.write(JSON.stringify(result) + '\n');
+
+  // A failed sync must not look like a success: the JSON above stays on stdout
+  // for machine consumers, but also log at error level and set a non-zero exit
+  // so a human (and CI) sees the failure. runSyncJob never throws — it folds
+  // per-task failures into the result — so this is the only place the CLI can
+  // surface them.
+  if (result.status === 'failed') {
+    logger.error('sync run failed', {
+      jobId: result.jobId,
+      failedTasks: result.tasks
+        .filter((t) => t.status === 'failed')
+        .map((t) => ({ taskId: t.taskId, error: t.error })),
+    });
+    process.exitCode = 1;
+  }
 }
 
 // Read-verb seams: the service is module-imported, so an optional deps param is

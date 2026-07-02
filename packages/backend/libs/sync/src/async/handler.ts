@@ -10,6 +10,7 @@ import {
 } from '@repel/backend-crypto/encryption';
 import { runPool } from '@repel/concurrency';
 import { runWithLogContext } from '@repel/logger/context';
+import { logger } from '@repel/logger/logger';
 import { SyncIncompleteStreamError, SyncTaskFailedError } from '../error';
 import type { SyncJob, SyncTask } from '../persistence/contract';
 import { createFailedEvent } from '../persistence/lib/events';
@@ -141,7 +142,7 @@ async function runSyncTask(
     let processed = 0;
     let cursor: unknown = null;
     let terminal: SyncTerminalStatus | null = null;
-    let failureMessage: string | undefined;
+    let failureError: Error | undefined;
 
     for await (const event of adapter.ingest(input)) {
       await handler.handle(event, ctx);
@@ -153,7 +154,9 @@ async function runSyncTask(
         terminal = 'completed';
       } else if (event.type === 'failed') {
         terminal = 'failed';
-        failureMessage = event.error.message;
+        // Keep the whole AdapterError (not just its message) so the log below
+        // captures its stack/cause.
+        failureError = event.error;
       }
     }
 
@@ -163,13 +166,21 @@ async function runSyncTask(
       );
     }
     if (terminal === 'failed') {
+      // The adapter *emitted* a failed event (its handler already persisted it).
+      // Surface it at error level too — passing the AdapterError so its stack is
+      // captured, not just the message — otherwise a failed sync leaves no
+      // diagnostic beyond the DB event row.
+      logger.error('sync task failed (adapter reported)', failureError, {
+        taskId: task.id,
+        providerAccountId: task.providerAccountId,
+      });
       return {
         taskId: task.id,
         providerAccountId: task.providerAccountId,
         status: 'failed',
         processed,
         cursor: null,
-        error: failureMessage ?? 'adapter reported failure',
+        error: failureError?.message ?? 'adapter reported failure',
       };
     }
     return {
@@ -185,6 +196,13 @@ async function runSyncTask(
     // event here — otherwise the derived status would stay `running`.
     // Best-effort.
     const err = e instanceof Error ? e : new Error(String(e));
+    // Log the full error (stack + cause) before it is reduced to a message on
+    // the persisted event and the result — otherwise a thrown adapter failure
+    // (e.g. an HTTP 403/429 that exhausted retries) leaves no stack anywhere.
+    logger.error('sync task failed', err, {
+      taskId: task.id,
+      providerAccountId: task.providerAccountId,
+    });
     try {
       await createFailedEvent(
         { orgId: job.orgId, userId: job.userId, taskId: task.id },

@@ -151,12 +151,14 @@ describe('httpRequest', function () {
   });
 
   test('falls back to text body when an error response is not json', async function () {
+    // 503 is retryable; maxRetries:0 asserts the terminal throw shape without
+    // waiting on backoff.
     const fetchImpl = asFetch(async function () {
       return new Response('plain failure', { status: 503 });
     });
     let caught: unknown;
     try {
-      await httpRequest({ url: 'https://api/x' }, { fetchImpl });
+      await httpRequest({ url: 'https://api/x' }, { fetchImpl, maxRetries: 0 });
     } catch (e) {
       caught = e;
     }
@@ -171,11 +173,186 @@ describe('httpRequest', function () {
     });
     let caught: unknown;
     try {
-      await httpRequest({ url: 'https://api/x' }, { fetchImpl });
+      await httpRequest({ url: 'https://api/x' }, { fetchImpl, maxRetries: 0 });
     } catch (e) {
       caught = e;
     }
     expect(caught).toBeInstanceOf(HttpNetworkError);
     expect((caught as HttpNetworkError).cause).toBe(cause);
+  });
+});
+
+describe('httpRequest — retry/backoff', function () {
+  // A sleep seam that records delays and never actually waits.
+  function recordingSleep() {
+    const delays: number[] = [];
+    const sleep = async function (ms: number): Promise<void> {
+      delays.push(ms);
+    };
+    return { delays, sleep };
+  }
+
+  test('retries a 429 then succeeds', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      if (calls === 1) return jsonResponse({ e: 1 }, { status: 429 });
+      return jsonResponse({ ok: true });
+    });
+    const { delays, sleep } = recordingSleep();
+    const result = await httpRequest<{ ok: boolean }>(
+      { url: 'https://api/x' },
+      { fetchImpl, sleep }
+    );
+    expect(result).toEqual({ ok: true });
+    expect(calls).toBe(2);
+    expect(delays).toHaveLength(1); // one backoff between the two attempts
+  });
+
+  test('retries a 5xx then succeeds', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      if (calls === 1) return new Response('x', { status: 500 });
+      return jsonResponse({ ok: true });
+    });
+    const { sleep } = recordingSleep();
+    await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep });
+    expect(calls).toBe(2);
+  });
+
+  test('retries a network throw then succeeds', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      if (calls === 1) throw new TypeError('boom');
+      return jsonResponse({ ok: true });
+    });
+    const { sleep } = recordingSleep();
+    await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep });
+    expect(calls).toBe(2);
+  });
+
+  test('retries a quota-flavored 403 (rateLimitExceeded body)', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse(
+          { error: { code: 403, message: 'Quota exceeded for quota metric' } },
+          { status: 403 }
+        );
+      }
+      return jsonResponse({ ok: true });
+    });
+    const { sleep } = recordingSleep();
+    await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep });
+    expect(calls).toBe(2);
+  });
+
+  test('does NOT retry a non-quota 403 (auth) — throws immediately', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      return jsonResponse(
+        { error: { code: 403, message: 'Request had insufficient scopes' } },
+        { status: 403 }
+      );
+    });
+    const { sleep } = recordingSleep();
+    let caught: unknown;
+    try {
+      await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(HttpResponseError);
+    expect(calls).toBe(1);
+  });
+
+  test('does NOT retry a 404', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      return new Response('nope', { status: 404 });
+    });
+    const { sleep } = recordingSleep();
+    await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep }).catch(
+      () => {}
+    );
+    expect(calls).toBe(1);
+  });
+
+  test('never retries a ZodError (schema mismatch on a 200)', async function () {
+    let calls = 0;
+    const schema = z.object({ emailAddress: z.string() });
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      return jsonResponse({ wrong: true });
+    });
+    const { sleep } = recordingSleep();
+    await httpRequest(
+      { url: 'https://api/x', schema },
+      { fetchImpl, sleep }
+    ).catch(() => {});
+    expect(calls).toBe(1);
+  });
+
+  test('honors Retry-After (delta-seconds) for the backoff delay', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      if (calls === 1) {
+        return jsonResponse(
+          { e: 1 },
+          {
+            status: 429,
+            headers: { 'retry-after': '2' },
+          }
+        );
+      }
+      return jsonResponse({ ok: true });
+    });
+    const { delays, sleep } = recordingSleep();
+    await httpRequest({ url: 'https://api/x' }, { fetchImpl, sleep });
+    expect(delays[0]).toBe(2000);
+  });
+
+  test('exhausts retries and throws, surfacing retryAfterMs on the error', async function () {
+    const fetchImpl = asFetch(async function () {
+      return jsonResponse(
+        { e: 1 },
+        {
+          status: 429,
+          headers: { 'retry-after': '1' },
+        }
+      );
+    });
+    const { sleep } = recordingSleep();
+    let caught: unknown;
+    try {
+      await httpRequest(
+        { url: 'https://api/x' },
+        { fetchImpl, sleep, maxRetries: 2 }
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(HttpResponseError);
+    expect((caught as HttpResponseError).status).toBe(429);
+    expect((caught as HttpResponseError).retryAfterMs).toBe(1000);
+  });
+
+  test('maxRetries:0 disables retry (single attempt on a 429)', async function () {
+    let calls = 0;
+    const fetchImpl = asFetch(async function () {
+      calls += 1;
+      return jsonResponse({ e: 1 }, { status: 429 });
+    });
+    await httpRequest(
+      { url: 'https://api/x' },
+      { fetchImpl, maxRetries: 0 }
+    ).catch(() => {});
+    expect(calls).toBe(1);
   });
 });

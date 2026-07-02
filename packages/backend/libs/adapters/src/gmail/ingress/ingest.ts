@@ -32,17 +32,15 @@ export interface GmailSyncCursor {
   readonly lastInternalDate: Iso8601String;
 }
 
-// Default cap when a full sync omits `limit`. v0 is a capped sync; an uncapped
-// full backfill is out of scope until the runner (REP-21) drives it.
-const DEFAULT_FULL_SYNC_CAP = 100;
-
 // Gmail's per-page list size.
 const PAGE_SIZE = 100;
 
 // How many messages.get calls run concurrently. Gmail's per-user ceiling is 250
 // quota units/sec and messages.get is ~5 units (~50 gets/sec), so ~8 in flight at
-// ~150ms latency lands near that with headroom. The per-method cost reportedly
-// rose toward 20 units in 2026 (~12 gets/sec) — if so, tune this down to ~4.
+// ~150ms latency lands near that with headroom. An unbounded backfill at 20
+// empirically tripped the per-user-per-minute quota (403), so this stays at 8 as
+// an interim margin; the http client now retries quota/429 with backoff, and a
+// future ticket adds adaptive concurrency (AIMD) to find steady state.
 // Overridable via deps.fetchConcurrency.
 const DEFAULT_FETCH_CONCURRENCY = 8;
 
@@ -125,7 +123,9 @@ function planList(input: GmailIngestInput): ListPlan {
   const spec = input.spec;
   switch (spec.type) {
     case 'full':
-      return { cap: spec.limit ?? DEFAULT_FULL_SYNC_CAP };
+      // No `limit` means an unbounded backfill — paginate to exhaustion, same as
+      // a date-windowed sync. The caller (CLI) owns any default cap.
+      return { cap: spec.limit };
     case 'range': {
       const after =
         spec.from !== undefined ? DateTime.fromISO(spec.from) : undefined;
