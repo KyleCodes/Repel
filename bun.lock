@@ -54,11 +54,13 @@
         "@repel/logger": "workspace:*",
         "@repel/slug": "workspace:*",
         "commander": "^12.1.0",
+        "luxon": "3.7.2",
         "node-pg-migrate": "^7.7.0",
         "pg": "^8.12.0",
         "zod": "4.4.3",
       },
       "devDependencies": {
+        "@types/luxon": "3.7.2",
         "@types/pg": "^8.11.6",
         "kysely-codegen": "^0.20.0",
       },

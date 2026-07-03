@@ -2,6 +2,7 @@ import { runInOrgTx } from '@repel/backend-db/tx';
 import type {
   CreateSyncJobInput,
   CreateSyncJobResult,
+  GetLatestCompletedCursorInput,
   GetSyncJobResultInput,
   GetSyncTaskInput,
   GetSyncTaskResultInput,
@@ -17,6 +18,10 @@ import {
   persistMessage,
 } from './mutations/persist-message';
 import { toCreateSyncJobResult, toCreateSyncJobValues } from './transform';
+import {
+  type LatestCompletedCursorRow,
+  getLatestCompletedCursor,
+} from './views/get-latest-completed-cursor';
 import {
   type SyncJobResultRow,
   getSyncJobResult,
@@ -39,6 +44,7 @@ export type {
 export type { SyncJobResultRow } from './views/get-sync-job-result';
 export type { SyncTaskResultRow } from './views/get-sync-task-results';
 export type { TaskEventRow } from './views/list-task-events';
+export type { LatestCompletedCursorRow } from './views/get-latest-completed-cursor';
 
 // The light per-job summary `listSyncJobs` returns: the bare sync_job columns
 // plus the per-job derived fold (status/taskCount/processed). The fold is reused
@@ -118,5 +124,15 @@ export const syncService = {
     input: ListTaskEventsInput
   ): Promise<TaskEventRow[]> {
     return listTaskEvents(trx, input);
+  }),
+
+  // The resumption cursor for an account — the newest completed event's cursor
+  // payload — or undefined if the account has never completed a sync. Feeds the
+  // CLI's `syncs run incremental` auto-resume.
+  getLatestCompletedCursor: runInOrgTx(async function (
+    trx,
+    input: GetLatestCompletedCursorInput
+  ): Promise<LatestCompletedCursorRow | undefined> {
+    return getLatestCompletedCursor(trx, input);
   }),
 };

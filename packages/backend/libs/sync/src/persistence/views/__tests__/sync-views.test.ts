@@ -3,6 +3,7 @@ import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import type { DB } from '@repel/backend-db/generated';
 import type { Tx } from '@repel/backend-db/types';
+import { buildGetLatestCompletedCursor } from '../get-latest-completed-cursor';
 import { buildListSyncJobs } from '../list-sync-jobs';
 import { buildListTaskEvents } from '../list-task-events';
 
@@ -42,5 +43,26 @@ describe('listTaskEvents', function () {
     expect(compiled.sql).toContain('order by');
     // The audit trail keeps every event — no distinctOn collapse.
     expect(compiled.sql).not.toContain('distinct on');
+  });
+});
+
+describe('getLatestCompletedCursor', function () {
+  test('selects the newest completed event cursor for an account, join-scoped, RLS-org', function () {
+    const compiled = buildGetLatestCompletedCursor(trx, {
+      providerAccount: { id: 'pa-1' },
+    }).compile();
+    // Reads the event log joined to sync_task to filter by the account.
+    expect(compiled.sql).toContain('sync_task_event');
+    expect(compiled.sql).toContain('inner join "sync_task"');
+    expect(compiled.sql).toContain('provider_account_id');
+    expect(compiled.parameters).toContain('pa-1');
+    // Latest completed event only.
+    expect(compiled.sql).toContain('order by');
+    expect(compiled.sql).toContain('desc');
+    expect(compiled.sql).toContain('limit');
+    // Extracts the cursor JSON object (-> not ->>).
+    expect(compiled.sql).toContain("payload->'cursor'");
+    // RLS scopes the org — no org_id predicate of its own.
+    expect(compiled.sql).not.toContain('org_id');
   });
 });

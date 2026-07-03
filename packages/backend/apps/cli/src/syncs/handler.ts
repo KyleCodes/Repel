@@ -12,12 +12,19 @@ import { resolveOrgId } from '../lib/resolve-org';
 import { resolveUserId } from '../lib/resolve-user';
 import {
   SyncJobNotFoundError,
-  SyncRunFullRequiredError,
   SyncRunLimitUnboundedError,
+  SyncRunNoCursorError,
+  SyncRunRangeBoundsError,
 } from './error';
 import {
-  type SyncRunInput,
-  SyncRunInputSchema,
+  type SyncRunFullInput,
+  SyncRunFullInputSchema,
+  type SyncRunIncrementalInput,
+  SyncRunIncrementalInputSchema,
+  type SyncRunRangeInput,
+  SyncRunRangeInputSchema,
+  type SyncRunSharedInput,
+  SyncRunSharedInputSchema,
   type SyncsListInput,
   SyncsListInputSchema,
   type SyncsShowInput,
@@ -30,11 +37,16 @@ import { registerTasksCommands } from './tasks/handler';
 // the underlying lib, the `sync` queue topic, and the `sync-worker` service keep
 // their names.
 //
-// `syncs run`: in-process and synchronous — writes the job/task skeleton, then
-// invokes the adapter's ingest() so the executor's persisting handler writes the
-// message graph + event log as it streams; prints the SyncJobResult.
+// `syncs run <mode>`: in-process and synchronous — writes the job/task skeleton,
+// then invokes the adapter's ingest() so the executor's persisting handler writes
+// the message graph + event log as it streams; prints the SyncJobResult.
 // Step-debuggable. `--enqueue` instead pushes one envelope onto the `sync` topic
 // (REP-57) for the sync-worker to run later; prints { enqueued, jobId }.
+//
+// The mode is a subcommand (full / incremental / range) so invalid flag combos
+// are structurally impossible and each mode gets its own `--help`. The shared
+// options (--account/--org/--user/--enqueue) sit on the parent `run` command;
+// each subcommand reads them via cmd.parent.opts().
 //
 // The skeleton write (createSyncJob) lives here, not in runSyncJob — the
 // executor no longer writes it (so the async worker doesn't write it twice).
@@ -45,8 +57,8 @@ const SYNC_TOPIC = 'sync';
 
 // Default cap for a full sync when neither `--limit` nor `--unbounded` is given.
 // The cap lives here (the CLI owns the spec), not in the adapter: a bare
-// `--full` stays a safe dev-sized pull; `--unbounded` opts into the whole
-// mailbox by omitting the limit. Overridable via `--limit`.
+// `full` stays a safe dev-sized pull; `--unbounded` opts into the whole mailbox
+// by omitting the limit. Overridable via `--limit`.
 const DEFAULT_FULL_SYNC_CAP = 100;
 
 export function registerSyncsCommands(program: Command): void {
@@ -54,10 +66,12 @@ export function registerSyncsCommands(program: Command): void {
     .command('syncs')
     .description('Run and inspect provider syncs');
 
-  syncs
+  // Parent `run` carries the options every mode shares; the three subcommands add
+  // only their own flags. Invoking `run` bare (no subcommand) prints help.
+  const run = syncs
     .command('run')
     .description(
-      'Run a full sync for one connected account (persists the message graph)'
+      'Run a sync for one connected account (full / incremental / range)'
     )
     .requiredOption(
       '--account <ref>',
@@ -65,7 +79,14 @@ export function registerSyncsCommands(program: Command): void {
     )
     .option('--org <id>', 'org id (defaults to REPEL_ORG_ID)')
     .option('--user <id>', 'user id (defaults to REPEL_USER_ID)')
-    .option('--full', 'run a full sync (required in v0)')
+    .option(
+      '--enqueue',
+      'enqueue the job on the sync topic for the worker to run, instead of running it in-process'
+    );
+
+  run
+    .command('full')
+    .description('Pull the whole mailbox (or a capped slice) from scratch')
     .option(
       '--limit <n>',
       `dev cap on messages fetched (default ${DEFAULT_FULL_SYNC_CAP})`
@@ -74,29 +95,52 @@ export function registerSyncsCommands(program: Command): void {
       '--unbounded',
       'pull the whole mailbox (no cap); mutually exclusive with --limit'
     )
-    .option(
-      '--enqueue',
-      'enqueue the job on the sync topic for the worker to run, instead of running it in-process'
-    )
-    .action(async function (opts: {
-      account: string;
-      org?: string;
-      user?: string;
-      full?: boolean;
-      limit?: string;
-      unbounded?: boolean;
-      enqueue?: boolean;
-    }) {
-      const input = parseOrExit(SyncRunInputSchema, {
-        org: opts.org,
-        user: opts.user,
-        account: opts.account,
-        full: opts.full,
+    .action(async function (
+      opts: { limit?: string; unbounded?: boolean },
+      cmd: Command
+    ) {
+      const shared = parseSharedOrExit(cmd);
+      const input = parseOrExit(SyncRunFullInputSchema, {
         limit: opts.limit,
         unbounded: opts.unbounded,
-        enqueue: opts.enqueue,
       });
-      await runSyncRun(input);
+      await runSyncFull(shared, input);
+    });
+
+  run
+    .command('incremental')
+    .description(
+      'Resume from the last completed sync, pulling only newer messages'
+    )
+    .option('--since <iso>', 'override: start from this ISO 8601 instant')
+    .option('--cursor <json>', 'override: resume from this raw cursor JSON')
+    .action(async function (
+      opts: { since?: string; cursor?: string },
+      cmd: Command
+    ) {
+      const shared = parseSharedOrExit(cmd);
+      const input = parseOrExit(SyncRunIncrementalInputSchema, {
+        since: opts.since,
+        cursor: opts.cursor,
+      });
+      await runSyncIncremental(shared, input);
+    });
+
+  run
+    .command('range')
+    .description('Pull a bounded window by message date')
+    .option('--from <iso>', 'window start (ISO 8601), inclusive')
+    .option('--to <iso>', 'window end (ISO 8601), exclusive')
+    .action(async function (
+      opts: { from?: string; to?: string },
+      cmd: Command
+    ) {
+      const shared = parseSharedOrExit(cmd);
+      const input = parseOrExit(SyncRunRangeInputSchema, {
+        from: opts.from,
+        to: opts.to,
+      });
+      await runSyncRange(shared, input);
     });
 
   syncs
@@ -124,52 +168,54 @@ export function registerSyncsCommands(program: Command): void {
   registerTasksCommands(syncs);
 }
 
+// Parse the parent `run` command's shared options. Each subcommand's action
+// receives its own Command; the shared flags live one level up, so read them off
+// `cmd.parent`. parseOrExit surfaces a bad/missing --account as a typed CLI exit.
+function parseSharedOrExit(cmd: Command): SyncRunSharedInput {
+  const parent = cmd.parent;
+  const opts = (parent?.opts() ?? {}) as {
+    account?: string;
+    org?: string;
+    user?: string;
+    enqueue?: boolean;
+  };
+  return parseOrExit(SyncRunSharedInputSchema, {
+    account: opts.account,
+    org: opts.org,
+    user: opts.user,
+    enqueue: opts.enqueue,
+  });
+}
+
 // Injectable seams so the resolve + skeleton + run/enqueue path can be
 // unit-tested without a real DB, adapter, or queue (same rationale as the
-// accounts handler). Production calls pass nothing.
+// accounts handler). Production calls pass nothing. getLatestCompletedCursor
+// feeds the incremental auto-resume path.
 export interface SyncRunDeps {
   resolveAccount?: typeof defaultResolveAccount;
   createSyncJob?: typeof defaultSyncService.createSyncJob;
   runSyncJob?: typeof defaultRunSyncJob;
   enqueue?: typeof defaultEnqueue;
+  getLatestCompletedCursor?: typeof defaultSyncService.getLatestCompletedCursor;
 }
 
-export async function runSyncRun(
-  input: SyncRunInput,
-  deps: SyncRunDeps = {}
+// The mode-agnostic tail shared by all three subcommands: resolve org/user/
+// account, build a one-task job for the given spec, persist the skeleton, then
+// either enqueue it or run it in-process (surfacing a failed run as a non-zero
+// exit). Only the AdapterSyncSpec differs per mode; that is built by the caller.
+async function runResolvedSync(
+  spec: AdapterSyncSpec,
+  shared: SyncRunSharedInput,
+  deps: SyncRunDeps
 ): Promise<void> {
   const resolveAccount = deps.resolveAccount ?? defaultResolveAccount;
   const createSyncJob = deps.createSyncJob ?? defaultSyncService.createSyncJob;
   const runSyncJob = deps.runSyncJob ?? defaultRunSyncJob;
   const enqueue = deps.enqueue ?? defaultEnqueue;
 
-  // v0 supports only full sync. Guard here (not in the schema) so the error is a
-  // typed CLI error, mirroring how `accounts connect` guards the auth method.
-  if (!input.full) {
-    throw new SyncRunFullRequiredError('sync run v0 requires --full');
-  }
-
-  // A cap and an uncapped pull are contradictory — reject rather than silently
-  // pick one.
-  if (input.limit !== undefined && input.unbounded) {
-    throw new SyncRunLimitUnboundedError(
-      'sync run: --limit and --unbounded are mutually exclusive'
-    );
-  }
-
-  const orgId = resolveOrgId(input.org);
-  const userId = resolveUserId(input.user);
-  const account = await resolveAccount(input.account, { orgId });
-
-  // --unbounded omits the cap (adapter paginates to exhaustion). Otherwise cap
-  // at --limit, or the default when neither is given.
-  const cap = input.unbounded
-    ? undefined
-    : (input.limit ?? DEFAULT_FULL_SYNC_CAP);
-  const spec: AdapterSyncSpec = {
-    type: 'full',
-    ...(cap !== undefined && { limit: cap }),
-  };
+  const orgId = resolveOrgId(shared.org);
+  const userId = resolveUserId(shared.user);
+  const account = await resolveAccount(shared.account, { orgId });
 
   // Build a one-task job. The executor fans out across tasks, but the CLI drives
   // exactly one account; multi-task jobs are the async runner's (REP-57).
@@ -184,7 +230,7 @@ export async function runSyncRun(
   // event) — both paths need it persisted before any task runs.
   await createSyncJob(job);
 
-  if (input.enqueue) {
+  if (shared.enqueue) {
     // Enqueue-only: the payload is the full SyncJob (orgId also rides the
     // envelope wrapper as the authoritative tenant scope). dedupKey = job id, so
     // a duplicate enqueue is a no-op. The sync runs later in the worker; status
@@ -217,6 +263,110 @@ export async function runSyncRun(
     });
     process.exitCode = 1;
   }
+}
+
+// `syncs run full` — pull the whole mailbox, or a capped slice.
+export async function runSyncFull(
+  shared: SyncRunSharedInput,
+  input: SyncRunFullInput,
+  deps: SyncRunDeps = {}
+): Promise<void> {
+  // A cap and an uncapped pull are contradictory — reject rather than silently
+  // pick one.
+  if (input.limit !== undefined && input.unbounded) {
+    throw new SyncRunLimitUnboundedError(
+      'sync run full: --limit and --unbounded are mutually exclusive'
+    );
+  }
+
+  // --unbounded omits the cap (adapter paginates to exhaustion). Otherwise cap
+  // at --limit, or the default when neither is given.
+  const cap = input.unbounded
+    ? undefined
+    : (input.limit ?? DEFAULT_FULL_SYNC_CAP);
+  const spec: AdapterSyncSpec = {
+    type: 'full',
+    ...(cap !== undefined && { limit: cap }),
+  };
+  await runResolvedSync(spec, shared, deps);
+}
+
+// `syncs run range` — pull a bounded window by message date. At least one bound
+// is required; an unbounded range is a full sync, which has its own subcommand.
+export async function runSyncRange(
+  shared: SyncRunSharedInput,
+  input: SyncRunRangeInput,
+  deps: SyncRunDeps = {}
+): Promise<void> {
+  if (input.from === undefined && input.to === undefined) {
+    throw new SyncRunRangeBoundsError(
+      'sync run range: at least one of --from / --to is required'
+    );
+  }
+  const spec: AdapterSyncSpec = {
+    type: 'range',
+    ...(input.from !== undefined && { from: input.from }),
+    ...(input.to !== undefined && { to: input.to }),
+  };
+  await runResolvedSync(spec, shared, deps);
+}
+
+// `syncs run incremental` — resume from the last completed sync. Cursor
+// resolution order: --cursor (raw JSON) > --since (→ { lastInternalDate }) >
+// the account's latest completed cursor. None → a typed no-cursor error (never a
+// silent full sync).
+export async function runSyncIncremental(
+  shared: SyncRunSharedInput,
+  input: SyncRunIncrementalInput,
+  deps: SyncRunDeps = {}
+): Promise<void> {
+  const resolveAccount = deps.resolveAccount ?? defaultResolveAccount;
+  const getLatestCompletedCursor =
+    deps.getLatestCompletedCursor ??
+    defaultSyncService.getLatestCompletedCursor;
+
+  const orgId = resolveOrgId(shared.org);
+  const account = await resolveAccount(shared.account, { orgId });
+
+  const cursor = await resolveCursor(input, {
+    orgId,
+    accountId: account.id,
+    getLatestCompletedCursor,
+  });
+  const spec: AdapterSyncSpec = { type: 'incremental', cursor };
+  await runResolvedSync(spec, shared, deps);
+}
+
+// Resolve the incremental resumption cursor from the override flags, else the
+// stored latest-completed cursor for the account. Throws SyncRunNoCursorError
+// when nothing is available so the caller never silently full-syncs.
+async function resolveCursor(
+  input: SyncRunIncrementalInput,
+  ctx: {
+    orgId: string;
+    accountId: string;
+    getLatestCompletedCursor: typeof defaultSyncService.getLatestCompletedCursor;
+  }
+): Promise<unknown> {
+  // `--cursor` wins: a raw cursor JSON object passed straight to the adapter.
+  if (input.cursor !== undefined) {
+    return JSON.parse(input.cursor);
+  }
+  // `--since`: an ISO start, shaped into the Gmail cursor the adapter expects.
+  if (input.since !== undefined) {
+    return { lastInternalDate: input.since };
+  }
+  // Auto-resume from the account's most recent completed sync.
+  const row = await ctx.getLatestCompletedCursor({
+    orgId: ctx.orgId,
+    providerAccount: { id: ctx.accountId },
+  });
+  if (row?.cursor === undefined || row.cursor === null) {
+    throw new SyncRunNoCursorError(
+      'sync run incremental: no prior completed sync to resume from; run `syncs run full` first, or pass --since / --cursor'
+    );
+  }
+  return row.cursor;
 }
 
 // Read-verb seams: the service is module-imported, so an optional deps param is
