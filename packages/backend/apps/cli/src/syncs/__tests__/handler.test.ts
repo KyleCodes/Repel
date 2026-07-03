@@ -1,14 +1,26 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import type { SyncJob, SyncJobResult } from '@repel/backend-sync/types';
-import { SyncJobNotFoundError, SyncRunFullRequiredError } from '../error';
+import { logger } from '@repel/logger/logger';
 import {
+  SyncJobNotFoundError,
+  SyncRunLimitUnboundedError,
+  SyncRunNoCursorError,
+  SyncRunRangeBoundsError,
+} from '../error';
+import {
+  type SyncRunDeps,
   registerSyncsCommands,
-  runSyncRun,
+  runSyncFull,
+  runSyncIncremental,
+  runSyncRange,
   runSyncsList,
   runSyncsShow,
 } from '../handler';
-import { SyncRunInputSchema } from '../schemas/index';
+import {
+  SyncRunFullInputSchema,
+  SyncRunRangeInputSchema,
+} from '../schemas/index';
 
 describe('registerSyncsCommands', function () {
   test('registers the syncs namespace with run/list/show + tasks subcommands', function () {
@@ -29,47 +41,51 @@ describe('registerSyncsCommands', function () {
     const run = syncs!.commands.find(function (c) {
       return c.name() === 'run';
     });
-    const optionNames = run!.options.map(function (o) {
-      return o.long;
-    });
-    // account is now a flag (was a positional) so support can redrive a sync for
-    // a non-dev user's account.
-    expect(optionNames).toContain('--account');
-    expect(optionNames).toContain('--full');
-    expect(optionNames).toContain('--limit');
-    expect(optionNames).toContain('--enqueue');
+    // The shared options live on the parent `run` command; the mode-specific
+    // flags live on its subcommands.
+    const runOptions = run!.options.map((o) => o.long);
+    expect(runOptions).toContain('--account');
+    expect(runOptions).toContain('--org');
+    expect(runOptions).toContain('--user');
+    expect(runOptions).toContain('--enqueue');
+
+    const modeOptions = (mode: string): (string | undefined)[] => {
+      const sub = run!.commands.find((c) => c.name() === mode);
+      expect(sub).toBeDefined();
+      return sub!.options.map((o) => o.long);
+    };
+    // full carries the cap flags; the shared flags do NOT repeat on it.
+    expect(modeOptions('full')).toEqual(['--limit', '--unbounded']);
+    expect(modeOptions('incremental')).toEqual(['--since', '--cursor']);
+    expect(modeOptions('range')).toEqual(['--from', '--to']);
   });
 });
 
-describe('SyncRunInputSchema', function () {
-  test('coerces a string limit to a positive int', function () {
-    const parsed = SyncRunInputSchema.parse({
-      account: 'work',
-      full: true,
-      limit: '20',
-    });
-    expect(parsed.limit).toBe(20);
+describe('per-mode input schemas', function () {
+  test('full coerces a string limit to a positive int', function () {
+    expect(SyncRunFullInputSchema.parse({ limit: '20' }).limit).toBe(20);
   });
 
-  test('defaults full to false when omitted', function () {
-    const parsed = SyncRunInputSchema.parse({ account: 'work' });
-    expect(parsed.full).toBe(false);
+  test('full rejects a non-positive limit', function () {
+    expect(SyncRunFullInputSchema.safeParse({ limit: '0' }).success).toBe(
+      false
+    );
   });
 
-  test('rejects a missing account', function () {
-    expect(SyncRunInputSchema.safeParse({ full: true }).success).toBe(false);
-  });
-
-  test('rejects a non-positive limit', function () {
+  test('range accepts ISO bounds and rejects an unparseable one', function () {
     expect(
-      SyncRunInputSchema.safeParse({ account: 'w', full: true, limit: '0' })
+      SyncRunRangeInputSchema.safeParse({ from: '2026-01-01T00:00:00Z' })
         .success
+    ).toBe(true);
+    expect(
+      SyncRunRangeInputSchema.safeParse({ from: 'not-a-date' }).success
     ).toBe(false);
   });
 });
 
-// runSyncRun: REPEL_ORG_ID / REPEL_USER_ID are set so resolveOrgId/resolveUserId
-// succeed; resolveAccount and runSyncJob are injected so no DB/adapter is touched.
+// The per-mode runners: REPEL_ORG_ID / REPEL_USER_ID are set so resolveOrgId/
+// resolveUserId succeed; resolveAccount, runSyncJob, and getLatestCompletedCursor
+// are injected so no DB/adapter is touched.
 
 let originalOrg: string | undefined;
 let originalUser: string | undefined;
@@ -97,44 +113,54 @@ const jobResult: SyncJobResult = {
       providerAccountId: 'pa-1',
       status: 'completed',
       processed: 5,
-      cursor: { historyId: '9' },
+      cursor: { lastInternalDate: '2026-07-02T04:50:07.000Z' },
     },
   ],
 };
 
-describe('runSyncRun', function () {
-  test('throws SyncRunFullRequiredError when --full is absent', async function () {
-    let caught: unknown;
-    try {
-      await runSyncRun({ account: 'work', full: false, enqueue: false });
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(SyncRunFullRequiredError);
-  });
+const SHARED = { org: undefined, user: undefined, enqueue: false };
 
-  test('builds a one-task full-sync job, writes the skeleton, and prints the summary', async function () {
+// Capture the job the runner would run in-process, driving through the shared
+// tail (resolveAccount → createSyncJob → runSyncJob). Returns the captured job so
+// tests can assert its spec.
+function captureRunnerDeps(accountId = 'pa-1'): {
+  deps: SyncRunDeps;
+  captured: { job?: SyncJob };
+} {
+  const captured: { job?: SyncJob } = {};
+  const deps: SyncRunDeps = {
+    resolveAccount: async () => ({ id: accountId }) as never,
+    createSyncJob: async (job) => job as never,
+    runSyncJob: async (job) => {
+      captured.job = job;
+      return jobResult;
+    },
+  };
+  return { deps, captured };
+}
+
+describe('runSyncFull', function () {
+  test('builds a capped full-sync job, writes the skeleton, and prints the summary', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
-    let receivedJob: SyncJob | undefined;
     let skeletonJob: SyncJob | undefined;
+    let receivedJob: SyncJob | undefined;
     let enqueueCalled = false;
     let printed = '';
     try {
-      await runSyncRun(
-        { account: 'work', full: true, limit: 20, enqueue: false },
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { limit: 20, unbounded: false },
         {
-          resolveAccount: async function () {
-            return { id: 'pa-1' } as never;
-          },
-          createSyncJob: async function (job) {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          createSyncJob: async (job) => {
             skeletonJob = job;
             return job as never;
           },
-          runSyncJob: async function (job) {
+          runSyncJob: async (job) => {
             receivedJob = job;
             return jobResult;
           },
-          enqueue: async function () {
+          enqueue: async () => {
             enqueueCalled = true;
             return { enqueued: true, id: 'x' };
           },
@@ -145,42 +171,112 @@ describe('runSyncRun', function () {
       writeSpy.mockRestore();
     }
 
-    expect(receivedJob).toBeDefined();
     expect(receivedJob!.orgId).toBe('org-1');
     expect(receivedJob!.userId).toBe('user-1');
     expect(receivedJob!.tasks).toHaveLength(1);
     expect(receivedJob!.tasks[0]!.providerAccountId).toBe('pa-1');
     expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full', limit: 20 });
-    // The skeleton is written before the run, for the same job the executor gets.
     expect(skeletonJob).toBe(receivedJob!);
-    // The default path runs in-process — it does not enqueue.
     expect(enqueueCalled).toBe(false);
     expect(JSON.parse(printed)).toEqual(jobResult as never);
   });
 
-  test('omits limit from the spec when not provided', async function () {
+  test('applies the default cap when neither --limit nor --unbounded is given', async function () {
     const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
-    let receivedJob: SyncJob | undefined;
+    const { deps, captured } = captureRunnerDeps('pa-2');
     try {
-      await runSyncRun(
-        { account: 'work', full: true, enqueue: false },
-        {
-          resolveAccount: async function () {
-            return { id: 'pa-2' } as never;
-          },
-          createSyncJob: async function (job) {
-            return job as never;
-          },
-          runSyncJob: async function (job) {
-            receivedJob = job;
-            return jobResult;
-          },
-        }
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { unbounded: false },
+        deps
       );
     } finally {
       writeSpy.mockRestore();
     }
-    expect(receivedJob!.tasks[0]!.spec).toEqual({ type: 'full' });
+    expect(captured.job!.tasks[0]!.spec).toEqual({ type: 'full', limit: 100 });
+  });
+
+  test('--unbounded omits the cap from the spec (whole-mailbox pull)', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps('pa-3');
+    try {
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { unbounded: true },
+        deps
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(captured.job!.tasks[0]!.spec).toEqual({ type: 'full' });
+  });
+
+  test('--limit and --unbounded together throw SyncRunLimitUnboundedError', async function () {
+    let caught: unknown;
+    try {
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { limit: 20, unbounded: true }
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(SyncRunLimitUnboundedError);
+  });
+
+  test('a failed sync result sets a non-zero exit code and logs an error', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const errorLog = spyOn(logger, 'error').mockReturnValue(undefined);
+    const priorExit = process.exitCode;
+    try {
+      const failedResult: SyncJobResult = {
+        jobId: 'job-1',
+        status: 'failed',
+        tasks: [
+          {
+            taskId: 'task-1',
+            providerAccountId: 'pa-1',
+            status: 'failed',
+            processed: 0,
+            cursor: null,
+            error: 'HTTP 403 quota',
+          },
+        ],
+      };
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { unbounded: false },
+        {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          createSyncJob: async (j) => j as never,
+          runSyncJob: async () => failedResult,
+        }
+      );
+      expect(process.exitCode).toBe(1);
+      expect(errorLog).toHaveBeenCalled();
+    } finally {
+      // Restore, coercing undefined → 0: assigning `undefined` does not clear an
+      // exit code the runtime has already latched, which would fail the suite.
+      process.exitCode = priorExit ?? 0;
+      errorLog.mockRestore();
+      writeSpy.mockRestore();
+    }
+  });
+
+  test('a completed sync result leaves the exit code unchanged', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const priorExit = process.exitCode;
+    const { deps } = captureRunnerDeps();
+    try {
+      await runSyncFull(
+        { ...SHARED, account: 'work' },
+        { unbounded: false },
+        deps
+      );
+      expect(process.exitCode).toBe(priorExit);
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 
   test('--enqueue writes the skeleton, enqueues, and prints { enqueued, jobId } without running', async function () {
@@ -196,21 +292,20 @@ describe('runSyncRun', function () {
       | undefined;
     let printed = '';
     try {
-      await runSyncRun(
-        { account: 'work', full: true, limit: 5, enqueue: true },
+      await runSyncFull(
+        { ...SHARED, account: 'work', enqueue: true },
+        { limit: 5, unbounded: false },
         {
-          resolveAccount: async function () {
-            return { id: 'pa-1' } as never;
-          },
-          createSyncJob: async function (job) {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          createSyncJob: async (job) => {
             skeletonJob = job;
             return job as never;
           },
-          runSyncJob: async function () {
+          runSyncJob: async () => {
             ranSync = true;
             return jobResult;
           },
-          enqueue: async function (topic, payload, opts) {
+          enqueue: async (topic, payload, opts) => {
             enqueued = { topic, payload, opts };
             return { enqueued: true, id: 'ignored' };
           },
@@ -224,12 +319,9 @@ describe('runSyncRun', function () {
     // Skeleton written; sync NOT run in-process; one envelope on the sync topic.
     expect(skeletonJob).toBeDefined();
     expect(ranSync).toBe(false);
-    expect(enqueued).toBeDefined();
     expect(enqueued!.topic).toBe('sync');
-    // orgId is the authoritative tenant scope on the envelope wrapper.
     expect(enqueued!.opts.orgId).toBe('org-1');
     expect(enqueued!.opts.dedupKey).toBe(skeletonJob!.id);
-    // The payload is the full SyncJob (orgId denormalized in too).
     const payload = enqueued!.payload as {
       id: string;
       userId: string;
@@ -240,11 +332,153 @@ describe('runSyncRun', function () {
     expect(payload.userId).toBe('user-1');
     expect(payload.orgId).toBe('org-1');
     expect(payload.tasks).toHaveLength(1);
-    // Output is the enqueue receipt, not a SyncJobResult.
     expect(JSON.parse(printed)).toEqual({
       enqueued: true,
       jobId: skeletonJob!.id,
     });
+  });
+});
+
+describe('runSyncRange', function () {
+  test('builds a range spec from --from / --to', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps();
+    try {
+      await runSyncRange(
+        { ...SHARED, account: 'work' },
+        { from: '2026-01-01T00:00:00Z', to: '2026-02-01T00:00:00Z' },
+        deps
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(captured.job!.tasks[0]!.spec).toEqual({
+      type: 'range',
+      from: '2026-01-01T00:00:00Z',
+      to: '2026-02-01T00:00:00Z',
+    });
+  });
+
+  test('omits the absent bound (only --from given)', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps();
+    try {
+      await runSyncRange(
+        { ...SHARED, account: 'work' },
+        { from: '2026-01-01T00:00:00Z' },
+        deps
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(captured.job!.tasks[0]!.spec).toEqual({
+      type: 'range',
+      from: '2026-01-01T00:00:00Z',
+    });
+  });
+
+  test('throws SyncRunRangeBoundsError when neither bound is given', async function () {
+    let caught: unknown;
+    try {
+      await runSyncRange({ ...SHARED, account: 'work' }, {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(SyncRunRangeBoundsError);
+  });
+});
+
+describe('runSyncIncremental', function () {
+  test('auto-resumes from the account latest completed cursor', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps('pa-9');
+    let cursorArg:
+      | { orgId: string; providerAccount: { id: string } }
+      | undefined;
+    try {
+      await runSyncIncremental(
+        { ...SHARED, account: 'work' },
+        {},
+        {
+          ...deps,
+          getLatestCompletedCursor: async (arg) => {
+            cursorArg = arg;
+            return { cursor: { lastInternalDate: '2026-07-02T04:50:07.000Z' } };
+          },
+        }
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    // The read is scoped to the resolved account and current org.
+    expect(cursorArg!.orgId).toBe('org-1');
+    expect(cursorArg!.providerAccount.id).toBe('pa-9');
+    expect(captured.job!.tasks[0]!.spec).toEqual({
+      type: 'incremental',
+      cursor: { lastInternalDate: '2026-07-02T04:50:07.000Z' },
+    });
+  });
+
+  test('--since overrides the stored cursor, shaping a lastInternalDate', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps();
+    let readCalled = false;
+    try {
+      await runSyncIncremental(
+        { ...SHARED, account: 'work' },
+        { since: '2026-06-01T00:00:00Z' },
+        {
+          ...deps,
+          getLatestCompletedCursor: async () => {
+            readCalled = true;
+            return undefined;
+          },
+        }
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    // The override short-circuits the stored-cursor read.
+    expect(readCalled).toBe(false);
+    expect(captured.job!.tasks[0]!.spec).toEqual({
+      type: 'incremental',
+      cursor: { lastInternalDate: '2026-06-01T00:00:00Z' },
+    });
+  });
+
+  test('--cursor overrides with raw parsed JSON', async function () {
+    const writeSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const { deps, captured } = captureRunnerDeps();
+    try {
+      await runSyncIncremental(
+        { ...SHARED, account: 'work' },
+        { cursor: '{"lastInternalDate":"2026-05-05T00:00:00.000Z"}' },
+        deps
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(captured.job!.tasks[0]!.spec).toEqual({
+      type: 'incremental',
+      cursor: { lastInternalDate: '2026-05-05T00:00:00.000Z' },
+    });
+  });
+
+  test('throws SyncRunNoCursorError when there is nothing to resume from', async function () {
+    let caught: unknown;
+    try {
+      await runSyncIncremental(
+        { ...SHARED, account: 'work' },
+        {},
+        {
+          resolveAccount: async () => ({ id: 'pa-1' }) as never,
+          getLatestCompletedCursor: async () => undefined,
+        }
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(SyncRunNoCursorError);
   });
 });
 

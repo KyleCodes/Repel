@@ -6,20 +6,24 @@ import { AppError } from '@repel/errors';
 export class HttpError extends AppError {}
 
 // A response was received but the status was non-2xx. Carries the parsed body
-// (best-effort) so callers can read provider error codes.
+// (best-effort) so callers can read provider error codes. `retryAfterMs` is the
+// server's `Retry-After` hint in milliseconds when it sent one (used by the
+// retry loop, and surfaced on the final error so callers/logs can see it).
 export class HttpResponseError extends HttpError {
   readonly status: number;
   readonly url: string;
   readonly body: unknown;
+  readonly retryAfterMs?: number;
 
   constructor(
     message: string,
-    info: { status: number; url: string; body: unknown }
+    info: { status: number; url: string; body: unknown; retryAfterMs?: number }
   ) {
     super(message);
     this.status = info.status;
     this.url = info.url;
     this.body = info.body;
+    this.retryAfterMs = info.retryAfterMs;
   }
 }
 

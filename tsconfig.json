@@ -29,6 +29,9 @@
       "path": "./packages/shared/concurrency"
     },
     {
+      "path": "./packages/shared/datetime"
+    },
+    {
       "path": "./packages/shared/logger"
     },
     {

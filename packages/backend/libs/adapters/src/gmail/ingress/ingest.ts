@@ -1,9 +1,12 @@
+import { DateTime } from 'luxon';
 import { boundedConcurrencyPoolStream } from '@repel/concurrency';
+import type { Iso8601String } from '@repel/datetime/types';
 import { type HttpDeps } from '@repel/http/client';
 import { logger } from '@repel/logger/logger';
 import { refreshIfExpired } from '../../lib/oauth2/flow';
 import type {
   AdapterEvent,
+  AdapterMessageEvent,
   AttachmentContent,
   GmailIngestInput,
   NormalizedAttachment,
@@ -13,32 +16,31 @@ import {
   GmailIngestError,
   GmailMessageFetchError,
   GmailNormalizeError,
-  GmailNotImplementedError,
 } from '../error';
 import { buildGmailRawMessage, normalizeGmailMessage } from '../normalize';
 import { loadGmailOAuthConfig, withRedirectUri } from '../oauth';
 import { getGmailAttachment } from '../queries/attachments';
 import { getGmailMessage, listGmailMessages } from '../queries/messages';
-import { getGmailProfile } from '../queries/profile';
+import { buildRangeQuery, gmailAfter } from './query-date';
 
-// The resumption cursor emitted on `completed`: Gmail's historyId, the seed for
-// the next incremental sync (REP-53). The runner persists it to
-// provider_account.sync_cursor; v0 only emits it.
+// The resumption cursor emitted on `completed`: the newest message's send time
+// (Gmail `internalDate`) seen this run, in ISO-8601. The next `incremental` sync
+// feeds it straight back as its `cursor` to bound an `after:` query. All three
+// sync modes emit this same shape so any run's cursor can seed an incremental
+// one. The runner persists it (REP-21); the adapter only accepts/returns it.
 export interface GmailSyncCursor {
-  readonly historyId: string;
+  readonly lastInternalDate: Iso8601String;
 }
-
-// Default cap when a full sync omits `limit`. v0 is a capped sync; an uncapped
-// full backfill is out of scope until the runner (REP-21) drives it.
-const DEFAULT_FULL_SYNC_CAP = 100;
 
 // Gmail's per-page list size.
 const PAGE_SIZE = 100;
 
 // How many messages.get calls run concurrently. Gmail's per-user ceiling is 250
 // quota units/sec and messages.get is ~5 units (~50 gets/sec), so ~8 in flight at
-// ~150ms latency lands near that with headroom. The per-method cost reportedly
-// rose toward 20 units in 2026 (~12 gets/sec) — if so, tune this down to ~4.
+// ~150ms latency lands near that with headroom. An unbounded backfill at 20
+// empirically tripped the per-user-per-minute quota (403), so this stays at 8 as
+// an interim margin; the http client now retries quota/429 with backoff, and a
+// future ticket adds adaptive concurrency (AIMD) to find steady state.
 // Overridable via deps.fetchConcurrency.
 const DEFAULT_FETCH_CONCURRENCY = 8;
 
@@ -46,22 +48,22 @@ const DEFAULT_FETCH_CONCURRENCY = 8;
 // fetches (defaults to DEFAULT_FETCH_CONCURRENCY).
 export type IngestDeps = HttpDeps & { fetchConcurrency?: number };
 
-// Run a v0 capped full sync as a stream of events:
+// Run a sync as a stream of events:
 //   started -> auth -> message* -> completed
-// Only spec.type === 'full' is handled; incremental/range throw. Fail-loud: any
-// message-get / normalize / attachment-fetch failure aborts the sync with a typed
-// error rather than skipping the message. Messages are fetched concurrently (up
-// to fetchConcurrency) and emitted in completion order.
+// Handles all three spec modes:
+//   - full:        page the whole mailbox, capped (dev/debug) at spec.limit.
+//   - range:       an `after:`/`before:` window from spec.from / spec.to.
+//   - incremental: an `after:` from the prior run's cursor (since-last-sync).
+// Fail-loud: any message-get / normalize / attachment-fetch failure aborts the
+// sync with a typed error rather than skipping the message. Messages are fetched
+// concurrently (up to fetchConcurrency) and emitted in completion order.
 export async function* ingest(
   input: GmailIngestInput,
   deps: IngestDeps = {}
 ): AsyncGenerator<AdapterEvent> {
-  if (input.spec.type !== 'full') {
-    throw new GmailNotImplementedError(
-      `Gmail ingest v0 supports only full sync; got '${input.spec.type}'`
-    );
-  }
-  const cap = input.spec.limit ?? DEFAULT_FULL_SYNC_CAP;
+  // Resolve the list query and (for incremental) the cursor to fall back to when
+  // nothing new arrives — both derived purely from the spec, before any I/O.
+  const plan = planList(input);
 
   yield { type: 'started' };
 
@@ -81,43 +83,128 @@ export async function* ingest(
     ...(refreshed && { credentials: tokens }),
   };
 
-  // Capture the cursor BEFORE listing so the next incremental sync replays
-  // anything that arrives during this backfill (no gap).
-  const cursor = await loadCursor(accessToken, deps);
-
   // Fetch messages concurrently and emit each as it completes. The id source
-  // paginates lazily and stops at the cap, so at most `cap` messages are fetched.
+  // paginates lazily, so only as many pages are listed as the pool drains.
+  // Track the newest internalDate seen across the (out-of-order) completions —
+  // the resumption cursor is the max, not the last emitted.
   const concurrency = deps.fetchConcurrency ?? DEFAULT_FETCH_CONCURRENCY;
   let processed = 0;
+  let newest: number | undefined;
   for await (const event of boundedConcurrencyPoolStream(
-    messageIds(accessToken, cap, deps),
+    messageIds(accessToken, { q: plan.q, cap: plan.cap }, deps),
     concurrency,
     (id) => processMessage(id, input, accessToken, deps)
   )) {
     yield event;
     processed += 1;
+    const ms = internalDateMs(event);
+    if (ms !== undefined && (newest === undefined || ms > newest)) newest = ms;
   }
 
-  yield { type: 'completed', cursor, processed };
+  yield {
+    type: 'completed',
+    cursor: nextCursor(newest, plan.fallback),
+    processed,
+  };
 }
 
-// Page through the message list lazily, yielding ids up to the cap and no
-// further. Stops following pages once the cap is hit (the consumer pulls only as
-// fast as the fetch pool drains, so pages are listed on demand).
+// What to list and how to resume, resolved from the spec alone (no I/O):
+//   - q:        the Gmail search query, or undefined to list the whole mailbox.
+//   - cap:      max messages to fetch, or undefined for the full window.
+//   - fallback: the cursor to emit when no messages are seen (incremental echoes
+//               the inbound cursor so it doesn't rewind; others emit nothing).
+interface ListPlan {
+  readonly q?: string;
+  readonly cap?: number;
+  readonly fallback?: GmailSyncCursor;
+}
+
+function planList(input: GmailIngestInput): ListPlan {
+  const spec = input.spec;
+  switch (spec.type) {
+    case 'full':
+      // No `limit` means an unbounded backfill — paginate to exhaustion, same as
+      // a date-windowed sync. The caller (CLI) owns any default cap.
+      return { cap: spec.limit };
+    case 'range': {
+      const after =
+        spec.from !== undefined ? DateTime.fromISO(spec.from) : undefined;
+      const before =
+        spec.to !== undefined ? DateTime.fromISO(spec.to) : undefined;
+      return { q: buildRangeQuery({ after, before }) };
+    }
+    case 'incremental': {
+      const cursor = parseCursor(spec.cursor);
+      const after = DateTime.fromISO(cursor.lastInternalDate);
+      return { q: gmailAfter(after), fallback: cursor };
+    }
+  }
+}
+
+// Narrow the opaque inbound cursor (the platform stores/returns it unread) to
+// the shape this adapter emitted. A malformed cursor is a fail-loud error so the
+// caller can fall back to a full sync rather than silently rewinding.
+function parseCursor(cursor: unknown): GmailSyncCursor {
+  if (
+    typeof cursor === 'object' &&
+    cursor !== null &&
+    'lastInternalDate' in cursor &&
+    typeof (cursor as { lastInternalDate: unknown }).lastInternalDate ===
+      'string'
+  ) {
+    return { lastInternalDate: (cursor as GmailSyncCursor).lastInternalDate };
+  }
+  throw new GmailIngestError(
+    'incremental sync cursor is malformed; expected { lastInternalDate: string }'
+  );
+}
+
+// The resumption cursor: the newest message seen (ISO) when any were, else the
+// fallback (incremental echoes its inbound cursor; full/range with an empty
+// result have no fallback and emit undefined).
+function nextCursor(
+  newestMs: number | undefined,
+  fallback: GmailSyncCursor | undefined
+): GmailSyncCursor | undefined {
+  if (newestMs === undefined) return fallback;
+  return {
+    lastInternalDate: DateTime.fromMillis(newestMs, { zone: 'utc' }).toISO()!,
+  };
+}
+
+// Pull Gmail's internalDate (epoch-ms string) off a message event as a number,
+// for the running max. Non-message events and absent dates yield undefined.
+function internalDateMs(event: AdapterEvent): number | undefined {
+  if (event.type !== 'message') return undefined;
+  const raw = (event as AdapterMessageEvent).raw.payload as {
+    internalDate?: string;
+  };
+  if (raw.internalDate === undefined) return undefined;
+  const ms = Number(raw.internalDate);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+// Page through the message list lazily, yielding ids until the cap is hit (when
+// set) or pages run out. With no cap the whole result set is walked. `q` filters
+// the list (date window); undefined lists everything. The consumer pulls only as
+// fast as the fetch pool drains, so pages are listed on demand.
 async function* messageIds(
   accessToken: string,
-  cap: number,
+  opts: { q?: string; cap?: number },
   deps: HttpDeps
 ): AsyncGenerator<string> {
+  const { q, cap } = opts;
   let pageToken: string | undefined;
   let n = 0;
-  while (n < cap) {
+  while (cap === undefined || n < cap) {
+    const maxResults =
+      cap === undefined ? PAGE_SIZE : Math.min(PAGE_SIZE, cap - n);
     const page = await listGmailMessages(
-      { accessToken, pageToken, maxResults: Math.min(PAGE_SIZE, cap - n) },
+      { accessToken, pageToken, maxResults, ...(q !== undefined && { q }) },
       deps
     );
     for (const ref of page.messages ?? []) {
-      if (n >= cap) return;
+      if (cap !== undefined && n >= cap) return;
       n += 1;
       yield ref.id;
     }
@@ -200,20 +287,4 @@ async function fetchAttachments(
     }
   }
   return out;
-}
-
-// Read the current historyId for the resumption cursor.
-async function loadCursor(
-  accessToken: string,
-  deps: HttpDeps
-): Promise<GmailSyncCursor> {
-  let profile;
-  try {
-    profile = await getGmailProfile({ accessToken }, deps);
-  } catch (cause) {
-    throw new GmailIngestError('Gmail users.getProfile failed (cursor)', {
-      cause,
-    });
-  }
-  return { historyId: profile.historyId ?? '' };
 }

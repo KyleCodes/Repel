@@ -12,6 +12,7 @@ import type {
 export type { GetSyncTaskResultInput } from './views/get-sync-task-results';
 export type { GetSyncJobResultInput } from './views/get-sync-job-result';
 export type { ListTaskEventsInput } from './views/list-task-events';
+export type { GetLatestCompletedCursorInput } from './views/get-latest-completed-cursor';
 
 // One task by id, scoped to its parent job — the job id validates membership
 // (a task id not under the job is treated as not-found). Distinct from

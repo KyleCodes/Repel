@@ -6,8 +6,9 @@ import {
 import type { AdapterEvent, IngestInput } from '../../../types';
 import {
   GmailAttachmentFetchError,
+  GmailIngestError,
   GmailMessageFetchError,
-  GmailNotImplementedError,
+  GmailRangeBoundsError,
 } from '../../error';
 import { ingest } from '../ingest';
 
@@ -65,12 +66,13 @@ function input(overrides?: Partial<IngestInput>): IngestInput {
   };
 }
 
-// A simple message payload builder for the get endpoint.
-function message(id: string, threadId: string) {
+// A simple message payload builder for the get endpoint. internalDate defaults
+// to 1700000000000ms (2023-11-14T22:13:20.000Z); override to vary send times.
+function message(id: string, threadId: string, internalDate = '1700000000000') {
   return {
     id,
     threadId,
-    internalDate: '1700000000000',
+    internalDate,
     snippet: `snippet-${id}`,
     historyId: '500',
     payload: {
@@ -123,7 +125,11 @@ describe('ingest — happy path (full sync)', function () {
     expect(completed.type).toBe('completed');
     if (completed.type === 'completed') {
       expect(completed.processed).toBe(2);
-      expect(completed.cursor).toEqual({ historyId: '777' });
+      // Cursor is the newest message's internalDate (1700000000000ms) in ISO,
+      // not Gmail's historyId — all modes emit { lastInternalDate }.
+      expect(completed.cursor).toEqual({
+        lastInternalDate: '2023-11-14T22:13:20.000Z',
+      });
     }
   });
 
@@ -207,19 +213,176 @@ describe('ingest — limit and pagination', function () {
   });
 });
 
-describe('ingest — unsupported specs', function () {
-  test('incremental throws not-implemented', async function () {
-    const it = ingest(input({ spec: { type: 'incremental', cursor: {} } }), {
-      fetchImpl: (async () => json({})) as unknown as typeof fetch,
+describe('ingest — range sync', function () {
+  test('builds an after:/before: query from spec.from/to and emits a cursor', async function () {
+    let listQ: string | null | undefined;
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        return json(message(id, 't1'));
+      }
+      listQ = new URL(url).searchParams.get('q');
+      return json({ messages: [{ id: 'm1', threadId: 't1' }] });
+    };
+    const events = await collect(
+      ingest(
+        input({
+          spec: {
+            type: 'range',
+            from: '2023-11-14T00:00:00.000Z',
+            to: '2023-11-15T00:00:00.000Z',
+          },
+        }),
+        { fetchImpl: fetchImpl as unknown as typeof fetch }
+      )
+    );
+    // 1699920000 = 2023-11-14T00:00Z, 1700006400 = 2023-11-15T00:00Z.
+    expect(listQ).toBe('after:1699920000 before:1700006400');
+    expect(events.filter((e) => e.type === 'message')).toHaveLength(1);
+    const completed = events.at(-1);
+    expect(completed?.type === 'completed' && completed.cursor).toEqual({
+      lastInternalDate: '2023-11-14T22:13:20.000Z',
     });
-    await expect(collect(it)).rejects.toBeInstanceOf(GmailNotImplementedError);
   });
 
-  test('range throws not-implemented', async function () {
+  test('open-ended `to` omits before:; no cap (follows pages to exhaustion)', async function () {
+    let listCalls = 0;
+    const pages: Record<string, unknown> = {
+      first: { messages: [{ id: 'm1', threadId: 't1' }], nextPageToken: 'p2' },
+      p2: { messages: [{ id: 'm2', threadId: 't1' }] },
+    };
+    let listQ: string | null | undefined;
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        return json(message(id, 't1'));
+      }
+      const u = new URL(url);
+      listQ = u.searchParams.get('q');
+      listCalls += 1;
+      return json(
+        u.searchParams.get('pageToken') === 'p2' ? pages.p2 : pages.first
+      );
+    };
+    const events = await collect(
+      ingest(
+        input({ spec: { type: 'range', from: '2023-11-14T00:00:00.000Z' } }),
+        {
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+        }
+      )
+    );
+    expect(listQ).toBe('after:1699920000');
+    expect(events.filter((e) => e.type === 'message')).toHaveLength(2);
+    expect(listCalls).toBe(2); // no cap → followed nextPageToken
+  });
+
+  test('both bounds omitted throws GmailRangeBoundsError', async function () {
     const it = ingest(input({ spec: { type: 'range' } }), {
       fetchImpl: (async () => json({})) as unknown as typeof fetch,
     });
-    await expect(collect(it)).rejects.toBeInstanceOf(GmailNotImplementedError);
+    await expect(collect(it)).rejects.toBeInstanceOf(GmailRangeBoundsError);
+  });
+});
+
+describe('ingest — incremental sync', function () {
+  test('builds an after: query from the cursor and advances it', async function () {
+    let listQ: string | null | undefined;
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (/\/messages\/m\d+/.test(url)) {
+        // m2 is newer than m1 — cursor must advance to m2's date.
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        const date = id === 'm2' ? '1700000050000' : '1700000000000';
+        return json(message(id, 't1', date));
+      }
+      listQ = new URL(url).searchParams.get('q');
+      return json({
+        messages: [
+          { id: 'm1', threadId: 't1' },
+          { id: 'm2', threadId: 't1' },
+        ],
+      });
+    };
+    const events = await collect(
+      ingest(
+        input({
+          spec: {
+            type: 'incremental',
+            cursor: { lastInternalDate: '2023-11-14T22:13:20.000Z' },
+          },
+        }),
+        { fetchImpl: fetchImpl as unknown as typeof fetch }
+      )
+    );
+    expect(listQ).toBe('after:1700000000'); // cursor instant → epoch-seconds
+    const completed = events.at(-1);
+    expect(completed?.type === 'completed' && completed.cursor).toEqual({
+      lastInternalDate: '2023-11-14T22:14:10.000Z', // 1700000050000ms (m2)
+    });
+  });
+
+  test('empty result echoes the inbound cursor unchanged', async function () {
+    const inboundCursor = { lastInternalDate: '2023-11-14T22:13:20.000Z' };
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      return json({}); // no messages
+    };
+    const events = await collect(
+      ingest(input({ spec: { type: 'incremental', cursor: inboundCursor } }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+    );
+    expect(events.filter((e) => e.type === 'message')).toHaveLength(0);
+    const completed = events.at(-1);
+    expect(completed?.type === 'completed' && completed.cursor).toEqual(
+      inboundCursor
+    );
+  });
+
+  test('a malformed cursor throws GmailIngestError', async function () {
+    const it = ingest(
+      input({ spec: { type: 'incremental', cursor: { nope: 1 } } }),
+      { fetchImpl: (async () => json({})) as unknown as typeof fetch }
+    );
+    await expect(collect(it)).rejects.toBeInstanceOf(GmailIngestError);
+  });
+});
+
+describe('ingest — cursor derivation', function () {
+  test('cursor is the max internalDate, not the last emitted', async function () {
+    // m1 is newest but, being first in the list, often completes first; the
+    // running max must still pick it over the later-but-older m2/m3.
+    const dates: Record<string, string> = {
+      m1: '1700000900000', // newest
+      m2: '1700000100000',
+      m3: '1700000500000',
+    };
+    const fetchImpl = async function (url: string) {
+      if (url.includes('/token')) return json(TOKEN_OK);
+      if (/\/messages\/m\d+/.test(url)) {
+        const id = url.match(/\/messages\/(m\d+)/)![1]!;
+        return json(message(id, 't1', dates[id]));
+      }
+      return json({
+        messages: [
+          { id: 'm1', threadId: 't1' },
+          { id: 'm2', threadId: 't1' },
+          { id: 'm3', threadId: 't1' },
+        ],
+      });
+    };
+    const events = await collect(
+      ingest(input({ spec: { type: 'full', limit: 3 } }), {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+    );
+    const completed = events.at(-1);
+    expect(completed?.type === 'completed' && completed.cursor).toEqual({
+      lastInternalDate: '2023-11-14T22:28:20.000Z', // 1700000900000ms (m1, the max)
+    });
   });
 });
 
@@ -315,8 +478,11 @@ describe('ingest — fetch failures fail the sync (v0 loud)', function () {
         return json({ error: 'boom' }, { status: 500 });
       return json({ messages: [{ id: 'm1', threadId: 't1' }] });
     };
+    // maxRetries: 0 — 500 is retryable; disable backoff so this asserts the
+    // terminal abort behavior without waiting on the retry loop.
     const it = ingest(input({ spec: { type: 'full', limit: 1 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailMessageFetchError);
   });
@@ -349,6 +515,7 @@ describe('ingest — fetch failures fail the sync (v0 loud)', function () {
     };
     const it = ingest(input({ spec: { type: 'full', limit: 1 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailAttachmentFetchError);
   });
@@ -399,8 +566,6 @@ describe('ingest — empty mailbox', function () {
   test('emits started -> auth -> completed with zero processed', async function () {
     const fetchImpl = async function (url: string) {
       if (url.includes('/token')) return json(TOKEN_OK);
-      if (url.includes('/profile'))
-        return json({ emailAddress: 'u@g.com', historyId: '3' });
       return json({ resultSizeEstimate: 0 });
     };
     const events = await collect(
@@ -410,7 +575,9 @@ describe('ingest — empty mailbox', function () {
     const completed = events[2];
     if (completed.type === 'completed') {
       expect(completed.processed).toBe(0);
-      expect(completed.cursor).toEqual({ historyId: '3' });
+      // A full sync with no messages has no internalDate to derive a cursor
+      // from and no inbound cursor to echo, so it emits undefined.
+      expect(completed.cursor).toBeUndefined();
     }
   });
 });
@@ -535,6 +702,7 @@ describe('ingest — concurrent fetch', function () {
     const it = ingest(input({ spec: { type: 'full', limit: 3 } }), {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       fetchConcurrency: 3,
+      maxRetries: 0,
     });
     await expect(collect(it)).rejects.toBeInstanceOf(GmailMessageFetchError);
   });

@@ -5,6 +5,7 @@ import type {
   IProviderAdapter,
 } from '@repel/backend-adapters/types';
 import { type LogContext, currentLogContext } from '@repel/logger/context';
+import { logger } from '@repel/logger/logger';
 import { syncService } from '../../persistence/service';
 import type { SyncContext, SyncEventHandler, SyncJob } from '../../types';
 import { type SyncDeps, runSyncJob } from '../handler';
@@ -276,6 +277,39 @@ describe('runSyncJob — failure isolation', function () {
 
     expect(result.tasks[0]!.status).toBe('failed');
     expect(result.tasks[0]!.error).toBe('revoked token');
+  });
+
+  test('a thrown ingest is logged at error level with the Error object', async function () {
+    const errorLog = spyOn(logger, 'error').mockReturnValue(undefined);
+    try {
+      const boom = new Error('boom');
+      await runSyncJob(job(oneTask), makeDeps(makeThrowingAdapter(boom)));
+
+      // The caught error is passed as the 2nd arg (the Error overload), not
+      // stringified into a field — so its stack is captured.
+      const call = errorLog.mock.calls.find((c) => c[1] === boom);
+      expect(call).toBeDefined();
+      expect(call![0]).toBe('sync task failed');
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  test('an emitted failed event is logged at error level with the AdapterError', async function () {
+    const errorLog = spyOn(logger, 'error').mockReturnValue(undefined);
+    try {
+      const adapterErr = new TestAdapterError('revoked token');
+      const adapter = makeAdapter([
+        { type: 'started' },
+        { type: 'failed', error: adapterErr },
+      ]);
+      await runSyncJob(job(oneTask), makeDeps(adapter));
+
+      const call = errorLog.mock.calls.find((c) => c[1] === adapterErr);
+      expect(call).toBeDefined();
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   test('null stored credentials fail the task without calling decrypt', async function () {

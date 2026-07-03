@@ -74,15 +74,23 @@ export type GmailMessageList = z.infer<typeof GmailMessageListSchema>;
 
 // List a single page of message ids. Pagination (following nextPageToken up to a
 // cap) is the caller's job; this is one request. `maxResults` bounds the page
-// size; `pageToken` resumes a prior list. deps.fetchImpl is a test seam.
+// size; `pageToken` resumes a prior list. `q` is a Gmail search query (e.g.
+// `after:<epoch> before:<epoch>`) — built by the caller; this stays a thin REST
+// mirror that passes it through. deps.fetchImpl is a test seam.
 export function listGmailMessages(
-  args: { accessToken: string; pageToken?: string; maxResults?: number },
+  args: {
+    accessToken: string;
+    pageToken?: string;
+    maxResults?: number;
+    q?: string;
+  },
   deps: HttpDeps = {}
 ): Promise<GmailMessageList> {
   const params: Record<string, string> = {};
   if (args.pageToken !== undefined) params.pageToken = args.pageToken;
   if (args.maxResults !== undefined)
     params.maxResults = String(args.maxResults);
+  if (args.q !== undefined) params.q = args.q;
   return httpRequest(
     {
       url: GMAIL_MESSAGES_ENDPOINT,

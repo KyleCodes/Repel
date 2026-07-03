@@ -4,9 +4,20 @@ import { AppError } from '@repel/errors';
 // boundary can distinguish a known, surfaceable failure from an unexpected crash.
 export abstract class SyncCliError extends AppError {}
 
-// Raised when `syncs run` is invoked without `--full`. v0 supports only full
-// sync; incremental/range land with REP-53.
-export class SyncRunFullRequiredError extends SyncCliError {}
+// Raised when `syncs run full` is given both `--limit` and `--unbounded`. A
+// capped and an uncapped full sync are contradictory; the caller must pick one.
+export class SyncRunLimitUnboundedError extends SyncCliError {}
+
+// Raised when `syncs run range` is given neither `--from` nor `--to`. An
+// unbounded range is a full sync — the caller must pick a bound (mirrors the
+// adapter's GmailRangeBoundsError).
+export class SyncRunRangeBoundsError extends SyncCliError {}
+
+// Raised when `syncs run incremental` has nothing to resume from: no prior
+// completed sync for the account and no `--since`/`--cursor` override. Never
+// silently falls back to a full sync — the caller must run `full` first or pass
+// an explicit start.
+export class SyncRunNoCursorError extends SyncCliError {}
 
 // Raised when a read verb is given a job id that no sync job in the org matches.
 export class SyncJobNotFoundError extends SyncCliError {}
