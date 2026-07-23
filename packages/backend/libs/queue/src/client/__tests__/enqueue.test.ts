@@ -5,37 +5,35 @@ import type { StoredPayload } from '../../types';
 import { enqueue } from '../enqueue';
 
 // enqueue runs its insert through the caller's tx when one is supplied, so a
-// stub Tx whose insertInto().…executeTakeFirst() resolves to a chosen row drives
-// both branches without a DB. The chain only needs the methods enqueueJob calls.
+// stub Tx whose $queryRaw resolves to a chosen row set drives both branches
+// without a DB (the dedup path is an empty result set).
 function stubTx(returnedRow: { id: string } | undefined): Tx {
-  const builder = {
-    values: () => builder,
-    onConflict: () => builder,
-    returning: () => builder,
-    executeTakeFirst: async () => returnedRow,
-  };
-  return { insertInto: () => builder } as unknown as Tx;
+  return {
+    $queryRaw: async () => (returnedRow ? [returnedRow] : []),
+  } as unknown as Tx;
 }
 
-// A stub Tx that records the row handed to .values(), so a test can assert what
-// was serialized into the payload wrapper (orgId, traceId, …).
+// A stub Tx that records the Sql handed to $queryRaw, so a test can assert what
+// was serialized into the payload wrapper (orgId, traceId, …). The stored
+// payload is the one stringified-jsonb bound value.
 function capturingTx(returnedRow: { id: string } | undefined): {
   tx: Tx;
   stored(): StoredPayload;
 } {
-  let captured: { payload: StoredPayload } | undefined;
-  const builder = {
-    values: (row: { payload: StoredPayload }) => {
-      captured = row;
-      return builder;
-    },
-    onConflict: () => builder,
-    returning: () => builder,
-    executeTakeFirst: async () => returnedRow,
-  };
+  let values: unknown[] = [];
   return {
-    tx: { insertInto: () => builder } as unknown as Tx,
-    stored: () => captured!.payload,
+    tx: {
+      $queryRaw: async (query: { values: unknown[] }) => {
+        values = query.values;
+        return returnedRow ? [returnedRow] : [];
+      },
+    } as unknown as Tx,
+    stored: () => {
+      const json = values.find(
+        (v): v is string => typeof v === 'string' && v.startsWith('{')
+      );
+      return JSON.parse(json!) as StoredPayload;
+    },
   };
 }
 

@@ -1,4 +1,4 @@
-import { sql } from 'kysely';
+import { type Sql, sql } from '@repel/backend-db/sql';
 import type { Tx } from '@repel/backend-db/types';
 
 export type ReapCompletedJobsInput = { ttlMs: number };
@@ -8,23 +8,16 @@ export type ReapCompletedJobsInput = { ttlMs: number };
 // inspection. The partial poll index never touches these rows (it is WHERE
 // status = 'pending'), so this is pure space reclamation, not a hot path.
 export const buildReapCompletedJobs = (
-  trx: Tx,
   input: ReapCompletedJobsInput
-) =>
-  trx
-    .deleteFrom('jobQueue')
-    .where('status', '=', 'completed')
-    .where(
-      'completedAt',
-      '<',
-      sql<Date>`now() - (${input.ttlMs}::int * interval '1 millisecond')`
-    );
+): Sql => sql`
+  DELETE FROM job_queue
+  WHERE status = 'completed'
+    AND completed_at < now() - (${input.ttlMs}::int * interval '1 millisecond')`;
 
 // Returns the number of rows deleted.
 export async function reapCompletedJobs(
   trx: Tx,
   input: ReapCompletedJobsInput
 ): Promise<number> {
-  const result = await buildReapCompletedJobs(trx, input).executeTakeFirst();
-  return Number(result.numDeletedRows);
+  return trx.$executeRaw(buildReapCompletedJobs(input));
 }
