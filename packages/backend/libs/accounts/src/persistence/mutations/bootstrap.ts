@@ -1,67 +1,59 @@
-import type { InferResult, Insertable } from 'kysely';
-import { jsonObjectFrom } from 'kysely/helpers/postgres';
-import type { Org, User } from '@repel/backend-db/generated';
+import type { Org, User } from '@repel/backend-db/prisma/client';
+import type {
+  OrgUncheckedCreateInput,
+  UserUncheckedCreateInput,
+} from '@repel/backend-db/prisma/models';
+import { type Sql, sql } from '@repel/backend-db/sql';
 import type { Tx } from '@repel/backend-db/types';
 
 // Bootstrap mutation: create the first org and its admin user in one round trip.
 //
-// Writeable CTE chains both inserts inside a single statement. The final
-// SELECT projects each inserted row as a JSON object via jsonObjectFrom,
-// so the returned shape is `{ org: {...}, user: {...} }` end-to-end — no
-// application-side reshape.
+// A writeable CTE chains both inserts inside a single statement — the query
+// API cannot express this, so the statement is raw SQL. The final SELECT
+// projects each inserted row as a JSON object (camelCase keys aliased in the
+// inner selects) so the returned shape is `{ org: {...}, user: {...} }`
+// end-to-end — no application-side reshape.
 //
-// Known caveat: jsonObjectFrom wraps results in to_json(), which serializes
-// timestamptz as ISO strings. Kysely's inferred type says Date; the wire
-// delivers string. Tracked at kysely-org/kysely#482. The service boundary
-// coerces with new Date() where it matters.
+// Known caveat (carried over from the Kysely version): to_json() serializes
+// timestamptz as ISO strings. The declared types say Date; the wire delivers
+// string. The service boundary coerces with new Date() where it matters.
 
-const buildBootstrap = (trx: Tx, input: BootstrapInput) =>
-  trx
-    .with('new_org', (qb) =>
-      qb.insertInto('org').values({ name: input.org.name }).returningAll()
-    )
-    .with('new_user', (qb) =>
-      qb
-        .insertInto('user')
-        .columns(['orgId', 'email', 'name', 'role'])
-        .expression((eb) =>
-          eb
-            .selectFrom('new_org')
-            .select((eb2) => [
-              'new_org.id as orgId',
-              eb2.val(input.user.email).as('email'),
-              eb2.val(input.user.name ?? null).as('name'),
-              eb2.val<'admin'>('admin').as('role'),
-            ])
-        )
-        .returningAll()
-    )
-    .selectNoFrom((eb) => [
-      jsonObjectFrom(eb.selectFrom('new_org').selectAll()).as('org'),
-      jsonObjectFrom(eb.selectFrom('new_user').selectAll()).as('user'),
-    ]);
-
-// jsonObjectFrom's inferred shape is `T | null` even when the sub-select is
-// guaranteed to return a row (Postgres' to_json() of a single-row select
-// can be null in the general case). Both objects are non-null here because
-// the CTE wrote them in the same statement. We strip the null at this
-// boundary so callers don't repeat the assertion.
-type BootstrapRow = InferResult<ReturnType<typeof buildBootstrap>>[number];
+export const buildBootstrap = (input: BootstrapInput): Sql => sql`
+  WITH new_org AS (
+    INSERT INTO org (name) VALUES (${input.org.name}) RETURNING *
+  ), new_user AS (
+    INSERT INTO "user" (org_id, email, name, role)
+    SELECT new_org.id, ${input.user.email}, ${input.user.name ?? null}, 'admin'
+    FROM new_org
+    RETURNING *
+  )
+  SELECT
+    (SELECT to_json(o) FROM (
+      SELECT id, name,
+             created_at AS "createdAt",
+             updated_at AS "updatedAt"
+      FROM new_org) o) AS "org",
+    (SELECT to_json(u) FROM (
+      SELECT id, email, name, role,
+             org_id     AS "orgId",
+             created_at AS "createdAt",
+             updated_at AS "updatedAt"
+      FROM new_user) u) AS "user"`;
 
 export type BootstrapResult = {
-  org: NonNullable<BootstrapRow['org']>;
-  user: NonNullable<BootstrapRow['user']>;
+  org: Org;
+  user: User;
 };
 
 export type BootstrapInput = {
-  org: Insertable<Org>;
-  user: Omit<Insertable<User>, 'orgId' | 'role'>;
+  org: OrgUncheckedCreateInput;
+  user: Omit<UserUncheckedCreateInput, 'orgId' | 'role'>;
 };
 
 export async function bootstrap(
   trx: Tx,
   input: BootstrapInput
 ): Promise<BootstrapResult> {
-  const row = await buildBootstrap(trx, input).executeTakeFirstOrThrow();
-  return { org: row.org!, user: row.user! };
+  const rows = await trx.$queryRaw<BootstrapResult[]>(buildBootstrap(input));
+  return rows[0]!;
 }

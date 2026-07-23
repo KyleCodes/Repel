@@ -31,6 +31,16 @@ export class DBUniqueViolationError extends DBError {
 
 const UNIQUE_VIOLATION = '23505';
 
+// True when a Prisma query-API write matched no row (P2025) — the replacement
+// for Kysely's take-first-or-undefined contract on UPDATE ... RETURNING.
+// Mutations catch this locally and return undefined; it never crosses the
+// service boundary.
+export function isNoResultError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025'
+  );
+}
+
 // Best-effort scan of a Prisma known-request error's meta for the pg SQLSTATE
 // and constraint name. Prisma nests the original driver error at varying
 // depths (meta.code, meta.driverAdapterError.cause.*) and none of it is

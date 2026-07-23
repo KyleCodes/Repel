@@ -1,33 +1,34 @@
-import type { InferResult, Selectable } from 'kysely';
-import type { ProviderAccount } from '@repel/backend-db/generated';
+import { isNoResultError } from '@repel/backend-db/error';
+import type { ProviderAccount } from '@repel/backend-db/prisma/client';
 import type { Tx } from '@repel/backend-db/types';
+import {
+  type ProviderAccountRow,
+  toProviderAccountRow,
+} from '../lib/credentials';
 
 // Soft-delete: flips `isActive` to false. One statement (manifesto Rule 3).
-// `returningAll()` hands the updated row back so the caller can confirm the
-// account existed (RLS scopes the UPDATE — a cross-tenant id matches no row
-// and the runner returns undefined).
-
-const buildDeactivateProviderAccount = (
-  trx: Tx,
-  input: DeactivateProviderAccountInput
-) =>
-  trx
-    .updateTable('providerAccount')
-    .set({ isActive: false })
-    .where('id', '=', input.providerAccount.id)
-    .returningAll();
-
-export type DeactivateProviderAccountResult = InferResult<
-  ReturnType<typeof buildDeactivateProviderAccount>
->[number];
+// The updated row is handed back so the caller can confirm the account existed
+// (RLS scopes the UPDATE — a cross-tenant id matches no row; Prisma raises
+// its no-row error, mapped here to the undefined the contract has always had).
 
 export type DeactivateProviderAccountInput = {
-  providerAccount: Pick<Selectable<ProviderAccount>, 'id'>;
+  providerAccount: Pick<ProviderAccount, 'id'>;
 };
+
+export type DeactivateProviderAccountResult = ProviderAccountRow;
 
 export async function deactivateProviderAccount(
   trx: Tx,
   input: DeactivateProviderAccountInput
 ): Promise<DeactivateProviderAccountResult | undefined> {
-  return buildDeactivateProviderAccount(trx, input).executeTakeFirst();
+  try {
+    const row = await trx.providerAccount.update({
+      where: { id: input.providerAccount.id },
+      data: { isActive: false },
+    });
+    return toProviderAccountRow(row);
+  } catch (err) {
+    if (isNoResultError(err)) return undefined;
+    throw err;
+  }
 }

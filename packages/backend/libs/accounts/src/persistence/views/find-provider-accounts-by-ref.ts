@@ -1,6 +1,9 @@
-import type { InferResult, Selectable } from 'kysely';
-import type { ProviderAccount } from '@repel/backend-db/generated';
+import type { ProviderAccount } from '@repel/backend-db/prisma/client';
 import type { Tx } from '@repel/backend-db/types';
+import {
+  type ProviderAccountRow,
+  toProviderAccountRow,
+} from '../lib/credentials';
 
 // Resolves a provider-account reference. A reference is one of two shapes:
 //   - { alias } — a human-chosen alias.
@@ -10,40 +13,30 @@ import type { Tx } from '@repel/backend-db/types';
 // to handle no-match and ambiguity. RLS scopes the query to the current org.
 
 export type FindProviderAccountsByAliasInput = {
-  providerAccount: Pick<Selectable<ProviderAccount>, 'alias'>;
+  providerAccount: Pick<ProviderAccount, 'alias'>;
 };
 
 export type FindProviderAccountsByProviderRefInput = {
-  providerAccount: Pick<
-    Selectable<ProviderAccount>,
-    'provider' | 'externalAccountId'
-  >;
+  providerAccount: Pick<ProviderAccount, 'provider' | 'externalAccountId'>;
 };
 
 export type FindProviderAccountsByRefInput =
   | FindProviderAccountsByAliasInput
   | FindProviderAccountsByProviderRefInput;
 
-const buildFindProviderAccountsByRef = (
-  trx: Tx,
-  input: FindProviderAccountsByRefInput
-) => {
-  const base = trx.selectFrom('providerAccount').selectAll();
-  if ('alias' in input.providerAccount) {
-    return base.where('alias', '=', input.providerAccount.alias);
-  }
-  return base
-    .where('provider', '=', input.providerAccount.provider)
-    .where('externalAccountId', '=', input.providerAccount.externalAccountId);
-};
-
-export type FindProviderAccountsByRefResult = InferResult<
-  ReturnType<typeof buildFindProviderAccountsByRef>
->[number];
+export type FindProviderAccountsByRefResult = ProviderAccountRow;
 
 export async function findProviderAccountsByRef(
   trx: Tx,
   input: FindProviderAccountsByRefInput
 ): Promise<FindProviderAccountsByRefResult[]> {
-  return buildFindProviderAccountsByRef(trx, input).execute();
+  const where =
+    'alias' in input.providerAccount
+      ? { alias: input.providerAccount.alias }
+      : {
+          provider: input.providerAccount.provider,
+          externalAccountId: input.providerAccount.externalAccountId,
+        };
+  const rows = await trx.providerAccount.findMany({ where });
+  return rows.map(toProviderAccountRow);
 }
