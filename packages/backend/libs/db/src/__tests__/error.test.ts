@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '@repel/errors';
 import { DBError, DBUniqueViolationError, normalizeDbError } from '../error';
+import { Prisma } from '../prisma/client';
 
 // A concrete AppError standing in for any domain error a view/mutation might
 // throw inside a tx (e.g. ProviderAccountNotFoundError).
@@ -79,6 +80,58 @@ describe('normalizeDbError', function () {
 
   test('wraps undefined', function () {
     expect(normalizeDbError(undefined)).toBeInstanceOf(DBError);
+  });
+});
+
+// Prisma-shaped errors. The query API raises P2002 for unique violations; raw
+// queries surface the pg SQLSTATE nested in meta. meta is not public API, so
+// these tests pin our defensive extraction, not Prisma's contract.
+describe('normalizeDbError on Prisma errors', function () {
+  function knownError(code: string, meta: Record<string, unknown> | undefined) {
+    return new Prisma.PrismaClientKnownRequestError('prisma failure', {
+      code,
+      clientVersion: 'test',
+      meta,
+    });
+  }
+
+  test('maps P2002 to DBUniqueViolationError with SQLSTATE code', function () {
+    const result = normalizeDbError(knownError('P2002', undefined));
+    expect(result).toBeInstanceOf(DBUniqueViolationError);
+    expect((result as DBUniqueViolationError).code).toBe('23505');
+    expect((result as DBUniqueViolationError).constraint).toBeUndefined();
+  });
+
+  test('recovers the constraint name from meta.driverAdapterError when present', function () {
+    const result = normalizeDbError(
+      knownError('P2002', {
+        driverAdapterError: {
+          cause: { constraint: { index: 'user_uniq_org_id_email' } },
+        },
+      })
+    );
+    expect((result as DBUniqueViolationError).constraint).toBe(
+      'user_uniq_org_id_email'
+    );
+  });
+
+  test('maps a raw-query error carrying SQLSTATE 23505 in meta to DBUniqueViolationError', function () {
+    const result = normalizeDbError(knownError('P2010', { code: '23505' }));
+    expect(result).toBeInstanceOf(DBUniqueViolationError);
+    expect((result as DBUniqueViolationError).code).toBe('23505');
+  });
+
+  test('maps a raw-query error with a non-unique SQLSTATE to DBError carrying it', function () {
+    const result = normalizeDbError(knownError('P2010', { code: '42P01' }));
+    expect(result).toBeInstanceOf(DBError);
+    expect(result).not.toBeInstanceOf(DBUniqueViolationError);
+    expect((result as DBError).code).toBe('42P01');
+  });
+
+  test('falls back to the Prisma code when no SQLSTATE is recoverable', function () {
+    const result = normalizeDbError(knownError('P2025', undefined));
+    expect(result).toBeInstanceOf(DBError);
+    expect((result as DBError).code).toBe('P2025');
   });
 });
 

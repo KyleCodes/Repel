@@ -1,10 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { sql } from 'kysely';
 import { normalizeDbError } from './error';
 import { getDb } from './runtime';
 import type { Tx } from './types';
 
-// Run a decorated operation, classifying any raw pg/Kysely error crossing the
+// Run a decorated operation, classifying any raw pg/Prisma error crossing the
 // tx boundary into the AppError hierarchy (DBError family for genuine DB faults,
 // existing AppErrors passed through). Applied on every fresh-open and ambient-
 // join path so "what a service catches is always an AppError" holds app-wide.
@@ -16,13 +15,19 @@ async function withDbErrorClassification<R>(fn: () => Promise<R>): Promise<R> {
   }
 }
 
+// Interactive-transaction bounds. Kysely transactions were unbounded; Prisma
+// requires limits (its defaults are maxWait 2s / timeout 5s, too tight for a
+// large sync batch). 30s is the deliberate new ceiling — the one behavioral
+// delta of the Prisma port (MIGRATION_NOTES.md §3).
+const TX_OPTIONS = { maxWait: 5_000, timeout: 30_000 };
+
 // Runtime context tracked per transaction. runInOrgTx/runInTx stash this on
 // the AsyncLocalStorage so nested service calls can detect an ambient tx
 // and join it instead of opening a fresh one.
 //
 // orgId === null indicates a runInTx (no RLS scoping — bootstrap only).
 //
-// `trx` is the live Kysely transaction handle. Decorated service operations
+// `trx` is the live Prisma transaction client. Decorated service operations
 // receive it as their first argument on both fresh-open and ambient-join
 // paths, so a service operation never needs to know whether it is the root
 // of a transaction or joining an ambient one — its first arg is always the
@@ -38,11 +43,12 @@ const txStorage = new AsyncLocalStorage<TxContext>();
 //
 // The wrapper's public input type is `A & { orgId: string }` — the caller
 // supplies `orgId` to scope the transaction, and the inner `fn` sees its
-// own input type `A` (views and flows do not need to declare `orgId`;
-// Postgres RLS handles tenant filtering once SET LOCAL is in place).
+// own input type `A` (views and mutations do not need to declare `orgId`;
+// Postgres RLS handles tenant filtering once the GUC is in place).
 //
-//   - No ambient tx → opens one, SET LOCAL app.current_org_id = <orgId>,
-//     stashes { trx, orgId } on the ALS, runs fn(trx, input).
+//   - No ambient tx → opens one, set_config('app.current_org_id', orgId,
+//     true) — the parameterizable form of SET LOCAL, scoped to the
+//     transaction — stashes { trx, orgId } on the ALS, runs fn(trx, input).
 //   - Ambient tx with same orgId → joins it; passes ambient.trx to fn.
 //   - Ambient tx with a different orgId → throws (cross-tenant leak guard).
 //   - Ambient runInTx (no org) → throws; cannot call tenant code from
@@ -68,20 +74,16 @@ export function runInOrgTx<A, R>(
       }
       return withDbErrorClassification(() => fn(ambient.trx, input));
     }
-    return getDb()
-      .transaction()
-      .execute(async function (trx) {
-        await sql`SET LOCAL app.current_org_id = ${sql.lit(orgId)}`.execute(
-          trx
-        );
-        return txStorage.run({ trx, orgId }, function () {
-          return withDbErrorClassification(() => fn(trx, input));
-        });
+    return getDb().$transaction(async function (trx) {
+      await trx.$queryRaw`SELECT set_config('app.current_org_id', ${orgId}, true)`;
+      return txStorage.run({ trx, orgId }, function () {
+        return withDbErrorClassification(() => fn(trx, input));
       });
+    }, TX_OPTIONS);
   };
 }
 
-// Decorator for unscoped flows — bootstrap, and other flows that create
+// Decorator for unscoped operations — bootstrap, and other flows that create
 // the org itself. Joins an ambient runInTx if one exists; refuses to join
 // a runInOrgTx, which would silently bypass RLS.
 export function runInTx<A, R>(
@@ -98,13 +100,11 @@ export function runInTx<A, R>(
       }
       return withDbErrorClassification(() => fn(ambient.trx, input));
     }
-    return getDb()
-      .transaction()
-      .execute(async function (trx) {
-        return txStorage.run({ trx, orgId: null }, function () {
-          return withDbErrorClassification(() => fn(trx, input));
-        });
+    return getDb().$transaction(async function (trx) {
+      return txStorage.run({ trx, orgId: null }, function () {
+        return withDbErrorClassification(() => fn(trx, input));
       });
+    }, TX_OPTIONS);
   };
 }
 
