@@ -41,6 +41,17 @@ export function isNoResultError(err: unknown): boolean {
   );
 }
 
+// True when a Prisma query-API write hit a unique constraint (P2002).
+// CAUTION: inside an open transaction this is only useful to classify the
+// failure — a unique violation aborts the whole Postgres transaction (25P02),
+// so catch-and-continue does NOT work under runInTx/runInOrgTx. For in-tx
+// idempotent writes use upsert (native ON CONFLICT, no abort) instead.
+export function isUniqueViolationError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+  );
+}
+
 // Best-effort scan of a Prisma known-request error's meta for the pg SQLSTATE
 // and constraint name. Prisma nests the original driver error at varying
 // depths (meta.code, meta.driverAdapterError.cause.*) and none of it is

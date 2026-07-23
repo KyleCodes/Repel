@@ -1,91 +1,104 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  type CreateSyncJobValues,
-  buildCreateSyncJob,
-} from '../create-sync-job';
-import { buildPersistEvent } from '../persist-event';
-import {
-  type PersistMessageInput,
-  buildPersistMessageCore,
-} from '../persist-message';
+import { Prisma } from '@repel/backend-db/prisma/client';
+import type { Tx } from '@repel/backend-db/types';
+import { createSyncJob } from '../create-sync-job';
+import { persistEvent } from '../persist-event';
+import { type PersistMessageInput, persistMessage } from '../persist-message';
 
-// Connection-free: a Prisma.Sql is plain text + bound values, so the SQL-shape
-// invariants are asserted with no I/O — the successor of the old
-// Kysely .compile() pattern. (persistMessage runs sequential statements, not a
-// single builder, so its idempotency is covered by an integration test; here we
-// assert the SQL-shape invariants of the single-statement mutations.)
+// Behavioral tests against a fake Tx: the mutations are ORM calls now, so the
+// unit under test is the orchestration — nested-write shape, the idempotency
+// branch, the DbNull sentinel — not SQL text. No database.
 
-const createInput: CreateSyncJobValues = {
-  syncJob: { id: 'job-1', orgId: 'org-1', userId: 'user-1' },
-  tasks: [
-    {
-      id: 'task-1',
-      orgId: 'org-1',
-      userId: 'user-1',
-      jobId: 'job-1',
-      providerAccountId: 'pa-1',
-      spec: { type: 'full', limit: 20 },
-    },
-  ],
-};
+describe('createSyncJob', function () {
+  test('creates job, tasks, and per-task enqueued events as one nested write', async function () {
+    let captured: Record<string, unknown> | undefined;
+    const trx = {
+      syncJob: {
+        create: async (args: { data: Record<string, unknown> }) => {
+          captured = args.data;
+          return {
+            id: 'job-1',
+            orgId: 'org-1',
+            userId: 'user-1',
+            tasks: [{ id: 'task-1', providerAccountId: 'pa-1', spec: {} }],
+          };
+        },
+      },
+    } as unknown as Tx;
 
-describe('buildCreateSyncJob', function () {
-  test('writes job, tasks, and a per-task enqueued event in one statement', function () {
-    const query = buildCreateSyncJob(createInput);
-    // All three inserts ride one CTE statement.
-    expect(query.sql).toContain('sync_job');
-    expect(query.sql).toContain('sync_task');
-    expect(query.sql).toContain('sync_task_event');
-    // The enqueued event type is a bound parameter.
-    expect(query.values).toContain('enqueued');
-    // org_id is written explicitly (RLS USING-only).
-    expect(query.sql).toContain('org_id');
-    expect(query.values).toContain('org-1');
-    // The nested task projection aliases camelCase in-SQL (no plugin anymore).
-    expect(query.sql).toContain('"providerAccountId"');
-  });
+    const row = await createSyncJob(trx, {
+      syncJob: { id: 'job-1', orgId: 'org-1', userId: 'user-1' },
+      tasks: [
+        {
+          id: 'task-1',
+          orgId: 'org-1',
+          userId: 'user-1',
+          jobId: 'job-1',
+          providerAccountId: 'pa-1',
+          spec: { type: 'full', limit: 20 },
+        },
+      ],
+    });
 
-  test('the supplied ids become bound parameters (in-memory id == persisted id)', function () {
-    const query = buildCreateSyncJob(createInput);
-    expect(query.values).toContain('job-1');
-    expect(query.values).toContain('task-1');
-  });
-
-  test('the spec is bound stringified and cast to jsonb', function () {
-    const query = buildCreateSyncJob(createInput);
-    expect(query.sql).toContain('::jsonb');
-    expect(query.values).toContain(JSON.stringify({ type: 'full', limit: 20 }));
+    expect(row.id).toBe('job-1');
+    const tasks = (captured!.tasks as { create: Record<string, unknown>[] })
+      .create;
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]!.providerAccountId).toBe('pa-1');
+    // org_id explicit on every level (RLS USING-only) and the enqueued event
+    // nested under its task.
+    expect(captured!.orgId).toBe('org-1');
+    expect(tasks[0]!.orgId).toBe('org-1');
+    const events = (tasks[0]!.events as { create: Record<string, unknown>[] })
+      .create;
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe('enqueued');
+    expect(events[0]!.orgId).toBe('org-1');
   });
 });
 
-describe('buildPersistEvent', function () {
-  test('inserts one sync_task_event with org_id explicit', function () {
-    const query = buildPersistEvent({
+describe('persistEvent', function () {
+  function capturingTx() {
+    let captured: Record<string, unknown> | undefined;
+    const trx = {
+      syncTaskEvent: {
+        create: async (args: { data: Record<string, unknown> }) => {
+          captured = args.data;
+          return { id: 'evt-1', ...args.data };
+        },
+      },
+    } as unknown as Tx;
+    return { trx, data: () => captured! };
+  }
+
+  test('passes an object payload through', async function () {
+    const { trx, data } = capturingTx();
+    await persistEvent(trx, {
       orgId: 'org-1',
       userId: 'user-1',
       taskId: 'task-1',
       type: 'progress',
       payload: { processed: 3 },
     });
-    expect(query.sql).toContain('sync_task_event');
-    expect(query.sql).toContain('org_id');
-    expect(query.values).toContain('progress');
+    expect(data().payload).toEqual({ processed: 3 });
+    expect(data().orgId).toBe('org-1');
   });
 
-  test('a nullish payload binds SQL NULL, not a JSON null sentinel', function () {
-    const query = buildPersistEvent({
+  test('stores an absent payload as SQL NULL via the DbNull sentinel', async function () {
+    const { trx, data } = capturingTx();
+    await persistEvent(trx, {
       orgId: 'org-1',
       userId: 'user-1',
       taskId: 'task-1',
       type: 'started',
       payload: null,
     });
-    expect(query.values).toContain(null);
+    expect(data().payload).toBe(Prisma.DbNull);
   });
 });
 
-describe('buildPersistMessageCore', function () {
-  const messageInput: PersistMessageInput = {
+describe('persistMessage', function () {
+  const input: PersistMessageInput = {
     orgId: 'org-1',
     userId: 'user-1',
     providerAccountId: 'pa-1',
@@ -112,28 +125,79 @@ describe('buildPersistMessageCore', function () {
       references: null,
       messageIdHeader: null,
     } as PersistMessageInput['message'],
-    participants: [],
+    participants: [{ handle: 'a@x.com', displayName: 'A', role: 'from' }],
     attachments: [],
   };
 
-  test('raw, message, and the message event ride one CTE statement', function () {
-    const query = buildPersistMessageCore(messageInput);
-    // All three writes are CTEs in a single statement.
-    expect(query.sql).toContain('message_raw');
-    expect(query.sql).toContain('INSERT INTO message');
-    expect(query.sql).toContain('sync_task_event');
-    // Idempotency anchor: ON CONFLICT DO NOTHING on the raw insert.
-    expect(query.sql).toContain('ON CONFLICT');
-    expect(query.sql).toContain('DO NOTHING');
-    // The message event type is bound.
-    expect(query.values).toContain('message');
+  // The raw insert is an upsert (native ON CONFLICT — a thrown P2002 would
+  // abort the ambient Postgres tx, so create-then-catch is not an option).
+  // persisted is derived from whether the 1:1 message row already exists.
+  function makeFakeTx(behavior: {
+    existingMessage: { id: string } | null;
+    upsert?: () => Promise<{ id: string }>;
+  }) {
+    const calls = {
+      messageCreate: 0,
+      participantRows: 0,
+      events: [] as Record<string, unknown>[],
+    };
+    const trx = {
+      messageRaw: {
+        upsert: behavior.upsert ?? (async () => ({ id: 'raw-1' })),
+      },
+      message: {
+        findUnique: async () => behavior.existingMessage,
+        create: async () => {
+          calls.messageCreate += 1;
+          return { id: 'msg-1' };
+        },
+      },
+      messageParticipant: {
+        createMany: async (args: { data: unknown[] }) => {
+          calls.participantRows += args.data.length;
+        },
+      },
+      attachment: {
+        createMany: async () => {},
+      },
+      syncTaskEvent: {
+        create: async (args: { data: Record<string, unknown> }) => {
+          calls.events.push(args.data);
+        },
+      },
+    } as unknown as Tx;
+    return { trx, calls };
+  }
+
+  test('fresh message: writes the graph and appends the message event', async function () {
+    const { trx, calls } = makeFakeTx({ existingMessage: null });
+    const result = await persistMessage(trx, input);
+    expect(result).toEqual({ rawMessageId: 'raw-1', persisted: true });
+    expect(calls.messageCreate).toBe(1);
+    expect(calls.participantRows).toBe(1);
+    expect(calls.events).toHaveLength(1);
+    expect(calls.events[0]!.rawMessageId).toBe('raw-1');
+    expect(calls.events[0]!.type).toBe('message');
   });
 
-  test('resolves the raw id on both branches via a union select-back', function () {
-    const query = buildPersistMessageCore(messageInput);
-    expect(query.sql).toContain('UNION ALL');
-    // The projection aliases camelCase in-SQL for both returned columns.
-    expect(query.sql).toContain('"rawMessageId"');
-    expect(query.sql).toContain('"messageId"');
+  test('resync (raw already has a message): skips the graph but still appends the event', async function () {
+    const { trx, calls } = makeFakeTx({ existingMessage: { id: 'msg-1' } });
+    const result = await persistMessage(trx, input);
+    expect(result).toEqual({ rawMessageId: 'raw-1', persisted: false });
+    expect(calls.messageCreate).toBe(0);
+    expect(calls.participantRows).toBe(0);
+    expect(calls.events).toHaveLength(1);
+  });
+
+  test('propagates upsert failures', async function () {
+    const { trx } = makeFakeTx({
+      existingMessage: null,
+      upsert: async () => {
+        throw new Error('connection reset');
+      },
+    });
+    await expect(persistMessage(trx, input)).rejects.toThrow(
+      'connection reset'
+    );
   });
 });
