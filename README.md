@@ -16,11 +16,11 @@ Self-hosted AI inbox — aggregates email and messaging channels, classifies and
 | Runtime        | Bun                                             |
 | Language       | TypeScript                                      |
 | Database       | PostgreSQL (with RLS for tenant isolation)      |
-| Query builder  | Kysely                                          |
+| ORM            | Prisma (driver adapter over `pg`)               |
 | HTTP framework | Express                                         |
 | Frontend       | React + Vite + TanStack Router + TanStack Query |
 | CLI            | Commander                                       |
-| Migrations     | node-pg-migrate                                 |
+| Migrations     | Prisma Migrate                                  |
 
 ## Repo structure
 

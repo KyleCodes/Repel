@@ -1,4 +1,4 @@
-import type { Json } from '@repel/backend-db/generated';
+import type { Json } from '@repel/backend-db/types';
 import { Channel } from '@repel/enums';
 import type {
   NormalizedAttachment,

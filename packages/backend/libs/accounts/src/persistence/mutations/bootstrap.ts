@@ -1,67 +1,42 @@
-import type { InferResult, Insertable } from 'kysely';
-import { jsonObjectFrom } from 'kysely/helpers/postgres';
-import type { Org, User } from '@repel/backend-db/generated';
+import type { Org, User } from '@repel/backend-db/prisma/client';
+import type {
+  OrgUncheckedCreateInput,
+  UserUncheckedCreateInput,
+} from '@repel/backend-db/prisma/models';
 import type { Tx } from '@repel/backend-db/types';
 
-// Bootstrap mutation: create the first org and its admin user in one round trip.
-//
-// Writeable CTE chains both inserts inside a single statement. The final
-// SELECT projects each inserted row as a JSON object via jsonObjectFrom,
-// so the returned shape is `{ org: {...}, user: {...} }` end-to-end — no
-// application-side reshape.
-//
-// Known caveat: jsonObjectFrom wraps results in to_json(), which serializes
-// timestamptz as ISO strings. Kysely's inferred type says Date; the wire
-// delivers string. Tracked at kysely-org/kysely#482. The service boundary
-// coerces with new Date() where it matters.
-
-const buildBootstrap = (trx: Tx, input: BootstrapInput) =>
-  trx
-    .with('new_org', (qb) =>
-      qb.insertInto('org').values({ name: input.org.name }).returningAll()
-    )
-    .with('new_user', (qb) =>
-      qb
-        .insertInto('user')
-        .columns(['orgId', 'email', 'name', 'role'])
-        .expression((eb) =>
-          eb
-            .selectFrom('new_org')
-            .select((eb2) => [
-              'new_org.id as orgId',
-              eb2.val(input.user.email).as('email'),
-              eb2.val(input.user.name ?? null).as('name'),
-              eb2.val<'admin'>('admin').as('role'),
-            ])
-        )
-        .returningAll()
-    )
-    .selectNoFrom((eb) => [
-      jsonObjectFrom(eb.selectFrom('new_org').selectAll()).as('org'),
-      jsonObjectFrom(eb.selectFrom('new_user').selectAll()).as('user'),
-    ]);
-
-// jsonObjectFrom's inferred shape is `T | null` even when the sub-select is
-// guaranteed to return a row (Postgres' to_json() of a single-row select
-// can be null in the general case). Both objects are non-null here because
-// the CTE wrote them in the same statement. We strip the null at this
-// boundary so callers don't repeat the assertion.
-type BootstrapRow = InferResult<ReturnType<typeof buildBootstrap>>[number];
+// Bootstrap mutation: create the first org and its admin user as one nested
+// write — the ORM idiom for the old two-insert CTE. Prisma issues both inserts
+// inside the ambient transaction, so the pair is atomic. (A side effect of
+// leaving to_json() behind: timestamps now really are Date objects, matching
+// the declared types — the old CTE delivered ISO strings at runtime.)
 
 export type BootstrapResult = {
-  org: NonNullable<BootstrapRow['org']>;
-  user: NonNullable<BootstrapRow['user']>;
+  org: Org;
+  user: User;
 };
 
 export type BootstrapInput = {
-  org: Insertable<Org>;
-  user: Omit<Insertable<User>, 'orgId' | 'role'>;
+  org: OrgUncheckedCreateInput;
+  user: Omit<UserUncheckedCreateInput, 'orgId' | 'role'>;
 };
 
 export async function bootstrap(
   trx: Tx,
   input: BootstrapInput
 ): Promise<BootstrapResult> {
-  const row = await buildBootstrap(trx, input).executeTakeFirstOrThrow();
-  return { org: row.org!, user: row.user! };
+  const { users, ...org } = await trx.org.create({
+    data: {
+      name: input.org.name,
+      users: {
+        create: {
+          email: input.user.email,
+          name: input.user.name ?? null,
+          role: 'admin',
+        },
+      },
+    },
+    include: { users: true },
+  });
+  return { org, user: users[0]! };
 }

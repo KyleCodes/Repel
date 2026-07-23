@@ -4,6 +4,23 @@
 **Status:** ACCEPTED
 **Domain:** data-access, conventions
 
+## Amendment — 2026-07-23 (Prisma port)
+
+The Kysely stack (and with it `CamelCasePlugin` and `kysely-codegen`) was
+replaced by Prisma 7 (see `MIGRATION_NOTES.md`). The core decision is
+unchanged — TypeScript uses camelCase, the database stays snake_case — but the
+mechanism moved:
+
+- **Query API:** `@map` (columns) / `@@map` (tables, enums) in
+  `libs/db/prisma/schema.prisma`. The generated client exposes camelCase
+  everywhere.
+- **Raw SQL:** nothing rewrites result keys anymore. Every raw statement
+  aliases camelCase per-column in the SQL itself
+  (`dedup_key AS "dedupKey"`), so the mapping is visible and reviewed at the
+  statement.
+- **Codegen:** `repel db codegen` runs `prisma generate` from `schema.prisma`
+  — the live database is no longer an input to type generation.
+
 ## Amendment — 2026-05-21 (Review Trigger fired)
 
 The Review Trigger below — adoption of `kysely-codegen --camel-case` — has occurred (REP-45). `infra/db/generated.ts` is now produced by `kysely-codegen` from the live database schema, not hand-maintained. `runCodegen` (`apps/server/src/cli/db/lib/codegen.ts`) regenerates it and runs as a post-step of every migration command (`up`/`down`/`nuke`), so the generated types cannot drift from the schema; `repel db codegen` exposes it for manual runs. `infra/db/types.ts` retains only the hand-written `Db`/`Tx` aliases that re-export the generated `DB` interface.

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./generated": "./src/generated.ts",
+    "./prisma/client": "./src/prisma/client.ts",
+    "./prisma/models": "./src/prisma/models.ts",
+    "./prisma/enums": "./src/prisma/enums.ts",
     "./types": "./src/types.ts",
     "./tx": "./src/tx.ts",
     "./error": "./src/error.ts",
@@ -12,22 +14,23 @@
     "./client": "./src/client.ts",
     "./admin-ops": "./src/admin-ops.ts",
     "./lib/admin-url": "./src/lib/admin-url.ts",
-    "./migrations-tracking/service": "./src/migrations-tracking/service.ts"
+    "./migrations-tracking/service": "./src/migrations-tracking/service.ts",
+    "./sql": "./src/sql.ts"
   },
   "scripts": {
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7",
+    "@prisma/client": "^7",
     "@repel/backend-env": "workspace:*",
-    "@repel/enums": "workspace:*",
     "@repel/errors": "workspace:*",
     "@repel/slug": "workspace:*",
-    "kysely": "^0.27.3",
-    "node-pg-migrate": "^7.7.0",
     "pg": "^8.12.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.6"
+    "@types/pg": "^8.11.6",
+    "prisma": "^7"
   },
   "nx": {
     "tags": [

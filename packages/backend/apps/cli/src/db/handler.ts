@@ -93,7 +93,7 @@ export function registerDbCommands(program: Command): void {
 
   db.command('status')
     .description(
-      'Diff applied migrations in pgmigrations against the filesystem'
+      'Diff applied migrations in _prisma_migrations against the filesystem'
     )
     .action(async function () {
       const input = parseOrExit(StatusInputSchema, {});
@@ -102,7 +102,7 @@ export function registerDbCommands(program: Command): void {
 
   db.command('nuke')
     .description(
-      'Reset the per-branch database to empty (drops the public schema, including pgmigrations) so migrations re-apply from zero'
+      'Reset the per-branch database to empty (drops the public schema, including _prisma_migrations) so migrations re-apply from zero'
     )
     .option('-y, --yes', 'skip the confirmation prompt')
     .action(async function (opts: { yes?: boolean }) {
@@ -112,7 +112,7 @@ export function registerDbCommands(program: Command): void {
 
   db.command('codegen')
     .description(
-      'Regenerate infra/db/generated.ts from the live database schema'
+      'Regenerate the committed Prisma client from prisma/schema.prisma'
     )
     .action(async function () {
       const input = parseOrExit(CodegenInputSchema, {});
@@ -195,11 +195,11 @@ export async function runNuke(
   }
   const databaseUrl = readDatabaseUrlFromEnvLocal();
   await nukeDatabase({ databaseUrl });
+  // No codegen step: the client is generated from schema.prisma, not the
+  // (now-empty) database, so nuking changes nothing about the types.
   logger.info(
     'nuke: dropped and recreated the public schema — run `repel db migrations up` to re-apply migrations from zero'
   );
-  // Regenerate types to reflect the now-empty schema.
-  await runCodegen();
 }
 
 export async function runCodegenCommand(_input: CodegenInput): Promise<void> {

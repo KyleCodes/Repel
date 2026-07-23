@@ -2,14 +2,14 @@
 // an external provider (Gmail, iCloud, …) and the application's normalized
 // message shape. Concrete adapters live in adapters/<provider>/; this file is
 // only the shared contract.
-import type { Insertable } from 'kysely';
 import type {
-  Attachment,
-  Message,
-  MessageParticipant,
-  MessageRaw,
-  Thread,
-} from '@repel/backend-db/generated';
+  AttachmentUncheckedCreateInput,
+  MessageParticipantUncheckedCreateInput,
+  MessageRawUncheckedCreateInput,
+  MessageUncheckedCreateInput,
+  ThreadUncheckedCreateInput,
+} from '@repel/backend-db/prisma/models';
+import type { Json } from '@repel/backend-db/types';
 import type { AuthMethodSlug, ChannelSlug, ProviderSlug } from '@repel/enums';
 import type { HttpDeps } from '@repel/http/client';
 import type { AdapterError } from './error';
@@ -154,18 +154,22 @@ export interface SendInput {
 
 // The provider's payload, with enough fidelity to re-render the message and
 // re-normalize it later without re-fetching. The omitted columns are the ones
-// the runner assigns when it persists the row. Insertable<> unwraps the
-// generated ColumnType brands to the values an adapter actually writes.
+// the runner assigns when it persists the row. The unchecked create input is
+// the write shape with scalar FKs — defaulted columns optional, the rest as an
+// adapter actually writes them.
 export type RawMessage = Omit<
-  Insertable<MessageRaw>,
-  'id' | 'createdAt' | 'syncTaskId'
->;
+  MessageRawUncheckedCreateInput,
+  // payload is re-declared with the platform Json alias: Prisma's input type
+  // wants its own InputJsonValue/JsonNull sentinels, but this value rides the
+  // raw-SQL persist path, and adapters stay off the Prisma namespace.
+  'id' | 'createdAt' | 'syncTaskId' | 'payload'
+> & { readonly payload: Json };
 
 // A participant on a normalized message. `contactId` is omitted because
 // resolving it is a DB lookup, and normalize() is pure — a downstream reconciler
 // fills it in.
 export type NormalizedParticipant = Omit<
-  Insertable<MessageParticipant>,
+  MessageParticipantUncheckedCreateInput,
   'id' | 'createdAt' | 'messageId' | 'orgId' | 'userId' | 'contactId'
 >;
 
@@ -174,7 +178,7 @@ export type NormalizedParticipant = Omit<
 // the bytes (those need a separate fetch). The bytes ride the message event as
 // AttachmentContent; the runner pairs them by externalAttachmentId.
 export type NormalizedAttachment = Omit<
-  Insertable<Attachment>,
+  AttachmentUncheckedCreateInput,
   'id' | 'createdAt' | 'messageId' | 'orgId' | 'userId' | 'bytes'
 >;
 
@@ -183,7 +187,7 @@ export type NormalizedAttachment = Omit<
 // read/state flags. externalThreadId comes from the provider (the runner
 // resolves it to a thread row), and participants become message_participant rows.
 export type NormalizedMessage = Omit<
-  Insertable<Message>,
+  MessageUncheckedCreateInput,
   | 'id'
   | 'createdAt'
   | 'updatedAt'
@@ -197,8 +201,13 @@ export type NormalizedMessage = Omit<
   | 'isArchived'
   | 'isStarred'
   | 'isDeleted'
-> &
-  Pick<Insertable<Thread>, 'externalThreadId'> & {
+  // Prisma list inputs cannot be null; the column is a nullable text[] and
+  // normalize() legitimately produces null, so the member is re-declared.
+  | 'references'
+> & { readonly references?: string[] | null } & Pick<
+    ThreadUncheckedCreateInput,
+    'externalThreadId'
+  > & {
     readonly participants: readonly NormalizedParticipant[];
     readonly attachments: readonly NormalizedAttachment[];
   };

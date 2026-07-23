@@ -1,9 +1,8 @@
-import type { Selectable } from 'kysely';
 import type { AdapterSyncSpec } from '@repel/backend-adapters/types';
 import type {
   SyncJob as SyncJobTbl,
   SyncTask as SyncTaskTbl,
-} from '@repel/backend-db/generated';
+} from '@repel/backend-db/prisma/client';
 
 // The sync persistence service's public contract: the executor working model
 // the service accepts/returns, surfaced to the rest of the sync module. The
@@ -24,15 +23,11 @@ export type GetSyncTaskInput = {
 // so the columns track the schema. spec is opaque Json in the table; the
 // executor sees the discriminated AdapterSyncSpec. SyncTask.id is the persisted
 // sync_task.id (the CLI generates it and passes it as the row PK).
-export type SyncTask = Pick<
-  Selectable<SyncTaskTbl>,
-  'id' | 'providerAccountId'
-> & { readonly spec: AdapterSyncSpec };
+export type SyncTask = Pick<SyncTaskTbl, 'id' | 'providerAccountId'> & {
+  readonly spec: AdapterSyncSpec;
+};
 
-export type SyncJob = Pick<
-  Selectable<SyncJobTbl>,
-  'id' | 'orgId' | 'userId'
-> & {
+export type SyncJob = Pick<SyncJobTbl, 'id' | 'orgId' | 'userId'> & {
   readonly tasks: readonly SyncTask[];
 };
 

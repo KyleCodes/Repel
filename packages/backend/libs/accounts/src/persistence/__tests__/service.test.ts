@@ -6,33 +6,22 @@ import { DuplicateProviderAccountError } from '../error';
 import { accountsService } from '../service';
 
 // The service's addProviderAccount wraps the mutation and maps a
-// DBUniqueViolationError to DuplicateProviderAccountError. Raw pg errors are
-// classified into the DBError family by the tx decorator before the service's
-// catch runs (covered in tx.test.ts / error.test.ts), so here the fake `exec`
-// throws the already-classified DBUniqueViolationError directly. The mutation
-// builds an insert on the supplied Tx and calls executeTakeFirstOrThrow(); we
-// drive its behaviour by supplying a fake Tx whose insert chain resolves or
-// rejects as the test dictates. No mock.module (it leaks process-globally and
-// breaks sibling tests), no database — withTxContext supplies an ambient
-// org-scoped frame so runInOrgTx joins it (the tx.test.ts idiom).
+// DBUniqueViolationError to DuplicateProviderAccountError. Raw pg/Prisma
+// errors are classified into the DBError family by the tx decorator before the
+// service's catch runs (covered in tx.test.ts / error.test.ts), so here the
+// fake `exec` throws the already-classified DBUniqueViolationError directly.
+// The mutation calls trx.providerAccount.create(); we drive its behaviour by
+// supplying a fake Tx whose create delegates to `exec`. No mock.module (it
+// leaks process-globally and breaks sibling tests), no database — withTxContext
+// supplies an ambient org-scoped frame so runInOrgTx joins it (the tx.test.ts
+// idiom).
 
-// Build a fake Tx whose insertInto(...).values(...).returningAll()
-// .executeTakeFirstOrThrow() delegates to `exec`.
 function makeFakeTx(exec: () => Promise<unknown>): Tx {
-  const chain = {
-    values() {
-      return this;
-    },
-    returningAll() {
-      return this;
-    },
-    executeTakeFirstOrThrow() {
-      return exec();
-    },
-  };
   return {
-    insertInto() {
-      return chain;
+    providerAccount: {
+      create() {
+        return exec();
+      },
     },
   } as unknown as Tx;
 }
@@ -58,12 +47,25 @@ function call(exec: () => Promise<unknown>) {
 
 describe('accountsService.addProviderAccount', function () {
   test('returns the inserted row on success', async function () {
-    const row = { id: 'pa-99', externalAccountId: 'user@gmail.com' };
+    const row = {
+      id: 'pa-99',
+      externalAccountId: 'user@gmail.com',
+      credentialsEncrypted: null,
+    };
     expect(
       await call(async function () {
         return row;
       })
     ).toEqual(row as never);
+  });
+
+  test('converts a Uint8Array credentials column back to Buffer', async function () {
+    const stored = new Uint8Array([1, 2, 3]);
+    const result = await call(async function () {
+      return { id: 'pa-99', credentialsEncrypted: stored };
+    });
+    expect(Buffer.isBuffer(result.credentialsEncrypted)).toBe(true);
+    expect(result.credentialsEncrypted).toEqual(Buffer.from([1, 2, 3]));
   });
 
   test('maps a DBUniqueViolationError to DuplicateProviderAccountError', async function () {

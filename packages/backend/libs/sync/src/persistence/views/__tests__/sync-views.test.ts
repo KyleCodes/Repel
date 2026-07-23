@@ -1,46 +1,173 @@
 import { describe, expect, test } from 'bun:test';
-import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
-import { Pool } from 'pg';
-import type { DB } from '@repel/backend-db/generated';
 import type { Tx } from '@repel/backend-db/types';
-import { buildListSyncJobs } from '../list-sync-jobs';
-import { buildListTaskEvents } from '../list-task-events';
+import { getSyncTaskResults } from '../get-sync-task-results';
 
-// Compile-only: a Kysely over a never-connected Pool so .compile() yields SQL +
-// parameters with no I/O. These views are plain selects (no CTE), so the SQL
-// shape is the unit under test — org scoping is enforced by RLS (no explicit
-// predicate), ordering and the taskId filter are explicit and asserted here.
-const db = new Kysely<DB>({
-  dialect: new PostgresDialect({
-    pool: new Pool({ connectionString: 'postgres://unused' }),
-  }),
-  plugins: [new CamelCasePlugin()],
-});
-const trx = db as unknown as Tx;
+// Behavioral tests of the event-log fold: fetch is ORM, derivation is app
+// code, so the unit under test is the fold — latest-per-type, terminal
+// resolution, payload field extraction — driven through a fake Tx.
 
-describe('listSyncJobs', function () {
-  test('selects the bare job columns, newest first, with no explicit org filter', function () {
-    const compiled = buildListSyncJobs(trx).compile();
-    expect(compiled.sql).toContain('sync_job');
-    expect(compiled.sql).toContain('order by');
-    expect(compiled.sql).toContain('desc');
-    // RLS scopes the org — the query carries no org_id predicate of its own.
-    expect(compiled.sql).not.toContain('where');
-    // No status/processed fold in SQL — that is the service's N+1 loop.
-    expect(compiled.sql).not.toContain('sync_task_event');
+function makeFakeTx(fixture: {
+  tasks: Array<{ id: string; jobId: string; providerAccountId: string }>;
+  events: Array<{
+    taskId: string;
+    type: string;
+    payload: unknown;
+    createdAt: Date;
+  }>;
+}) {
+  let capturedWhere: Record<string, unknown> | undefined;
+  const trx = {
+    syncTask: {
+      findMany: async () => fixture.tasks,
+    },
+    syncTaskEvent: {
+      findMany: async (args: { where: Record<string, unknown> }) => {
+        capturedWhere = args.where;
+        return [...fixture.events].sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+        );
+      },
+    },
+  } as unknown as Tx;
+  return { trx, where: () => capturedWhere! };
+}
+
+const at = (s: number) => new Date(2026, 0, 1, 0, 0, s);
+const task = { id: 'task-1', jobId: 'job-1', providerAccountId: 'pa-1' };
+
+describe('getSyncTaskResults', function () {
+  test('excludes high-volume message events from the fetch', async function () {
+    const { trx, where } = makeFakeTx({ tasks: [task], events: [] });
+    await getSyncTaskResults(trx, { syncTask: { jobId: 'job-1' } });
+    const typeFilter = where().type as { in: string[] };
+    expect(typeFilter.in).not.toContain('message');
+    expect(typeFilter.in).toEqual(
+      expect.arrayContaining(['started', 'progress', 'completed', 'failed'])
+    );
   });
-});
 
-describe('listTaskEvents', function () {
-  test('selects the raw event columns for one task, oldest first', function () {
-    const compiled = buildListTaskEvents(trx, {
-      syncTask: { id: 'task-1' },
-    }).compile();
-    expect(compiled.sql).toContain('sync_task_event');
-    expect(compiled.sql).toContain('task_id');
-    expect(compiled.parameters).toContain('task-1');
-    expect(compiled.sql).toContain('order by');
-    // The audit trail keeps every event — no distinctOn collapse.
-    expect(compiled.sql).not.toContain('distinct on');
+  test('a completed run: status, processed and cursor from the completed payload', async function () {
+    const { trx } = makeFakeTx({
+      tasks: [task],
+      events: [
+        { taskId: 'task-1', type: 'started', payload: null, createdAt: at(1) },
+        {
+          taskId: 'task-1',
+          type: 'progress',
+          payload: { processed: 5 },
+          createdAt: at(2),
+        },
+        {
+          taskId: 'task-1',
+          type: 'completed',
+          payload: { processed: 9, cursor: { historyId: '42' } },
+          createdAt: at(3),
+        },
+      ],
+    });
+    const [row] = await getSyncTaskResults(trx, {
+      syncTask: { jobId: 'job-1' },
+    });
+    expect(row).toMatchObject({
+      taskId: 'task-1',
+      status: 'completed',
+      processed: 9,
+      cursor: { historyId: '42' },
+      startedAt: at(1),
+      completedAt: at(3),
+      error: null,
+    });
+  });
+
+  test('a running task (no terminal event) falls back to the progress count', async function () {
+    const { trx } = makeFakeTx({
+      tasks: [task],
+      events: [
+        { taskId: 'task-1', type: 'started', payload: null, createdAt: at(1) },
+        {
+          taskId: 'task-1',
+          type: 'progress',
+          payload: { processed: 3 },
+          createdAt: at(2),
+        },
+      ],
+    });
+    const [row] = await getSyncTaskResults(trx, {
+      syncTask: { jobId: 'job-1' },
+    });
+    expect(row).toMatchObject({
+      status: 'running',
+      processed: 3,
+      completedAt: null,
+      cursor: null,
+    });
+  });
+
+  test('completion after an earlier failure: terminal is the newer event, error still reported', async function () {
+    const { trx } = makeFakeTx({
+      tasks: [task],
+      events: [
+        {
+          taskId: 'task-1',
+          type: 'failed',
+          payload: { error: 'rate limited' },
+          createdAt: at(1),
+        },
+        {
+          taskId: 'task-1',
+          type: 'completed',
+          payload: { processed: 7 },
+          createdAt: at(2),
+        },
+      ],
+    });
+    const [row] = await getSyncTaskResults(trx, {
+      syncTask: { jobId: 'job-1' },
+    });
+    // error reads from the latest failed event even when the run completed.
+    expect(row).toMatchObject({
+      status: 'completed',
+      processed: 7,
+      error: 'rate limited',
+      completedAt: at(2),
+    });
+  });
+
+  test('the latest event per type wins', async function () {
+    const { trx } = makeFakeTx({
+      tasks: [task],
+      events: [
+        {
+          taskId: 'task-1',
+          type: 'progress',
+          payload: { processed: 1 },
+          createdAt: at(1),
+        },
+        {
+          taskId: 'task-1',
+          type: 'progress',
+          payload: { processed: 8 },
+          createdAt: at(5),
+        },
+      ],
+    });
+    const [row] = await getSyncTaskResults(trx, {
+      syncTask: { jobId: 'job-1' },
+    });
+    expect(row!.processed).toBe(8);
+  });
+
+  test('a task with no events at all is running with zero progress', async function () {
+    const { trx } = makeFakeTx({ tasks: [task], events: [] });
+    const [row] = await getSyncTaskResults(trx, {
+      syncTask: { jobId: 'job-1' },
+    });
+    expect(row).toMatchObject({
+      status: 'running',
+      processed: 0,
+      startedAt: null,
+      completedAt: null,
+      error: null,
+    });
   });
 });
