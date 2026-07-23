@@ -30,6 +30,7 @@ export default [
       '**/dist/**',
       '**/node_modules/**',
       '**/generated.ts',
+      '**/libs/db/src/prisma/**',
       '.devctl_generated/**',
       '.devctl-worktrees/**',
       '.nx/**',
@@ -114,11 +115,13 @@ export default [
       // Test imports count: a package that imports `pg` (etc.) in its tests must
       // declare it. No test-file exclusion — undeclared imports fail everywhere.
       // `vite` + its plugin are build tooling consumed by vite.config.ts / the
-      // build script; they legitimately live in devDependencies.
+      // build script; they legitimately live in devDependencies. `prisma` is
+      // the same category: imported only by prisma.config.ts (CLI config, not
+      // shipped code), so it stays a devDependency.
       '@nx/dependency-checks': [
         'error',
         {
-          ignoredDependencies: ['vite', '@vitejs/plugin-react'],
+          ignoredDependencies: ['vite', '@vitejs/plugin-react', 'prisma'],
         },
       ],
     },

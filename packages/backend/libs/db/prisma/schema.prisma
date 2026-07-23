@@ -1,0 +1,377 @@
+// The Prisma schema, hand-authored to model the existing database exactly.
+// Field order within each model matches the live column order (attnum) so a
+// schema-only pg_dump of a fresh `migrate deploy` database diffs clean against
+// the pre-migration baseline.
+//
+// Deliberately absent, because PSL cannot express them — they live in
+// prisma/migrations/0_init/migration.sql instead:
+//   - row-level security (ENABLE + the tenant_isolation policies)
+//   - partial indexes: idx_job_queue_poll, idx_job_queue_dedup,
+//     idx_message_participant_contact, idx_sync_task_event_raw_message
+//   - CHECK constraints: user.role, message.direction,
+//     message_participant.role, attachment.disposition
+//
+// No @updatedAt anywhere: the previous stack never auto-touched updated_at
+// from the client, and adding it would be a behavior change.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AuthMethod {
+  oauth2
+  app_password
+  api_key
+
+  @@map("auth_method")
+}
+
+enum Channel {
+  email
+  sms
+  dm
+  chat_room
+
+  @@map("channel")
+}
+
+enum JobStatus {
+  pending
+  processing
+  completed
+  failed
+  dead
+
+  @@map("job_status")
+}
+
+enum Provider {
+  gmail
+  icloud
+  generic_imap
+
+  @@map("provider")
+}
+
+enum SyncEventType {
+  enqueued
+  started
+  auth
+  progress
+  message
+  completed
+  failed
+
+  @@map("sync_event_type")
+}
+
+model Org {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+
+  users            User[]
+  providerAccounts ProviderAccount[]
+  contacts         Contact[]
+  contactHandles   ContactHandle[]
+  threads          Thread[]
+  messages         Message[]
+  messageRaws      MessageRaw[]
+  messageParticipants MessageParticipant[]
+  attachments      Attachment[]
+  syncJobs         SyncJob[]
+  syncTasks        SyncTask[]
+  syncTaskEvents   SyncTaskEvent[]
+
+  @@map("org")
+}
+
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  email     String
+  name      String?
+  role      String   @default("admin")
+  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+
+  org                 Org                  @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  providerAccounts    ProviderAccount[]
+  contacts            Contact[]
+  contactHandles      ContactHandle[]
+  threads             Thread[]
+  messages            Message[]
+  messageRaws         MessageRaw[]
+  messageParticipants MessageParticipant[]
+  attachments         Attachment[]
+  syncJobs            SyncJob[]
+  syncTasks           SyncTask[]
+  syncTaskEvents      SyncTaskEvent[]
+
+  @@unique([orgId, email], map: "user_uniq_org_id_email")
+  @@map("user")
+}
+
+model ProviderAccount {
+  id                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                String     @map("org_id") @db.Uuid
+  userId               String     @map("user_id") @db.Uuid
+  provider             Provider
+  channel              Channel
+  authMethod           AuthMethod @map("auth_method")
+  externalAccountId    String     @map("external_account_id")
+  alias                String?
+  credentialsEncrypted Bytes?     @map("credentials_encrypted")
+  lastSyncedAt         DateTime?  @map("last_synced_at") @db.Timestamptz
+  isActive             Boolean    @default(true) @map("is_active")
+  createdAt            DateTime   @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime   @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+
+  org         Org          @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user        User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  threads     Thread[]
+  messages    Message[]
+  messageRaws MessageRaw[]
+  syncTasks   SyncTask[]
+
+  @@unique([orgId, provider, externalAccountId], map: "provider_account_uniq_org_id_provider_external_account_id")
+  @@map("provider_account")
+}
+
+model Contact {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  name      String?
+  isBlocked Boolean  @default(false) @map("is_blocked")
+  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  userId    String   @map("user_id") @db.Uuid
+
+  org                 Org                  @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user                User                 @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  handles             ContactHandle[]
+  messageParticipants MessageParticipant[]
+
+  @@map("contact")
+}
+
+model ContactHandle {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  channel   Channel
+  handle    String
+  isPrimary Boolean  @default(false) @map("is_primary")
+  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  org     Org     @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, channel, handle], map: "contact_handle_uniq_user_channel_handle")
+  @@map("contact_handle")
+}
+
+model Thread {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  channel           Channel
+  externalThreadId  String?   @map("external_thread_id")
+  subject           String?
+  lastMessageAt     DateTime? @map("last_message_at") @db.Timestamptz
+  messageCount      Int       @default(0) @map("message_count")
+  createdAt         DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  userId            String    @map("user_id") @db.Uuid
+  providerAccountId String    @map("provider_account_id") @db.Uuid
+
+  org             Org             @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  providerAccount ProviderAccount @relation(fields: [providerAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  messages        Message[]
+
+  @@unique([providerAccountId, externalThreadId], map: "thread_uniq_provider_account_external_thread")
+  @@index([userId], map: "idx_thread_user")
+  @@map("thread")
+}
+
+model Message {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  threadId          String?   @map("thread_id") @db.Uuid
+  providerAccountId String    @map("provider_account_id") @db.Uuid
+  channel           Channel
+  externalMessageId String    @map("external_message_id")
+  subject           String?
+  bodyText          String?   @map("body_text")
+  bodyHtml          String?   @map("body_html")
+  direction         String
+  sentAt            DateTime  @map("sent_at") @db.Timestamptz
+  receivedAt        DateTime? @map("received_at") @db.Timestamptz
+  isRead            Boolean   @default(false) @map("is_read")
+  isStarred         Boolean   @default(false) @map("is_starred")
+  isArchived        Boolean   @default(false) @map("is_archived")
+  isDeleted         Boolean   @default(false) @map("is_deleted")
+  createdAt         DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  userId            String    @map("user_id") @db.Uuid
+  rawMessageId      String    @unique(map: "message_raw_message_id_key") @map("raw_message_id") @db.Uuid
+  inReplyTo         String?   @map("in_reply_to")
+  references        String[]
+  messageIdHeader   String?   @map("message_id_header")
+  snippet           String?
+
+  org             Org                  @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  thread          Thread?              @relation(fields: [threadId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  providerAccount ProviderAccount      @relation(fields: [providerAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  raw             MessageRaw           @relation(fields: [rawMessageId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "message_raw_message_id_fkey")
+  participants    MessageParticipant[]
+  attachments     Attachment[]
+
+  @@index([userId], map: "idx_message_user")
+  @@map("message")
+}
+
+model MessageRaw {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  providerAccountId String   @map("provider_account_id") @db.Uuid
+  syncTaskId        String   @map("sync_task_id") @db.Uuid
+  channel           Channel
+  externalMessageId String   @map("external_message_id")
+  payloadSchema     String   @map("payload_schema")
+  payload           Json     @db.JsonB
+  createdAt         DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+
+  org             Org             @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  providerAccount ProviderAccount @relation(fields: [providerAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  syncTask        SyncTask        @relation(fields: [syncTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  message         Message?
+  syncTaskEvents  SyncTaskEvent[]
+
+  @@unique([providerAccountId, externalMessageId], map: "message_raw_uniq_provider_account_id_external_message_id")
+  @@map("message_raw")
+}
+
+model MessageParticipant {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  messageId   String   @map("message_id") @db.Uuid
+  contactId   String?  @map("contact_id") @db.Uuid
+  handle      String
+  displayName String?  @map("display_name")
+  role        String
+  createdAt   DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+
+  org     Org      @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user    User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  message Message  @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([messageId], map: "idx_message_participant_message")
+  @@map("message_participant")
+}
+
+model Attachment {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId                String   @map("org_id") @db.Uuid
+  messageId            String   @map("message_id") @db.Uuid
+  filename             String
+  contentType          String?  @map("content_type")
+  sizeBytes            BigInt?  @map("size_bytes")
+  createdAt            DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  userId               String   @map("user_id") @db.Uuid
+  externalAttachmentId String?  @map("external_attachment_id")
+  contentId            String?  @map("content_id")
+  disposition          String?
+  bytes                Bytes
+
+  org     Org     @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  message Message @relation(fields: [messageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("attachment")
+}
+
+model SyncJob {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+
+  org   Org        @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user  User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks SyncTask[]
+
+  @@map("sync_job")
+}
+
+model SyncTask {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId             String   @map("org_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  jobId             String   @map("job_id") @db.Uuid
+  providerAccountId String   @map("provider_account_id") @db.Uuid
+  spec              Json     @db.JsonB
+  createdAt         DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+
+  org             Org             @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  job             SyncJob         @relation(fields: [jobId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  providerAccount ProviderAccount @relation(fields: [providerAccountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  events          SyncTaskEvent[]
+  messageRaws     MessageRaw[]
+
+  @@index([jobId], map: "idx_sync_task_job")
+  @@index([providerAccountId], map: "idx_sync_task_provider_account")
+  @@map("sync_task")
+}
+
+model SyncTaskEvent {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId        String        @map("org_id") @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  taskId       String        @map("task_id") @db.Uuid
+  type         SyncEventType
+  payload      Json?         @db.JsonB
+  rawMessageId String?       @map("raw_message_id") @db.Uuid
+  createdAt    DateTime      @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+
+  org        Org         @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task       SyncTask    @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  rawMessage MessageRaw? @relation(fields: [rawMessageId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([taskId], map: "idx_sync_task_event_task")
+  @@map("sync_task_event")
+}
+
+model JobQueue {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  topic        String    @default("default")
+  payload      Json      @db.JsonB
+  dedupKey     String?   @map("dedup_key")
+  status       JobStatus @default(pending)
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3) @map("max_attempts")
+  lastError    String?   @map("last_error")
+  lockedAt     DateTime? @map("locked_at") @db.Timestamptz
+  lockedBy     String?   @map("locked_by")
+  scheduledFor DateTime  @default(dbgenerated("now()")) @map("scheduled_for") @db.Timestamptz
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz
+  createdAt    DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+
+  @@map("job_queue")
+}

@@ -6,6 +6,8 @@ package-lock.json
 dist/
 .devctl_generated/
 node_modules/
+packages/backend/libs/db/src/prisma/
+packages/backend/libs/db/prisma/migrations/
 
 # Worktree noise
 .devctl-worktrees/
