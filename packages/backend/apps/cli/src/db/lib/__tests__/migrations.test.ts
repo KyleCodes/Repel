@@ -11,26 +11,24 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   MIGRATIONS_DIR,
   applyHeaderToFile,
-  buildRunnerOptions,
+  findCreatedMigrationDir,
   formatHeader,
   listFsMigrations,
-  parseGeneratedPath,
   partitionStatus,
   renderStatusTable,
-  resolveMigrationMatch,
   resolveMigrationName,
 } from '../migrations';
 
 describe('MIGRATIONS_DIR', function () {
-  test('points at packages/backend/libs/db/src/migrations', function () {
+  test('points at packages/backend/libs/db/prisma/migrations', function () {
     expect(
-      MIGRATIONS_DIR.endsWith('packages/backend/libs/db/src/migrations')
+      MIGRATIONS_DIR.endsWith('packages/backend/libs/db/prisma/migrations')
     ).toBe(true);
   });
 });
 
 describe('formatHeader', function () {
-  test('emits exact 4-line JSDoc block with all fields', function () {
+  test('emits exact 4-line SQL comment block with all fields', function () {
     const out = formatHeader({
       name: 'rep-39',
       branch: 'kylemuldoon15/rep-39-foo',
@@ -39,12 +37,10 @@ describe('formatHeader', function () {
     });
     expect(out).toBe(
       [
-        '/**',
-        ' * Migration: rep-39',
-        ' * Branch:    kylemuldoon15/rep-39-foo',
-        ' * Ticket:    REP-39',
-        ' * Created:   2026-05-12T00:00:00.000Z',
-        ' */',
+        '-- Migration: rep-39',
+        '-- Branch:    kylemuldoon15/rep-39-foo',
+        '-- Ticket:    REP-39',
+        '-- Created:   2026-05-12T00:00:00.000Z',
         '',
       ].join('\n')
     );
@@ -57,7 +53,7 @@ describe('formatHeader', function () {
       ticket: null,
       createdAt: new Date('2026-05-12T00:00:00.000Z'),
     });
-    expect(out).toContain(' * Ticket:    unknown');
+    expect(out).toContain('-- Ticket:    unknown');
   });
 
   test('ISO-8601 UTC date is rendered', function () {
@@ -67,7 +63,7 @@ describe('formatHeader', function () {
       ticket: 'REP-1',
       createdAt: new Date('2026-01-02T03:04:05.678Z'),
     });
-    expect(out).toContain(' * Created:   2026-01-02T03:04:05.678Z');
+    expect(out).toContain('-- Created:   2026-01-02T03:04:05.678Z');
   });
 });
 
@@ -138,25 +134,48 @@ describe('listFsMigrations', function () {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test('keeps <digits>_<slug>.ts, excludes README, .d.ts, subdirs, and unprefixed .ts', function () {
-    writeFileSync(join(dir, '1777002187000_rep-9.ts'), '');
-    writeFileSync(join(dir, '1700000000000_rep-1.ts'), '');
-    writeFileSync(join(dir, '1750000000000_rep-39_add_users.ts'), '');
-    writeFileSync(join(dir, 'README.md'), '');
-    writeFileSync(join(dir, 'helpers.d.ts'), '');
-    writeFileSync(join(dir, 'foo.ts'), '');
-    mkdirSync(join(dir, 'subdir'));
+  test('keeps <digits>_<slug> directories, excludes files and unprefixed dirs', function () {
+    mkdirSync(join(dir, '0_init'));
+    mkdirSync(join(dir, '20260723100000_rep-39_add_users'));
+    mkdirSync(join(dir, '20250101000000_rep-9'));
+    mkdirSync(join(dir, 'not-a-migration'));
+    writeFileSync(join(dir, 'migration_lock.toml'), '');
+    writeFileSync(join(dir, '999_stray-file'), '');
 
     const result = listFsMigrations(dir);
     expect(result).toEqual([
-      '1700000000000_rep-1',
-      '1750000000000_rep-39_add_users',
-      '1777002187000_rep-9',
+      '0_init',
+      '20250101000000_rep-9',
+      '20260723100000_rep-39_add_users',
     ]);
   });
 
   test('returns empty array for an empty directory', function () {
     expect(listFsMigrations(dir)).toEqual([]);
+  });
+});
+
+describe('findCreatedMigrationDir', function () {
+  let dir: string;
+  beforeEach(function () {
+    dir = mkdtempSync(join(tmpdir(), 'rep39-created-'));
+  });
+  afterEach(function () {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('resolves the newest directory whose suffix matches the name', function () {
+    mkdirSync(join(dir, '20250101000000_rep-39'));
+    mkdirSync(join(dir, '20260723100000_rep-39'));
+    mkdirSync(join(dir, '20260723100001_other'));
+    expect(findCreatedMigrationDir('rep-39', dir)).toBe(
+      join(dir, '20260723100000_rep-39')
+    );
+  });
+
+  test('returns null when nothing matches', function () {
+    mkdirSync(join(dir, '20260723100001_other'));
+    expect(findCreatedMigrationDir('rep-39', dir)).toBeNull();
   });
 });
 
@@ -232,134 +251,21 @@ describe('renderStatusTable', function () {
   });
 });
 
-describe('resolveMigrationMatch', function () {
-  const fs = [
-    '1700000000000_rep-1',
-    '1750000000000_rep-39_add_users',
-    '1777002187000_rep-9',
-  ];
-
-  test('no match arg on up → count Infinity', function () {
-    expect(resolveMigrationMatch(undefined, 'up', fs)).toEqual({
-      count: Infinity,
-    });
-  });
-
-  test('no match arg on down → count 1', function () {
-    expect(resolveMigrationMatch(undefined, 'down', fs)).toEqual({ count: 1 });
-  });
-
-  test('base on down → count Infinity', function () {
-    expect(resolveMigrationMatch(undefined, 'down', fs, true)).toEqual({
-      count: Infinity,
-    });
-  });
-
-  test('empty-string match treated as no match', function () {
-    expect(resolveMigrationMatch('', 'up', fs)).toEqual({ count: Infinity });
-  });
-
-  test('single substring hit → returns the resolved filename', function () {
-    expect(resolveMigrationMatch('rep-39', 'up', fs)).toEqual({
-      file: '1750000000000_rep-39_add_users',
-    });
-  });
-
-  test('matches by epoch substring', function () {
-    expect(resolveMigrationMatch('1700000000000', 'up', fs)).toEqual({
-      file: '1700000000000_rep-1',
-    });
-  });
-
-  test('matches by slug substring', function () {
-    expect(resolveMigrationMatch('add_users', 'up', fs)).toEqual({
-      file: '1750000000000_rep-39_add_users',
-    });
-  });
-
-  test('zero hits → throws no-match error', function () {
-    expect(function () {
-      resolveMigrationMatch('nonexistent', 'up', fs);
-    }).toThrow('db migrations up: no migration matches "nonexistent"');
-  });
-
-  test('multiple hits → throws ambiguity error with candidates', function () {
-    expect(function () {
-      resolveMigrationMatch('rep', 'up', fs);
-    }).toThrow(/matches multiple migrations:/);
-  });
-
-  test('ambiguity error lists every candidate', function () {
-    let captured: Error | null = null;
-    try {
-      resolveMigrationMatch('rep', 'down', fs);
-    } catch (e) {
-      captured = e as Error;
-    }
-    expect(captured).not.toBeNull();
-    expect(captured!.message).toContain('1700000000000_rep-1');
-    expect(captured!.message).toContain('1750000000000_rep-39_add_users');
-    expect(captured!.message).toContain('1777002187000_rep-9');
-    expect(captured!.message).toContain('db migrations down:');
-  });
-});
-
-describe('buildRunnerOptions', function () {
-  const env = { databaseUrl: 'postgres://x' };
-
-  test("('up', { count: Infinity }) → count Infinity, direction up", function () {
-    const o = buildRunnerOptions('up', { count: Infinity }, env);
-    expect(o.direction).toBe('up');
-    expect(o.count).toBe(Infinity);
-    expect(o.dir).toBe(MIGRATIONS_DIR);
-    expect(o.migrationsTable).toBe('pgmigrations');
-    expect('databaseUrl' in o && o.databaseUrl).toBe('postgres://x');
-  });
-
-  test("('down', { count: 1 }) → count 1, direction down", function () {
-    const o = buildRunnerOptions('down', { count: 1 }, env);
-    expect(o.direction).toBe('down');
-    expect(o.count).toBe(1);
-  });
-
-  test("('up', { file: '...' }) → file branch, no count", function () {
-    const o = buildRunnerOptions('up', { file: '1700000000000_rep-9' }, env);
-    expect(o.file).toBe('1700000000000_rep-9');
-    expect(o.count).toBeUndefined();
-  });
-
-  test('log option routes to console.log', function () {
-    const o = buildRunnerOptions('up', { count: Infinity }, env);
-    expect(typeof o.log).toBe('function');
-  });
-});
-
-describe('parseGeneratedPath', function () {
-  test('matches "Created migration -- /abs/path/X.ts"', function () {
-    const stdout =
-      'some preface\nCreated migration -- /tmp/migrations/1777_rep-9.ts\nepilogue\n';
-    expect(parseGeneratedPath(stdout)).toBe('/tmp/migrations/1777_rep-9.ts');
-  });
-
-  test('returns null when no match', function () {
-    expect(parseGeneratedPath('nothing here')).toBeNull();
-  });
-});
-
 describe('applyHeaderToFile', function () {
   let dir: string;
   beforeEach(function () {
-    dir = mkdtempSync(join(tmpdir(), 'rep39-apply-'));
+    dir = mkdtempSync(join(tmpdir(), 'rep39-hdr-'));
   });
   afterEach(function () {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test('prepends header to existing body, preserving body content', function () {
-    const file = join(dir, '1_a.ts');
-    writeFileSync(file, 'export const x = 1;\n');
-    applyHeaderToFile(file, '/**\n * Migration: a\n */\n');
-    const out = readFileSync(file, 'utf8');
-    expect(out).toBe('/**\n * Migration: a\n */\nexport const x = 1;\n');
+  test('prepends the header to the file body', function () {
+    const filePath = join(dir, 'migration.sql');
+    writeFileSync(filePath, 'ALTER TABLE x ADD COLUMN y text;\n');
+    applyHeaderToFile(filePath, '-- header\n');
+    expect(readFileSync(filePath, 'utf8')).toBe(
+      '-- header\nALTER TABLE x ADD COLUMN y text;\n'
+    );
   });
 });

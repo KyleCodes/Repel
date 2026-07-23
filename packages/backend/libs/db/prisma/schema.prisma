@@ -73,8 +73,8 @@ enum SyncEventType {
 model Org {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
-  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   users            User[]
   providerAccounts ProviderAccount[]
@@ -98,8 +98,8 @@ model User {
   email     String
   name      String?
   role      String   @default("admin")
-  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   org                 Org                  @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   providerAccounts    ProviderAccount[]
@@ -130,8 +130,8 @@ model ProviderAccount {
   credentialsEncrypted Bytes?     @map("credentials_encrypted")
   lastSyncedAt         DateTime?  @map("last_synced_at") @db.Timestamptz
   isActive             Boolean    @default(true) @map("is_active")
-  createdAt            DateTime   @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime   @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime   @default(now()) @map("updated_at") @db.Timestamptz
 
   org         Org          @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user        User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -149,8 +149,8 @@ model Contact {
   orgId     String   @map("org_id") @db.Uuid
   name      String?
   isBlocked Boolean  @default(false) @map("is_blocked")
-  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
   userId    String   @map("user_id") @db.Uuid
 
   org                 Org                  @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -167,7 +167,7 @@ model ContactHandle {
   channel   Channel
   handle    String
   isPrimary Boolean  @default(false) @map("is_primary")
-  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   orgId     String   @map("org_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
 
@@ -187,8 +187,8 @@ model Thread {
   subject           String?
   lastMessageAt     DateTime? @map("last_message_at") @db.Timestamptz
   messageCount      Int       @default(0) @map("message_count")
-  createdAt         DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime  @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz
   userId            String    @map("user_id") @db.Uuid
   providerAccountId String    @map("provider_account_id") @db.Uuid
 
@@ -219,8 +219,8 @@ model Message {
   isStarred         Boolean   @default(false) @map("is_starred")
   isArchived        Boolean   @default(false) @map("is_archived")
   isDeleted         Boolean   @default(false) @map("is_deleted")
-  createdAt         DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime  @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz
   userId            String    @map("user_id") @db.Uuid
   rawMessageId      String    @unique(map: "message_raw_message_id_key") @map("raw_message_id") @db.Uuid
   inReplyTo         String?   @map("in_reply_to")
@@ -250,7 +250,7 @@ model MessageRaw {
   externalMessageId String   @map("external_message_id")
   payloadSchema     String   @map("payload_schema")
   payload           Json     @db.JsonB
-  createdAt         DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   org             Org             @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -272,7 +272,7 @@ model MessageParticipant {
   handle      String
   displayName String?  @map("display_name")
   role        String
-  createdAt   DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   org     Org      @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user    User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -290,7 +290,7 @@ model Attachment {
   filename             String
   contentType          String?  @map("content_type")
   sizeBytes            BigInt?  @map("size_bytes")
-  createdAt            DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
   userId               String   @map("user_id") @db.Uuid
   externalAttachmentId String?  @map("external_attachment_id")
   contentId            String?  @map("content_id")
@@ -308,8 +308,8 @@ model SyncJob {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId     String   @map("org_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @default(dbgenerated("now()")) @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz
 
   org   Org        @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user  User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -325,7 +325,7 @@ model SyncTask {
   jobId             String   @map("job_id") @db.Uuid
   providerAccountId String   @map("provider_account_id") @db.Uuid
   spec              Json     @db.JsonB
-  createdAt         DateTime @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   org             Org             @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user            User            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -347,7 +347,7 @@ model SyncTaskEvent {
   type         SyncEventType
   payload      Json?         @db.JsonB
   rawMessageId String?       @map("raw_message_id") @db.Uuid
-  createdAt    DateTime      @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   org        Org         @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user       User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -369,9 +369,11 @@ model JobQueue {
   lastError    String?   @map("last_error")
   lockedAt     DateTime? @map("locked_at") @db.Timestamptz
   lockedBy     String?   @map("locked_by")
-  scheduledFor DateTime  @default(dbgenerated("now()")) @map("scheduled_for") @db.Timestamptz
+  scheduledFor DateTime  @default(now()) @map("scheduled_for") @db.Timestamptz
   completedAt  DateTime? @map("completed_at") @db.Timestamptz
-  createdAt    DateTime  @default(dbgenerated("now()")) @map("created_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("job_queue")
 }
+
+

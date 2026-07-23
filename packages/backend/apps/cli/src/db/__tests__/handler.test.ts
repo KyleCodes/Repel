@@ -32,7 +32,8 @@ describe('registerDbCommands', function () {
     });
     expect(migrationsSubs).toContain('create');
     expect(migrationsSubs).toContain('up');
-    expect(migrationsSubs).toContain('down');
+    // No down under Prisma Migrate; the reset path is nuke + up.
+    expect(migrationsSubs).not.toContain('down');
   });
 });
 

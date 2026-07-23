@@ -83,9 +83,10 @@ describe('normalizeDbError', function () {
   });
 });
 
-// Prisma-shaped errors. The query API raises P2002 for unique violations; raw
-// queries surface the pg SQLSTATE nested in meta. meta is not public API, so
-// these tests pin our defensive extraction, not Prisma's contract.
+// Prisma-shaped errors. The meta shapes below are copied from real errors
+// observed against prisma 7.9 + adapter-pg (see extractPgDetails); meta is not
+// public API, so these tests pin our defensive extraction, not Prisma's
+// contract.
 describe('normalizeDbError on Prisma errors', function () {
   function knownError(code: string, meta: Record<string, unknown> | undefined) {
     return new Prisma.PrismaClientKnownRequestError('prisma failure', {
@@ -95,6 +96,15 @@ describe('normalizeDbError on Prisma errors', function () {
     });
   }
 
+  function driverMeta(originalCode: string, originalMessage: string) {
+    return {
+      driverAdapterError: {
+        name: 'DriverAdapterError',
+        cause: { originalCode, originalMessage },
+      },
+    };
+  }
+
   test('maps P2002 to DBUniqueViolationError with SQLSTATE code', function () {
     const result = normalizeDbError(knownError('P2002', undefined));
     expect(result).toBeInstanceOf(DBUniqueViolationError);
@@ -102,27 +112,43 @@ describe('normalizeDbError on Prisma errors', function () {
     expect((result as DBUniqueViolationError).constraint).toBeUndefined();
   });
 
-  test('recovers the constraint name from meta.driverAdapterError when present', function () {
+  test('recovers the constraint name from the driver originalMessage', function () {
     const result = normalizeDbError(
-      knownError('P2002', {
-        driverAdapterError: {
-          cause: { constraint: { index: 'user_uniq_org_id_email' } },
-        },
-      })
+      knownError(
+        'P2002',
+        driverMeta(
+          '23505',
+          'duplicate key value violates unique constraint "user_uniq_org_id_email"'
+        )
+      )
     );
     expect((result as DBUniqueViolationError).constraint).toBe(
       'user_uniq_org_id_email'
     );
   });
 
-  test('maps a raw-query error carrying SQLSTATE 23505 in meta to DBUniqueViolationError', function () {
-    const result = normalizeDbError(knownError('P2010', { code: '23505' }));
+  test('maps a raw-query 23505 (P2010 + originalCode) to DBUniqueViolationError', function () {
+    const result = normalizeDbError(
+      knownError(
+        'P2010',
+        driverMeta(
+          '23505',
+          'duplicate key value violates unique constraint "org_pkey"'
+        )
+      )
+    );
     expect(result).toBeInstanceOf(DBUniqueViolationError);
     expect((result as DBUniqueViolationError).code).toBe('23505');
+    expect((result as DBUniqueViolationError).constraint).toBe('org_pkey');
   });
 
   test('maps a raw-query error with a non-unique SQLSTATE to DBError carrying it', function () {
-    const result = normalizeDbError(knownError('P2010', { code: '42P01' }));
+    const result = normalizeDbError(
+      knownError(
+        'P2010',
+        driverMeta('42P01', 'relation "_prisma_migrations" does not exist')
+      )
+    );
     expect(result).toBeInstanceOf(DBError);
     expect(result).not.toBeInstanceOf(DBUniqueViolationError);
     expect((result as DBError).code).toBe('42P01');

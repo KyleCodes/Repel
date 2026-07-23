@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { registerMigrationsCommands } from '../handler';
 
 describe('registerMigrationsCommands', function () {
-  test('attaches migrations create|up|down to a db Command', function () {
+  test('attaches migrations create|up to a db Command', function () {
     const db = new Command('db');
     registerMigrationsCommands(db);
     const migrations = db.commands.find(function (c) {
@@ -15,21 +15,17 @@ describe('registerMigrationsCommands', function () {
     });
     expect(subs).toContain('create');
     expect(subs).toContain('up');
-    expect(subs).toContain('down');
   });
 
-  test('down exposes a --base flag', function () {
+  test('down is gone — Prisma Migrate has no down migrations', function () {
     const db = new Command('db');
     registerMigrationsCommands(db);
     const migrations = db.commands.find(function (c) {
       return c.name() === 'migrations';
     });
-    const down = migrations!.commands.find(function (c) {
-      return c.name() === 'down';
+    const subs = migrations!.commands.map(function (c) {
+      return c.name();
     });
-    const flags = down!.options.map(function (o) {
-      return o.long;
-    });
-    expect(flags).toContain('--base');
+    expect(subs).not.toContain('down');
   });
 });

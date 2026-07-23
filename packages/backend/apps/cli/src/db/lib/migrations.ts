@@ -1,7 +1,5 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { RunnerOption } from 'node-pg-migrate';
-import { logger } from '@repel/logger/logger';
 import { sanitizeSlug } from '@repel/slug';
 import { extractTicketSlug } from './branch';
 
@@ -20,15 +18,16 @@ function findRepoRoot(): string {
   );
 }
 
-// Absolute path to the migrations directory, resolved from the repo root.
-// Boot-time existsSync check surfaces a clear error if the path drifts.
-export const MIGRATIONS_DIR = join(
-  findRepoRoot(),
-  'packages/backend/libs/db/src/migrations'
-);
+// The db package root — where prisma.config.ts and prisma/schema.prisma live,
+// and the cwd every Prisma CLI invocation is pinned to.
+export const DB_PACKAGE_DIR = join(findRepoRoot(), 'packages/backend/libs/db');
+
+// Absolute path to the Prisma migrations directory. Boot-time existsSync
+// check surfaces a clear error if the path drifts.
+export const MIGRATIONS_DIR = join(DB_PACKAGE_DIR, 'prisma/migrations');
 if (!existsSync(MIGRATIONS_DIR)) {
   throw new Error(
-    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — repo layout drifted from packages/backend/libs/db/src/migrations.`
+    `MIGRATIONS_DIR does not exist at ${MIGRATIONS_DIR} — repo layout drifted from packages/backend/libs/db/prisma/migrations.`
   );
 }
 
@@ -39,22 +38,23 @@ export interface FormatHeaderInput {
   createdAt: Date;
 }
 
-// Emits the 4-line JSDoc header used at the top of every generated migration
-// file. Trailing newline included so the migration body starts on a fresh line.
+// Emits the header comment prepended to every generated migration.sql.
+// SQL line comments — the file is plain SQL under Prisma Migrate. The
+// trailing newline keeps the migration body on a fresh line. Editing a
+// migration file after it has been applied changes its checksum and Prisma
+// flags it — which is why the header is written at create time, before apply.
 export function formatHeader(input: FormatHeaderInput): string {
   const ticket = input.ticket ?? 'unknown';
   return [
-    '/**',
-    ` * Migration: ${input.name}`,
-    ` * Branch:    ${input.branch}`,
-    ` * Ticket:    ${ticket}`,
-    ` * Created:   ${input.createdAt.toISOString()}`,
-    ' */',
+    `-- Migration: ${input.name}`,
+    `-- Branch:    ${input.branch}`,
+    `-- Ticket:    ${ticket}`,
+    `-- Created:   ${input.createdAt.toISOString()}`,
     '',
   ].join('\n');
 }
 
-// Composes the migration name baked into the filename:
+// Composes the migration name passed to `prisma migrate dev --name`:
 //   - No `explicit` → ticket slug alone (e.g. "rep-39")
 //   - With `explicit` → "<ticket-slug>_<sanitized-explicit>" (e.g. "rep-39_add_users")
 //   - No slug WITH `explicit` → sanitized explicit alone
@@ -80,17 +80,18 @@ export function resolveMigrationName(input: {
   return slugLc ? `${slugLc}_${cleaned}` : cleaned;
 }
 
-// Reads MIGRATIONS_DIR (or override) and returns base filenames sorted by
-// numeric unix-ms prefix. Single positive regex — anything not matching is
-// skipped (covers README, .d.ts files, subdirectories, editor backups, etc.).
+// Reads MIGRATIONS_DIR (or override) and returns migration directory names
+// sorted by numeric prefix. Prisma migrations are directories named
+// <timestamp>_<name> (the baseline is 0_init); anything else in the tree
+// (migration_lock.toml, editor backups) is skipped.
 export function listFsMigrations(dir: string = MIGRATIONS_DIR): string[] {
-  const PATTERN = /^(\d+)_[a-z0-9_-]+\.ts$/i;
+  const PATTERN = /^(\d+)_[a-z0-9_-]+$/i;
   const entries = readdirSync(dir, { withFileTypes: true });
   const names: string[] = [];
   for (const e of entries) {
-    if (!e.isFile()) continue;
+    if (!e.isDirectory()) continue;
     if (!PATTERN.test(e.name)) continue;
-    names.push(e.name.replace(/\.ts$/, ''));
+    names.push(e.name);
   }
   names.sort(function (a, b) {
     const ai = Number(a.split('_')[0]);
@@ -98,6 +99,23 @@ export function listFsMigrations(dir: string = MIGRATIONS_DIR): string[] {
     return ai - bi;
   });
   return names;
+}
+
+// Locates the migration directory `prisma migrate dev --create-only --name X`
+// just wrote: the highest-timestamp directory whose suffix matches the name.
+// Prisma applies its own sanitization to --name (dashes become underscores),
+// so both sides are normalized before comparing. Returns null when none
+// matches so the caller can throw a clear error.
+export function findCreatedMigrationDir(
+  name: string,
+  dir: string = MIGRATIONS_DIR
+): string | null {
+  const wanted = `_${name.replace(/-/g, '_')}`;
+  const matches = listFsMigrations(dir).filter(function (n) {
+    return n.replace(/-/g, '_').endsWith(wanted);
+  });
+  if (matches.length === 0) return null;
+  return join(dir, matches[matches.length - 1]!);
 }
 
 export interface PartitionInput {
@@ -176,72 +194,6 @@ export function renderStatusTable(input: PartitionResult): string {
     })
     .join('\n');
   return [header, separator, body].join('\n');
-}
-
-// Resolves the user-supplied `[match]` substring against the filesystem list:
-//   - No `match` → default count (Infinity for up, 1 for down)
-//   - 1 substring hit → return { file: <full-name> }
-//   - 0 hits → throw with a clear message
-//   - >1 hits → throw with the candidate list so the user can narrow
-export type ResolvedTarget = { file: string } | { count: number };
-export function resolveMigrationMatch(
-  match: string | undefined,
-  direction: 'up' | 'down',
-  fsMigrations: string[],
-  base = false
-): ResolvedTarget {
-  // `--base` on down rolls back every applied migration. The both-set case
-  // (base + match) is rejected upstream by MigrateDownInputSchema.
-  if (base && direction === 'down') {
-    return { count: Infinity };
-  }
-  if (!match) {
-    return { count: direction === 'up' ? Infinity : 1 };
-  }
-  const hits = fsMigrations.filter(function (n) {
-    return n.includes(match);
-  });
-  if (hits.length === 0) {
-    throw new Error(
-      `db migrations ${direction}: no migration matches "${match}"`
-    );
-  }
-  if (hits.length > 1) {
-    throw new Error(
-      `db migrations ${direction}: "${match}" matches multiple migrations:\n  - ${hits.join('\n  - ')}`
-    );
-  }
-  return { file: hits[0] };
-}
-
-// Pure routing for node-pg-migrate's `runner` option object. Caller supplies
-// the already-resolved target (either a unique filename or a count).
-export function buildRunnerOptions(
-  direction: 'up' | 'down',
-  resolved: ResolvedTarget,
-  env: { databaseUrl: string }
-): RunnerOption {
-  const base = {
-    databaseUrl: env.databaseUrl,
-    dir: MIGRATIONS_DIR,
-    migrationsTable: 'pgmigrations',
-    direction,
-    log: function (msg: string): void {
-      logger.info(msg);
-    },
-  };
-  if ('file' in resolved) {
-    return { ...base, file: resolved.file };
-  }
-  return { ...base, count: resolved.count };
-}
-
-// Pulls the absolute generated migration path out of `node-pg-migrate create`
-// stdout. Returns null when the marker isn't present so the caller can throw
-// a clear error — no newest-mtime fallback.
-export function parseGeneratedPath(stdout: string): string | null {
-  const m = stdout.match(/Created migration -- (.+\.ts)\s*$/m);
-  return m ? m[1] : null;
 }
 
 // Reads `filePath`, prepends `header`, writes back. Extracted as a pure helper

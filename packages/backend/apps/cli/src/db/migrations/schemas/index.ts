@@ -5,17 +5,9 @@ export const MigrateCreateInputSchema = z.object({
 });
 export type MigrateCreateInput = z.infer<typeof MigrateCreateInputSchema>;
 
-export const MigrateUpInputSchema = z.object({
-  match: z.string().min(1).optional(),
-});
+// No targeting input: `prisma migrate deploy` always applies every pending
+// migration in order (the old node-pg-migrate `[match]` partial-apply has no
+// Prisma equivalent). `down` is gone with it — Prisma Migrate has no down
+// migrations; the reset path is `repel db nuke` + `repel db migrations up`.
+export const MigrateUpInputSchema = z.object({});
 export type MigrateUpInput = z.infer<typeof MigrateUpInputSchema>;
-
-export const MigrateDownInputSchema = z
-  .object({
-    match: z.string().min(1).optional(),
-    base: z.boolean().optional(),
-  })
-  .refine((v) => !(v.match && v.base), {
-    message: 'Pass either [match] or --base, not both.',
-  });
-export type MigrateDownInput = z.infer<typeof MigrateDownInputSchema>;

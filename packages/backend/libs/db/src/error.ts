@@ -53,9 +53,20 @@ export function isUniqueViolationError(err: unknown): boolean {
 }
 
 // Best-effort scan of a Prisma known-request error's meta for the pg SQLSTATE
-// and constraint name. Prisma nests the original driver error at varying
-// depths (meta.code, meta.driverAdapterError.cause.*) and none of it is
-// public API — every access is optional and the result may be empty.
+// and constraint name. None of this is public API — the shape below was
+// verified empirically against prisma 7.9 + adapter-pg (both the query API and
+// $queryRaw nest the driver error identically):
+//
+//   meta.driverAdapterError.cause = {
+//     originalCode: '23505',
+//     originalMessage: '... violates unique constraint "user_uniq_org_id_email"',
+//     kind: 'UniqueConstraintViolation',
+//     constraint: { fields: ['org_id', 'email'] },   // columns, not the name
+//   }
+//
+// The constraint NAME only exists inside originalMessage, so it is recovered
+// by parsing pg's stable message wording. Every access is optional and the
+// result may be empty.
 function extractPgDetails(meta: unknown): {
   sqlstate?: string;
   constraint?: string;
@@ -66,18 +77,15 @@ function extractPgDetails(meta: unknown): {
   const out: { sqlstate?: string; constraint?: string } = {};
   if (typeof m.code === 'string') out.sqlstate = m.code;
 
-  const target = m.target;
-  if (typeof target === 'string') out.constraint = target;
-
   const cause = (m.driverAdapterError as Record<string, unknown> | undefined)
     ?.cause as Record<string, unknown> | undefined;
   if (cause) {
-    if (out.sqlstate === undefined && typeof cause.code === 'string') {
-      out.sqlstate = cause.code;
+    if (typeof cause.originalCode === 'string')
+      out.sqlstate = cause.originalCode;
+    if (typeof cause.originalMessage === 'string') {
+      const match = cause.originalMessage.match(/constraint "([^"]+)"/);
+      if (match) out.constraint = match[1];
     }
-    const constraint = cause.constraint as Record<string, unknown> | undefined;
-    if (typeof constraint?.index === 'string')
-      out.constraint = constraint.index;
   }
   return out;
 }
