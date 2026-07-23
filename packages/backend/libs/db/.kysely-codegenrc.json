@@ -1,7 +1,0 @@
-{
-  "$comment": "kysely-codegen config. Auto-discovered by cosmiconfig when the tool runs with packages/backend/libs/db as cwd. The `repel db codegen` command passes the same options as explicit flags so it is cwd-independent; this file keeps a bare `bun x kysely-codegen` consistent. Output: src/generated.ts — see src/types.ts for the hand-written Db/Tx aliases.",
-  "dialect": "postgres",
-  "camelCase": true,
-  "url": "env(DATABASE_URL)",
-  "outFile": "./src/generated.ts"
-}

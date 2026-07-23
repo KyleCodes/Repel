@@ -47,10 +47,10 @@ export interface NukeDatabaseInput {
 }
 
 // Wipes a database back to empty: drops the `public` schema with everything in
-// it (tables, enums, sequences, functions) — including node-pg-migrate's
-// `pgmigrations` bookkeeping table — then recreates an empty `public` schema.
-// The database itself is preserved; only its contents are reset. With
-// `pgmigrations` gone, the next `migrations up` runs from zero.
+// it (tables, enums, sequences, functions) — including Prisma Migrate's
+// `_prisma_migrations` bookkeeping table — then recreates an empty `public`
+// schema. The database itself is preserved; only its contents are reset. With
+// `_prisma_migrations` gone, the next `migrations up` runs from zero.
 //
 // Unlike refresh-template this connects to the target database directly
 // (DATABASE_URL), not the admin/maintenance database, because DROP SCHEMA
@@ -73,7 +73,7 @@ export interface RefreshTemplateInput {
 
 // Drops the template database and recreates it empty. The caller is responsible
 // for running migrations and any bootstrap seeding afterwards — those flows
-// already live elsewhere (node-pg-migrate, account-setup bootstrap).
+// already live elsewhere (Prisma Migrate, account-setup bootstrap).
 export async function refreshTemplate(
   input: RefreshTemplateInput
 ): Promise<{ databaseUrl: string }> {
