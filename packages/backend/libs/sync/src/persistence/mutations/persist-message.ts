@@ -1,16 +1,15 @@
-import type { InferResult, Insertable } from 'kysely';
 import type {
   NormalizedAttachment,
   NormalizedMessage,
   NormalizedParticipant,
 } from '@repel/backend-adapters/types';
 import type {
-  Attachment,
-  Message,
-  MessageParticipant,
-  MessageRaw,
-} from '@repel/backend-db/generated';
-import type { Tx } from '@repel/backend-db/types';
+  AttachmentUncheckedCreateInput,
+  MessageParticipantUncheckedCreateInput,
+  MessageRawUncheckedCreateInput,
+} from '@repel/backend-db/prisma/models';
+import { type Sql, sql } from '@repel/backend-db/sql';
+import type { Json, Tx } from '@repel/backend-db/types';
 import { SyncEventType } from '@repel/enums';
 
 // Persist one message event's graph: message_raw → message → participants ×N →
@@ -21,15 +20,20 @@ import { SyncEventType } from '@repel/enums';
 // UNIQUE (provider_account_id, external_message_id). A resync skips the graph
 // write but still appends the message event.
 //
-// Two statements: the raw/message/event core is one writeable CTE (idempotency
-// resolved in-SQL via a union select-back); participants/attachments are a
-// second batched insert because their rows mix the CTE-derived messageId with a
-// JS array of per-row data, which a single statement can't express in kysely.
+// The core is a 4-CTE writeable statement Prisma's query API cannot express
+// (ON CONFLICT with a select-back union, INSERT ... SELECT across CTEs), so it
+// is raw SQL — transcribed 1:1 from the Kysely-compiled statement, with
+// camelCase aliases on the final projection (CamelCasePlugin used to do the
+// row-key mapping; raw results are returned verbatim). Statements two and
+// three batch-insert the children keyed off the new message id — their rows
+// mix the returned messageId with per-row data, which one statement can't
+// express.
 
 export type PersistMessageRaw = Omit<
-  Insertable<MessageRaw>,
-  'id' | 'createdAt' | 'syncTaskId'
->;
+  MessageRawUncheckedCreateInput,
+  // payload re-declared with the platform Json alias (see adapters RawMessage).
+  'id' | 'createdAt' | 'syncTaskId' | 'payload'
+> & { payload: Json };
 
 // The message body, taken straight from the adapter's normalized shape minus the
 // nested graph (participants/attachments) and the provider thread ref the
@@ -44,7 +48,7 @@ export type PersistMessageParticipant = NormalizedParticipant;
 // Attachment metadata plus the fetched bytes the handler pairs in (normalize()
 // is pure and can't fetch them).
 export type PersistMessageAttachment = NormalizedAttachment & {
-  bytes: Insertable<Attachment>['bytes'];
+  bytes: Buffer;
 };
 
 export type PersistMessageInput = {
@@ -59,12 +63,12 @@ export type PersistMessageInput = {
   attachments: readonly PersistMessageAttachment[];
 };
 
-type PersistMessageCoreRow = InferResult<
-  ReturnType<typeof buildPersistMessageCore>
->[number];
+type PersistMessageCoreRow = {
+  rawMessageId: string;
+  // null when the raw already existed (no new message row written).
+  messageId: string | null;
+};
 
-// rawMessageId is inferred from the core builder; persisted is derived in app
-// code (messageId !== null), not a query column.
 export type PersistMessageResult = Pick<
   PersistMessageCoreRow,
   'rawMessageId'
@@ -74,164 +78,107 @@ export type PersistMessageResult = Pick<
 };
 
 // Statement 1: raw (idempotent) + resolved id + conditional message + the
-// always-on message event, in one round trip.
-export function buildPersistMessageCore(trx: Tx, input: PersistMessageInput) {
-  return (
-    trx
-      .with('ins_raw', (qb) =>
-        qb
-          .insertInto('messageRaw')
-          .values({ ...input.raw, syncTaskId: input.taskId })
-          .onConflict((oc) =>
-            oc.columns(['providerAccountId', 'externalMessageId']).doNothing()
-          )
-          .returning('id')
-      )
-      // The resolved raw id, new or pre-existing: ins_raw is empty exactly on the
-      // conflict path, where the select-back finds the existing row. limit 1 is
-      // belt-and-suspenders — the two branches are mutually exclusive.
-      .with('raw_id', (qb) =>
-        qb
-          .selectFrom('ins_raw')
-          .select('ins_raw.id')
-          .unionAll(
-            trx
-              .selectFrom('messageRaw as r')
-              .select('r.id')
-              .where('r.providerAccountId', '=', input.providerAccountId)
-              .where('r.externalMessageId', '=', input.raw.externalMessageId)
-          )
-          .limit(1)
-      )
-      // Writes only when the raw was newly inserted (ins_raw empty on conflict).
-      // The message body columns the adapter owns are spread in via the typed
-      // body object; the runner-owned columns (ids, direction, thread) are
-      // selected from the resolved raw.
-      .with('new_message', (qb) =>
-        qb
-          .insertInto('message')
-          // Explicit column list: .expression() maps the select to columns by
-          // position, not alias, so this must mirror the select's order exactly.
-          .columns([
-            'rawMessageId',
-            'orgId',
-            'userId',
-            'providerAccountId',
-            'direction',
-            'threadId',
-            'channel',
-            'externalMessageId',
-            'sentAt',
-            'receivedAt',
-            'subject',
-            'snippet',
-            'bodyText',
-            'bodyHtml',
-            'inReplyTo',
-            'references',
-            'messageIdHeader',
-          ])
-          .expression((eb) =>
-            eb
-              .selectFrom('ins_raw')
-              .select((eb2) => [
-                'ins_raw.id as rawMessageId',
-                eb2.val(input.orgId).as('orgId'),
-                eb2.val(input.userId).as('userId'),
-                eb2.val(input.providerAccountId).as('providerAccountId'),
-                eb2.val<'inbound'>('inbound').as('direction'),
-                eb2.val<string | null>(null).as('threadId'),
-                eb2.val(input.message.channel).as('channel'),
-                eb2
-                  .val(input.message.externalMessageId)
-                  .as('externalMessageId'),
-                eb2.val(input.message.sentAt).as('sentAt'),
-                eb2.val(input.message.receivedAt ?? null).as('receivedAt'),
-                eb2.val(input.message.subject ?? null).as('subject'),
-                eb2.val(input.message.snippet ?? null).as('snippet'),
-                eb2.val(input.message.bodyText ?? null).as('bodyText'),
-                eb2.val(input.message.bodyHtml ?? null).as('bodyHtml'),
-                eb2.val(input.message.inReplyTo ?? null).as('inReplyTo'),
-                eb2.val(input.message.references ?? null).as('references'),
-                eb2
-                  .val(input.message.messageIdHeader ?? null)
-                  .as('messageIdHeader'),
-              ])
-          )
-          .returning('id')
-      )
-      // Always written (even on a noop'd graph); references the resolved raw id.
-      .with('new_event', (qb) =>
-        qb
-          .insertInto('syncTaskEvent')
-          .columns(['orgId', 'userId', 'taskId', 'type', 'rawMessageId'])
-          .expression((eb) =>
-            eb
-              .selectFrom('raw_id')
-              .select((eb2) => [
-                eb2.val(input.orgId).as('orgId'),
-                eb2.val(input.userId).as('userId'),
-                eb2.val(input.taskId).as('taskId'),
-                eb2.val(SyncEventType.message).as('type'),
-                'raw_id.id as rawMessageId',
-              ])
-          )
-      )
-      .selectFrom('raw_id')
-      .select((eb) => [
-        'raw_id.id as rawMessageId',
-        // null when the raw already existed (no new_message row written).
-        eb.selectFrom('new_message').select('new_message.id').as('messageId'),
-      ])
-  );
+// always-on message event, in one round trip. `raw_id` resolves the id on both
+// branches: ins_raw is empty exactly on the conflict path, where the union's
+// select-back finds the existing row; LIMIT 1 is belt-and-suspenders — the two
+// branches are mutually exclusive.
+export function buildPersistMessageCore(input: PersistMessageInput): Sql {
+  return sql`
+    WITH ins_raw AS (
+      INSERT INTO message_raw
+        (org_id, user_id, provider_account_id, sync_task_id, channel,
+         external_message_id, payload_schema, payload)
+      VALUES
+        (${input.raw.orgId}, ${input.raw.userId},
+         ${input.raw.providerAccountId}, ${input.taskId},
+         ${input.raw.channel}::channel, ${input.raw.externalMessageId},
+         ${input.raw.payloadSchema}, ${JSON.stringify(input.raw.payload)}::jsonb)
+      ON CONFLICT (provider_account_id, external_message_id) DO NOTHING
+      RETURNING id
+    ), raw_id AS (
+      SELECT ins_raw.id FROM ins_raw
+      UNION ALL
+      SELECT r.id FROM message_raw AS r
+      WHERE r.provider_account_id = ${input.providerAccountId}
+        AND r.external_message_id = ${input.raw.externalMessageId}
+      LIMIT 1
+    ), new_message AS (
+      INSERT INTO message
+        (raw_message_id, org_id, user_id, provider_account_id, direction,
+         thread_id, channel, external_message_id, sent_at, received_at,
+         subject, snippet, body_text, body_html, in_reply_to, "references",
+         message_id_header)
+      SELECT
+        ins_raw.id,
+        ${input.orgId}, ${input.userId}, ${input.providerAccountId},
+        'inbound', NULL,
+        ${input.message.channel}::channel,
+        ${input.message.externalMessageId},
+        ${input.message.sentAt},
+        ${input.message.receivedAt ?? null},
+        ${input.message.subject ?? null},
+        ${input.message.snippet ?? null},
+        ${input.message.bodyText ?? null},
+        ${input.message.bodyHtml ?? null},
+        ${input.message.inReplyTo ?? null},
+        ${input.message.references ?? null}::text[],
+        ${input.message.messageIdHeader ?? null}
+      FROM ins_raw
+      RETURNING id
+    ), new_event AS (
+      INSERT INTO sync_task_event (org_id, user_id, task_id, type, raw_message_id)
+      SELECT ${input.orgId}, ${input.userId}, ${input.taskId},
+             ${SyncEventType.message}::sync_event_type, raw_id.id
+      FROM raw_id
+    )
+    SELECT
+      raw_id.id AS "rawMessageId",
+      (SELECT new_message.id FROM new_message) AS "messageId"
+    FROM raw_id`;
 }
 
 export async function persistMessage(
   trx: Tx,
   input: PersistMessageInput
 ): Promise<PersistMessageResult> {
-  const core = await buildPersistMessageCore(
-    trx,
-    input
-  ).executeTakeFirstOrThrow();
+  const rows = await trx.$queryRaw<PersistMessageCoreRow[]>(
+    buildPersistMessageCore(input)
+  );
+  const core = rows[0];
+  if (!core) throw new Error('persistMessage: core statement returned no row');
   const { rawMessageId, messageId } = core;
   const persisted = messageId !== null;
 
-  // Statement 2: children, keyed off the new message id. Not foldable into the
-  // CTE — VALUES can't mix a CTE-derived messageId with a JS array of rows.
+  // Statements 2 and 3: children, keyed off the new message id. createMany is
+  // one multi-row INSERT each, matching the previous compiled statement count.
   // contact_id null — reconciler is a later ticket.
   if (persisted) {
     if (input.participants.length > 0) {
-      await trx
-        .insertInto('messageParticipant')
-        .values(
-          input.participants.map(
-            (p): Insertable<MessageParticipant> => ({
-              ...p,
-              orgId: input.orgId,
-              userId: input.userId,
-              messageId,
-              contactId: null,
-            })
-          )
-        )
-        .execute();
+      await trx.messageParticipant.createMany({
+        data: input.participants.map(
+          (p): MessageParticipantUncheckedCreateInput => ({
+            ...p,
+            orgId: input.orgId,
+            userId: input.userId,
+            messageId,
+            contactId: null,
+          })
+        ),
+      });
     }
 
     if (input.attachments.length > 0) {
-      await trx
-        .insertInto('attachment')
-        .values(
-          input.attachments.map(
-            (a): Insertable<Attachment> => ({
-              ...a,
-              orgId: input.orgId,
-              userId: input.userId,
-              messageId,
-            })
-          )
-        )
-        .execute();
+      await trx.attachment.createMany({
+        data: input.attachments.map(
+          (a): AttachmentUncheckedCreateInput => ({
+            ...a,
+            bytes: a.bytes as Uint8Array<ArrayBuffer>,
+            orgId: input.orgId,
+            userId: input.userId,
+            messageId,
+          })
+        ),
+      });
     }
   }
 

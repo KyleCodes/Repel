@@ -1,8 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
-import { Pool } from 'pg';
-import type { DB } from '@repel/backend-db/generated';
-import type { Tx } from '@repel/backend-db/types';
 import {
   type CreateSyncJobValues,
   buildCreateSyncJob,
@@ -13,17 +9,11 @@ import {
   buildPersistMessageCore,
 } from '../persist-message';
 
-// Compile-only: a Kysely over a never-connected Pool so .compile() yields SQL +
-// parameters with no I/O. (persistMessage runs sequential statements, not a
+// Connection-free: a Prisma.Sql is plain text + bound values, so the SQL-shape
+// invariants are asserted with no I/O — the successor of the old
+// Kysely .compile() pattern. (persistMessage runs sequential statements, not a
 // single builder, so its idempotency is covered by an integration test; here we
 // assert the SQL-shape invariants of the single-statement mutations.)
-const db = new Kysely<DB>({
-  dialect: new PostgresDialect({
-    pool: new Pool({ connectionString: 'postgres://unused' }),
-  }),
-  plugins: [new CamelCasePlugin()],
-});
-const trx = db as unknown as Tx;
 
 const createInput: CreateSyncJobValues = {
   syncJob: { id: 'job-1', orgId: 'org-1', userId: 'user-1' },
@@ -41,37 +31,56 @@ const createInput: CreateSyncJobValues = {
 
 describe('buildCreateSyncJob', function () {
   test('writes job, tasks, and a per-task enqueued event in one statement', function () {
-    const compiled = buildCreateSyncJob(trx, createInput).compile();
+    const query = buildCreateSyncJob(createInput);
     // All three inserts ride one CTE statement.
-    expect(compiled.sql).toContain('sync_job');
-    expect(compiled.sql).toContain('sync_task');
-    expect(compiled.sql).toContain('sync_task_event');
+    expect(query.sql).toContain('sync_job');
+    expect(query.sql).toContain('sync_task');
+    expect(query.sql).toContain('sync_task_event');
     // The enqueued event type is a bound parameter.
-    expect(compiled.parameters).toContain('enqueued');
+    expect(query.values).toContain('enqueued');
     // org_id is written explicitly (RLS USING-only).
-    expect(compiled.sql).toContain('org_id');
-    expect(compiled.parameters).toContain('org-1');
+    expect(query.sql).toContain('org_id');
+    expect(query.values).toContain('org-1');
+    // The nested task projection aliases camelCase in-SQL (no plugin anymore).
+    expect(query.sql).toContain('"providerAccountId"');
   });
 
   test('the supplied ids become bound parameters (in-memory id == persisted id)', function () {
-    const compiled = buildCreateSyncJob(trx, createInput).compile();
-    expect(compiled.parameters).toContain('job-1');
-    expect(compiled.parameters).toContain('task-1');
+    const query = buildCreateSyncJob(createInput);
+    expect(query.values).toContain('job-1');
+    expect(query.values).toContain('task-1');
+  });
+
+  test('the spec is bound stringified and cast to jsonb', function () {
+    const query = buildCreateSyncJob(createInput);
+    expect(query.sql).toContain('::jsonb');
+    expect(query.values).toContain(JSON.stringify({ type: 'full', limit: 20 }));
   });
 });
 
 describe('buildPersistEvent', function () {
   test('inserts one sync_task_event with org_id explicit', function () {
-    const compiled = buildPersistEvent(trx, {
+    const query = buildPersistEvent({
       orgId: 'org-1',
       userId: 'user-1',
       taskId: 'task-1',
       type: 'progress',
       payload: { processed: 3 },
-    }).compile();
-    expect(compiled.sql).toContain('sync_task_event');
-    expect(compiled.sql).toContain('org_id');
-    expect(compiled.parameters).toContain('progress');
+    });
+    expect(query.sql).toContain('sync_task_event');
+    expect(query.sql).toContain('org_id');
+    expect(query.values).toContain('progress');
+  });
+
+  test('a nullish payload binds SQL NULL, not a JSON null sentinel', function () {
+    const query = buildPersistEvent({
+      orgId: 'org-1',
+      userId: 'user-1',
+      taskId: 'task-1',
+      type: 'started',
+      payload: null,
+    });
+    expect(query.values).toContain(null);
   });
 });
 
@@ -108,15 +117,23 @@ describe('buildPersistMessageCore', function () {
   };
 
   test('raw, message, and the message event ride one CTE statement', function () {
-    const compiled = buildPersistMessageCore(trx, messageInput).compile();
+    const query = buildPersistMessageCore(messageInput);
     // All three writes are CTEs in a single statement.
-    expect(compiled.sql).toContain('message_raw');
-    expect(compiled.sql).toContain('"message"');
-    expect(compiled.sql).toContain('sync_task_event');
+    expect(query.sql).toContain('message_raw');
+    expect(query.sql).toContain('INSERT INTO message');
+    expect(query.sql).toContain('sync_task_event');
     // Idempotency anchor: ON CONFLICT DO NOTHING on the raw insert.
-    expect(compiled.sql).toContain('on conflict');
-    expect(compiled.sql).toContain('do nothing');
+    expect(query.sql).toContain('ON CONFLICT');
+    expect(query.sql).toContain('DO NOTHING');
     // The message event type is bound.
-    expect(compiled.parameters).toContain('message');
+    expect(query.values).toContain('message');
+  });
+
+  test('resolves the raw id on both branches via a union select-back', function () {
+    const query = buildPersistMessageCore(messageInput);
+    expect(query.sql).toContain('UNION ALL');
+    // The projection aliases camelCase in-SQL for both returned columns.
+    expect(query.sql).toContain('"rawMessageId"');
+    expect(query.sql).toContain('"messageId"');
   });
 });
